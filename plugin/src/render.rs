@@ -51,14 +51,6 @@ impl Vec2 {
         let dy = self.y - other.y;
         (dx * dx + dy * dy).sqrt()
     }
-
-    pub fn add(self, other: Self) -> Self {
-        Self::new(self.x + other.x, self.y + other.y)
-    }
-
-    pub fn scale(self, s: f64) -> Self {
-        Self::new(self.x * s, self.y * s)
-    }
 }
 
 /// Top-level output passed back to Typst as JSON.

@@ -61,7 +61,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
     let initial_dir = -PI / 6.0;
     place_chain(mol, root, initial_dir, &mut coords, &mut placed);
 
-    // ── 4. Center the molecule ────────────────────────────────────────────
+    // ── 5. Center the molecule ────────────────────────────────────────────
 
     center_coords(&mut coords);
 
@@ -127,15 +127,11 @@ fn implicit_h_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {
 
 fn standard_valence(symbol: &str) -> Option<i16> {
     match symbol {
-        "C" => Some(4),
-        "N" => Some(3),
-        "O" => Some(2),
-        "S" => Some(2),
-        "P" => Some(3),
-        "F" => Some(1),
-        "Cl" => Some(1),
-        "Br" => Some(1),
-        "I" => Some(1),
+        "C" | "Si" | "Sn" => Some(4),
+        "N" | "P" | "As" => Some(3),
+        "O" | "S" | "Se" | "Te" => Some(2),
+        "B" => Some(3),
+        "F" | "Cl" | "Br" | "I" => Some(1),
         _ => None,
     }
 }

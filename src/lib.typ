@@ -1,6 +1,6 @@
 // Typst SMILES Package
 // Renders SMILES strings as 2D molecular structure diagrams via a WASM plugin.
-// Also re-exports `ce` from typsium for chemical formula notation.
+// Also re-exports `ce` from chemformula for chemical formula notation.
 
 #import "@preview/cetz:0.5.2"
 #import "@preview/chemformula:0.1.3": ch

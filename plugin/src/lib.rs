@@ -224,4 +224,13 @@ mod tests {
         assert_eq!(out.atoms[0].abbrev, "OEt");
         assert_eq!(out.atoms[3].abbrev, "NHR");
     }
+
+    // ── Implicit H for expanded valence table ────────────────────────────────
+
+    #[test]
+    fn implicit_h_boron() {
+        // B (organic subset, valence 3): B bonded to one C → 2 implicit H
+        let out = layout_native("BC").expect("boron layout failed");
+        assert_eq!(out.atoms[0].implicit_h, 2);
+    }
 }
