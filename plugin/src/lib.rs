@@ -8,6 +8,56 @@ pub use render::LayoutOutput;
 use graph::MoleculeGraph;
 use layout::compute_layout;
 
+// ── Extended SMILES preprocessing ────────────────────────────────────────────
+//
+// Handles two extensions before handing the string to smiles-parser:
+//
+//   {label}  →  [*]   Abbreviated group (e.g. {PPh3}, {OEt}).
+//                     The Nth [*] atom in the output gets abbrev = the Nth label.
+//
+// The cleaned string is valid standard SMILES; extensions are stripped out.
+
+pub(crate) struct Preprocessed {
+    pub smiles: String,
+    /// Labels in the order they appeared, one per {label} token.
+    pub abbrev_labels: Vec<String>,
+}
+
+pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
+    let mut smiles = String::with_capacity(input.len());
+    let mut abbrev_labels = Vec::new();
+
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            let mut label = String::new();
+            for inner in chars.by_ref() {
+                if inner == '}' { break; }
+                label.push(inner);
+            }
+            abbrev_labels.push(label);
+            smiles.push_str("[*]");
+        } else {
+            smiles.push(ch);
+        }
+    }
+
+    Preprocessed { smiles, abbrev_labels }
+}
+
+/// Apply collected abbreviation labels to the matching `*` atoms in the graph
+/// (N-th `*` atom ← N-th label, in atom-index order).
+fn assign_abbrevs(mol: &mut MoleculeGraph, labels: &[String]) {
+    let mut label_iter = labels.iter();
+    for atom in mol.atoms.iter_mut() {
+        if atom.symbol == "*" {
+            if let Some(label) = label_iter.next() {
+                atom.abbrev = label.clone();
+            }
+        }
+    }
+}
+
 // ── WASM / Typst plugin entrypoint ──────────────────────────────────────────
 
 #[cfg(target_arch = "wasm32")]
@@ -19,10 +69,13 @@ mod wasm_entrypoint {
 
     /// Called from Typst as `smiles-plugin.layout(bytes(smiles-str))`.
     /// Returns JSON-encoded `LayoutOutput`.
+    /// Accepts extended SMILES with `{label}` abbreviation syntax.
     #[wasm_func]
     pub fn layout(smiles: &[u8]) -> Result<Vec<u8>, String> {
         let s = core::str::from_utf8(smiles).map_err(|e| format!("UTF-8 error: {e}"))?;
-        let mol = MoleculeGraph::from_smiles(s)?;
+        let pre = preprocess_smiles(s);
+        let mut mol = MoleculeGraph::from_smiles(&pre.smiles)?;
+        assign_abbrevs(&mut mol, &pre.abbrev_labels);
         let out = compute_layout(&mol)?;
         serde_json::to_vec(&out).map_err(|e| format!("JSON error: {e}"))
     }
@@ -32,7 +85,9 @@ mod wasm_entrypoint {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
-    let mol = MoleculeGraph::from_smiles(smiles)?;
+    let pre = preprocess_smiles(smiles);
+    let mut mol = MoleculeGraph::from_smiles(&pre.smiles)?;
+    assign_abbrevs(&mut mol, &pre.abbrev_labels);
     compute_layout(&mol)
 }
 
@@ -77,9 +132,77 @@ mod tests {
 
     #[test]
     fn naphthalene_kekule() {
-        // Naphthalene — fused bicyclic
         let out = layout_native("C1=CC2=CC=CC=C2C=C1").expect("naphthalene layout failed");
         assert_eq!(out.atoms.len(), 10);
         assert_eq!(out.bonds.len(), 11);
+    }
+
+    // ── Wedge / dash bond tests ───────────────────────────────────────────────
+
+    #[test]
+    fn wedge_up_bond() {
+        let out = layout_native("C/N").expect("wedge up failed");
+        assert_eq!(out.bonds[0].stereo, "wedge_up");
+    }
+
+    #[test]
+    fn wedge_down_bond() {
+        let out = layout_native("C\\N").expect("wedge down failed");
+        assert_eq!(out.bonds[0].stereo, "wedge_down");
+    }
+
+    #[test]
+    fn wedge_in_chain() {
+        // C–C wedge-up–N: bonds[0] normal, bonds[1] wedge_up
+        let out = layout_native("CC/N").expect("wedge in chain failed");
+        assert_eq!(out.bonds[0].stereo, "none");
+        assert_eq!(out.bonds[1].stereo, "wedge_up");
+    }
+
+    #[test]
+    fn double_bond_stereo_unchanged() {
+        // / and \ around a double bond should still render as a normal double bond
+        let out = layout_native("F/C=C/F").expect("E-alkene failed");
+        let double = out.bonds.iter().find(|b| b.order == 2).unwrap();
+        assert_eq!(double.order, 2);
+    }
+
+    // ── Abbreviation tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn preprocess_single_abbrev() {
+        let p = preprocess_smiles("C({PPh3})=O");
+        assert_eq!(p.smiles, "C([*])=O");
+        assert_eq!(p.abbrev_labels, vec!["PPh3"]);
+    }
+
+    #[test]
+    fn preprocess_multiple_abbrevs() {
+        let p = preprocess_smiles("{OEt}C(=O){NHR}");
+        assert_eq!(p.smiles, "[*]C(=O)[*]");
+        assert_eq!(p.abbrev_labels, vec!["OEt", "NHR"]);
+    }
+
+    #[test]
+    fn preprocess_no_abbrev() {
+        let p = preprocess_smiles("CCO");
+        assert_eq!(p.smiles, "CCO");
+        assert!(p.abbrev_labels.is_empty());
+    }
+
+    #[test]
+    fn abbrev_assigned_in_layout() {
+        let out = layout_native("{PPh3}C=O").expect("abbrev layout failed");
+        assert_eq!(out.atoms.len(), 3);
+        assert_eq!(out.atoms[0].abbrev, "PPh3");
+        assert_eq!(out.atoms[1].abbrev, "");
+    }
+
+    #[test]
+    fn abbrev_multiple_in_layout() {
+        // [*]C(=O)[*] → atoms: 0=[*](OEt), 1=C, 2=O (branch), 3=[*](NHR)
+        let out = layout_native("{OEt}C(=O){NHR}").expect("multi abbrev layout failed");
+        assert_eq!(out.atoms[0].abbrev, "OEt");
+        assert_eq!(out.atoms[3].abbrev, "NHR");
     }
 }

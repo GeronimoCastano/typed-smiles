@@ -125,3 +125,66 @@
   [*90°* \ #smiles("CC(N)C(=O)O", rotation: 90deg)],
   [*-90°* \ #smiles("CC(N)C(=O)O", rotation: -90deg)],
 )
+
+= Wedge / Dash Bonds
+
+Syntax: use #raw("/") in SMILES for a solid wedge (toward viewer) and
+#raw("\\") for a hashed wedge (away from viewer).
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Wedge up* \ #text(size: 8pt, `C/N`) \ #smiles("C/N")],
+  [*Wedge down* \ #text(size: 8pt, `C\N`) \ #smiles("C\\N")],
+  [*Mixed* \ #text(size: 8pt, `F/C\Cl`) \ #smiles("F/C\\Cl")],
+  [*L-Alanine* \ #text(size: 8pt, `N[C@@H](C)C(=O)O`) \
+   #smiles("N/C(C)C(=O)O")],
+)
+
+#v(1em)
+*E/Z double bonds* (the directional bonds flank the #raw("="):
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+  [*trans (E)* \ #text(size: 8pt, `F/C=C/F`) \ #smiles("F/C=C/F")],
+  [*cis (Z)* \ #text(size: 8pt, `F/C=C\F`) \ #smiles("F/C=C\\F")],
+)
+
+= Abbreviated Groups
+
+Syntax: use #raw("{label}") anywhere an atom would appear. The label is
+rendered as italic text. Standard SMILES bonding rules apply around it.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Simple abbrev* \ #text(size: 8pt, `{OEt}C=O`) \
+   #smiles("{OEt}C=O")],
+
+  [*Branch abbrev* \ #text(size: 8pt, `C({PPh3})=O`) \
+   #smiles("C({PPh3})=O")],
+
+  [*Multiple* \ #text(size: 8pt, `{L}C(=O){NHR}`) \
+   #smiles("{L}C(=O){NHR}")],
+)
+
+#v(1em)
+*Wedge bonds + abbreviated groups together* (transition-state style):
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Wilkinson's-like* \ #text(size: 8pt, `{PPh3}C({PPh3})=O`) \
+   #smiles("{PPh3}C({PPh3})=O")],
+
+  [*With stereo* \ #text(size: 8pt, `{Nu}/C({LG})=O`) \
+   #smiles("{Nu}/C({LG})=O")],
+)

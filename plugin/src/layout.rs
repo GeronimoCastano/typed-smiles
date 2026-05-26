@@ -77,6 +77,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             pos: coords[i],
             hcount: a.hcount,
             charge: a.charge,
+            abbrev: a.abbrev.clone(),
         })
         .collect();
 
@@ -90,7 +91,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             from: b.from,
             to: b.to,
             order: b.order.as_u8(),
-            stereo: "none".to_string(),
+            stereo: b.stereo.as_str().to_string(),
             inner_x: inner_dirs[i].0,
             inner_y: inner_dirs[i].1,
         })

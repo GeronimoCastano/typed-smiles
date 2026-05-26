@@ -34,6 +34,24 @@ impl BondOrder {
     }
 }
 
+/// Stereochemistry on a single bond, derived from `/` and `\` in the SMILES string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BondStereo {
+    None,
+    WedgeUp,   // `/` → solid filled wedge toward viewer
+    WedgeDown, // `\` → hashed wedge away from viewer
+}
+
+impl BondStereo {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None      => "none",
+            Self::WedgeUp   => "wedge_up",
+            Self::WedgeDown => "wedge_down",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Atom {
     /// Element symbol, e.g. "C", "N", "O"
@@ -42,6 +60,8 @@ pub struct Atom {
     pub aromatic: bool,
     pub hcount: u8,
     pub charge: i8,
+    /// Non-empty when this atom was created by a `{label}` abbreviation substitution.
+    pub abbrev: String,
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +69,7 @@ pub struct Bond {
     pub from: usize,
     pub to: usize,
     pub order: BondOrder,
+    pub stereo: BondStereo,
 }
 
 #[derive(Debug, Default)]
@@ -99,9 +120,9 @@ impl GraphBuilder {
         idx
     }
 
-    fn add_bond(&mut self, from: usize, to: usize, order: BondOrder) {
+    fn add_bond(&mut self, from: usize, to: usize, order: BondOrder, stereo: BondStereo) {
         let b_idx = self.bonds.len();
-        self.bonds.push(Bond { from, to, order });
+        self.bonds.push(Bond { from, to, order, stereo });
         self.adj[from].push((to, b_idx));
         self.adj[to].push((from, b_idx));
     }
@@ -119,7 +140,7 @@ impl GraphBuilder {
         &mut self,
         chain: &smiles_parser::Chain,
         prev_atom: Option<usize>,
-        incoming_bond: Option<BondOrder>,
+        incoming: Option<(BondOrder, BondStereo)>,
     ) {
         let ba = &chain.branched_atom;
 
@@ -129,18 +150,18 @@ impl GraphBuilder {
 
         // Bond to the previous atom using the bond the PARENT passed down
         if let Some(prev) = prev_atom {
-            self.add_bond(prev, cur, incoming_bond.unwrap_or(BondOrder::Single));
+            let (order, stereo) = incoming.unwrap_or((BondOrder::Single, BondStereo::None));
+            self.add_bond(prev, cur, order, stereo);
         }
 
-        // Process ring-closure bonds
+        // Process ring-closure bonds (stereo not supported on ring-closure bonds for now)
         for rb in &ba.ring_bonds {
             let ring_num = rb.ring_number;
-            let ring_order = rb.bond.as_ref().map(sparser_bond_to_order);
+            let ring_order = rb.bond.as_ref().map(|b| sparser_bond_to_order(b));
 
             if let Some((open_atom, open_order)) = self.open_rings.remove(&ring_num) {
-                // Close the ring; prefer whichever side declared an explicit bond type
                 let order = ring_order.or(open_order).unwrap_or(BondOrder::Single);
-                self.add_bond(open_atom, cur, order);
+                self.add_bond(open_atom, cur, order, BondStereo::None);
             } else {
                 self.open_rings.insert(ring_num, (cur, ring_order));
             }
@@ -148,20 +169,17 @@ impl GraphBuilder {
 
         // Process branches — each branch starts from `cur`
         for branch in &ba.branches {
-            let branch_bond = branch
-                .bond_or_dot
-                .as_ref()
-                .and_then(|bod| match bod {
-                    BondOrDot::Bond(b) => Some(sparser_bond_to_order(b)),
-                    BondOrDot::Dot(_) => None, // disconnected salt; no bond
-                });
+            let branch_bond = branch.bond_or_dot.as_ref().and_then(|bod| match bod {
+                BondOrDot::Bond(b) => Some(sparser_to_order_stereo(b)),
+                BondOrDot::Dot(_) => None,
+            });
             self.walk_chain(&branch.chain, Some(cur), branch_bond);
         }
 
         // Continue the main chain, forwarding THIS node's outgoing bond
         if let Some(next) = &chain.chain {
             let outgoing = chain.bond_or_dot.as_ref().and_then(|bod| match bod {
-                BondOrDot::Bond(b) => Some(sparser_bond_to_order(b)),
+                BondOrDot::Bond(b) => Some(sparser_to_order_stereo(b)),
                 BondOrDot::Dot(_) => None,
             });
             self.walk_chain(next, Some(cur), outgoing);
@@ -178,6 +196,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             aromatic: false,
             hcount: 0,
             charge: 0,
+            abbrev: String::new(),
         },
         SAtom::Bracket(b) => bracket_to_atom(b),
         SAtom::Unknown => Atom {
@@ -185,6 +204,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             aromatic: false,
             hcount: 0,
             charge: 0,
+            abbrev: String::new(),
         },
     }
 }
@@ -200,6 +220,7 @@ fn bracket_to_atom(b: &BracketAtom) -> Atom {
         aromatic,
         hcount: b.hcount,
         charge: b.charge,
+        abbrev: String::new(),
     }
 }
 
@@ -214,5 +235,17 @@ fn sparser_bond_to_order(b: &SBond) -> BondOrder {
         SBond::Triple | SBond::Quadruple => BondOrder::Triple,
         SBond::Aromatic => BondOrder::Aromatic,
     }
+}
+
+fn sparser_bond_to_stereo(b: &SBond) -> BondStereo {
+    match b {
+        SBond::Up   => BondStereo::WedgeUp,
+        SBond::Down => BondStereo::WedgeDown,
+        _           => BondStereo::None,
+    }
+}
+
+fn sparser_to_order_stereo(b: &SBond) -> (BondOrder, BondStereo) {
+    (sparser_bond_to_order(b), sparser_bond_to_stereo(b))
 }
 

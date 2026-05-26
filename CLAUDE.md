@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Commit and Attribution Rules
+
+Never include any of the following in commit messages, PR descriptions, code comments, or any project files:
+- `Co-Authored-By:` lines
+- "Generated with Claude Code" or similar footers
+- Any mention of AI tools or assistants
+
 ## What This Is
 
 A Typst package that renders SMILES chemical structure strings as 2D molecular diagrams. Architecture:

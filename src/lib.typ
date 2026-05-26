@@ -14,7 +14,9 @@
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 #let _has-label(atom) = {
-  (atom.symbol != "C" and atom.symbol != "c" and atom.symbol != "*") or (atom.charge != 0)
+  let has-abbrev = atom.at("abbrev", default: "") != ""
+  let has-hetero = (atom.symbol != "C" and atom.symbol != "c" and atom.symbol != "*") or (atom.charge != 0)
+  has-abbrev or has-hetero
 }
 
 #let _atom-color(sym) = {
@@ -94,7 +96,34 @@
       let mx = (q1x + q2x) / 2
       let my = (q1y + q2y) / 2
 
-      if bond.order == 1 {
+      let stereo = bond.at("stereo", default: "none")
+
+      if stereo == "wedge_up" {
+        // Solid filled triangle: point at q1 (from-atom), wide base at q2 (to-atom).
+        let half-w = 0.10
+        let ox = -uy * half-w
+        let oy =  ux * half-w
+        line(
+          (q1x, q1y), (q2x + ox, q2y + oy), (q2x - ox, q2y - oy),
+          close: true, fill: c2, stroke: none,
+        )
+
+      } else if stereo == "wedge_down" {
+        // Hashed wedge: parallel lines perpendicular to bond, widening toward q2.
+        let n-lines = 7
+        let half-w = 0.10
+        for i in range(n-lines) {
+          let t = (i + 1) / (n-lines + 1)
+          let cx = q1x + (q2x - q1x) * t
+          let cy = q1y + (q2y - q1y) * t
+          let w  = half-w * t
+          let ox = -uy * w
+          let oy =  ux * w
+          let c  = if t < 0.5 { c1 } else { c2 }
+          line((cx - ox, cy - oy), (cx + ox, cy + oy), stroke: stroke-w + c)
+        }
+
+      } else if bond.order == 1 {
         line((q1x, q1y), (mx, my),   stroke: stroke-w + c1)
         line((mx, my),   (q2x, q2y), stroke: stroke-w + c2)
 
@@ -158,35 +187,48 @@
       }
     }
 
-    // Heteroatom labels (and charged C) — drawn after bonds.
+    // Atom labels — heteroatoms, charged atoms, and abbreviated groups.
     // Positions are rotated; text content stays upright.
     for atom in layout.atoms {
       if _has-label(atom) {
-        let fill = atom-clr(atom.symbol)
+        let abbrev = atom.at("abbrev", default: "")
+        let fill   = atom-clr(atom.symbol)
 
-        let charge-str = if atom.charge == 1        { "+" }
-                         else if atom.charge == -1  { "\u{2212}" }
-                         else if atom.charge > 1    { str(atom.charge) + "+" }
-                         else if atom.charge < -1   { str(-atom.charge) + "\u{2212}" }
-                         else                       { "" }
-
-        let sym-text = text(
-          size: atom-font-size,
-          font: "New Computer Modern",
-          weight: "regular",
-          fill: fill,
-          atom.symbol,
-        )
-
-        let label-content = if charge-str == "" {
-          sym-text
+        let label-content = if abbrev != "" {
+          // Abbreviated group: render the label text in black, italic, serif.
+          text(
+            size: atom-font-size,
+            font: "New Computer Modern",
+            style: "italic",
+            weight: "regular",
+            fill: black,
+            abbrev,
+          )
         } else {
-          sym-text + super(text(
-            fill: fill,
+          let charge-str = if atom.charge == 1        { "+" }
+                           else if atom.charge == -1  { "\u{2212}" }
+                           else if atom.charge > 1    { str(atom.charge) + "+" }
+                           else if atom.charge < -1   { str(-atom.charge) + "\u{2212}" }
+                           else                       { "" }
+
+          let sym-text = text(
+            size: atom-font-size,
             font: "New Computer Modern",
             weight: "regular",
-            charge-str,
-          ))
+            fill: fill,
+            atom.symbol,
+          )
+
+          if charge-str == "" {
+            sym-text
+          } else {
+            sym-text + super(text(
+              fill: fill,
+              font: "New Computer Modern",
+              weight: "regular",
+              charge-str,
+            ))
+          }
         }
 
         content(

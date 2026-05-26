@@ -9,6 +9,10 @@ pub struct AtomOutput {
     pub hcount: u8,
     /// Formal charge (shown as superscript when != 0)
     pub charge: i8,
+    /// Non-empty when this atom was created by a `{label}` abbreviation.
+    /// The renderer displays this text instead of `symbol`.
+    #[serde(default)]
+    pub abbrev: String,
 }
 
 /// A bond between two atoms by their index in `LayoutOutput::atoms`.
