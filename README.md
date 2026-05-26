@@ -1,88 +1,181 @@
-# smiles
+# typed-smiles
 
-A Typst package for rendering SMILES chemical structure strings as 2D molecular diagrams.
+`typed-smiles` renders SMILES strings as clean 2D molecular diagrams in Typst.
+It uses a small Rust/WASM plugin for parsing and layout, then draws the result
+with CeTZ.
 
-## Usage
+The package is meant for chemistry notes, reaction schemes, reports, and
+teaching material where you want molecules to live directly in your Typst
+source instead of copying diagrams from a separate editor.
+
+## Basic molecule drawing
+
+Start by importing `smiles`. Pass a SMILES string and the package will draw the
+skeletal structure.
 
 ```typst
-#import "@preview/smiles:0.1.0": smiles, display-smiles
+#import "@preview/typed-smiles:0.1.0": smiles
 
-// Ethanol
-#smiles("CCO")
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.2em,
+  align: center,
 
-// Benzene (Kekulé form)
-#smiles("C1=CC=CC=C1")
+  [*Ethanol* \ #text(size: 8pt, `CCO`) \ #smiles("CCO")],
+  [*Benzene* \ #text(size: 8pt, `C1=CC=CC=C1`) \ #smiles("C1=CC=CC=C1")],
+  [*Acetic acid* \ #text(size: 8pt, `CC(=O)O`) \ #smiles("CC(=O)O")],
+  [*Chlorobenzene* \ #text(size: 8pt, `ClC1=CC=CC=C1`) \ #smiles("ClC1=CC=CC=C1")],
+)
+```
 
-// Caffeine
-#smiles("Cn1cnc2c1c(=O)n(c(=O)n2C)C")
+![Basic molecule examples](assets/readme/basics.png)
 
-// Custom size
+Use `bond-length` to scale diagrams. The scale is uniform, so the molecule keeps
+its aspect ratio.
+
+```typst
 #smiles("C1=CC=CC=C1", bond-length: 1.4)
 ```
+
+## Reaction schemes
+
+`typed-smiles` also re-exports `ce` from `chemformula` and provides small
+helpers for reaction layouts: `reaction`, `rxn-arrow`, and `mol`.
+
+```typst
+#import "@preview/typed-smiles:0.1.0": smiles, ce, rxn-arrow, mol, reaction
+
+#reaction(
+  mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
+  [+],
+  mol(smiles("CCO"), label: text(size: 8pt)[ethanol]),
+  rxn-arrow(above: ce("H+"), below: [heat]),
+  mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ethyl acetate]),
+  [+],
+  ce("H2O"),
+)
+
+#reaction(
+  mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[benzene]),
+  rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+  mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[bromobenzene]),
+)
+```
+
+![Reaction scheme examples](assets/readme/reactions.png)
+
+## Multi-step mechanisms
+
+Reaction arrows can point right, left, up, or down. This lets you write compact
+wrap-around schemes without manually placing every molecule.
+
+```typst
+#reaction(
+  mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[1]),
+  rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+  mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[A]),
+  rxn-arrow(dir: "down", above: [HNO#sub[3]], below: [H#sub[2]SO#sub[4]]),
+  mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[B]),
+  rxn-arrow(dir: "left", above: [Fe], below: [HCl]),
+  mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[C]),
+)
+```
+
+![Wrap-around reaction scheme](assets/readme/schemes.png)
+
+## Wedges, dashed bonds, and hydrogens
+
+Use `/` for a solid wedge and `\` for a hashed wedge. By default, carbon
+hydrogens stay implicit, but `show-h: true` displays computed implicit
+hydrogens. Explicit bracket hydrogens, such as `[NH4+]`, are always shown.
+
+```typst
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.2em,
+  align: center,
+
+  [*Solid wedge* \ #text(size: 8pt, `C/N`) \ #smiles("C/N")],
+  [*Hashed wedge* \ #text(size: 8pt, `C\N`) \ #smiles("C\\N")],
+  [*Implicit H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", show-h: true)],
+  [*Explicit H* \ #text(size: 8pt, `[NH4+]`) \ #smiles("[NH4+]")],
+)
+```
+
+![Stereochemistry and hydrogen examples](assets/readme/stereo-h.png)
 
 ## API
 
 ### `#smiles(smiles-str, bond-length, atom-font-size, color, rotation, show-h)`
 
-Renders a SMILES string as a 2D molecular diagram.
+Renders a SMILES string as a 2D skeletal molecular diagram.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `smiles-str` | `str` | required | OpenSMILES string |
 | `bond-length` | `float` | `1.0` | Uniform bond length scale factor; `1.0` equals 30pt per bond |
-| `atom-font-size` | `length` | `11pt` | Heteroatom label font size |
+| `atom-font-size` | `length` | `11pt` | Atom label font size |
 | `color` | `bool` | `true` | Apply Jmol CPK atom colors |
 | `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
 | `show-h` | `bool` | `false` | Show computed implicit hydrogens |
 
-Explicit bracket hydrogens, such as `[NH4+]`, are always shown. Computed
-implicit hydrogens are hidden unless `show-h: true` is set:
-
-```typst
-#smiles("CCO", show-h: true)
-```
-
-### Sizing and aspect ratio
-
-`#smiles` currently does not take `width` or `height` arguments. Use `bond-length` to scale the drawing up or down:
-
-```typst
-#smiles("CCO", bond-length: 0.8)
-#smiles("CCO", bond-length: 1.5)
-```
-
-Scaling is uniform, so the molecule's aspect ratio is preserved. The drawing is not independently stretched along the x and y axes.
-
 `#display-smiles` is an alias for `#smiles`.
 
-## SMILES Support
+### `#rxn-arrow(above, below, dir)`
 
-The package uses the [smiles-parser](https://crates.io/crates/smiles-parser) crate (OpenSMILES spec) for parsing. Current limitations:
+Creates an arrow for `#reaction`.
 
-- **Aromatic atoms**: Use Kekulé notation (`C1=CC=CC=C1`) rather than lowercase aromatic notation (`c1ccccc1`). Aromatic notation support is planned.
-- **Stereochemistry**: Wedge bonds are not yet rendered (stereo information is parsed but ignored in the layout).
-- **Complex ring systems**: Fused bicyclics work; bridged bicyclics may have atom overlap.
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `above` | `content` | `none` | Label above a horizontal arrow, or right of a vertical arrow |
+| `below` | `content` | `none` | Label below a horizontal arrow, or left of a vertical arrow |
+| `dir` | `str` | `"right"` | One of `"right"`, `"left"`, `"down"`, or `"up"` |
 
-## Architecture
+### `#mol(content, label: none)`
 
-The package is implemented as a Typst WASM plugin:
+Wraps a molecule or formula with an optional centered label below it.
 
-```
-SMILES string → [Rust WASM plugin] → JSON layout → CeTZ drawing
-```
+### `#reaction(gap-h, gap-v, ..items)`
 
-The Rust plugin (`plugin/`) handles parsing and 2D coordinate generation. The Typst layer (`src/lib.typ`) calls the plugin and renders with [CeTZ](https://github.com/cetz-package/cetz).
+Lays out molecules, formulas, plus signs, and `rxn-arrow` values in a reaction
+scheme. Directional arrows move the placement cursor, so multi-line schemes can
+be written as a single sequence.
+
+## SMILES support
+
+The package uses the [`smiles-parser`](https://crates.io/crates/smiles-parser)
+crate for parsing.
+
+Current limitations:
+
+- Aromatic lowercase atoms are not parsed by `smiles-parser` 0.4. Use Kekule
+  forms such as `C1=CC=CC=C1` instead of `c1ccccc1`.
+- Directional `/` and `\` bonds are rendered as wedge/hash bonds, but the
+  package does not yet perform full stereochemical interpretation.
+- Bridged bicyclics may have atom overlap; template matching is not implemented.
+- Implicit hydrogen counts use a simple standard-valence model.
 
 ## Building
 
 ```sh
-# Run tests
+# Run native Rust tests
 cargo test --manifest-path plugin/Cargo.toml
 
-# Build WASM (requires wasm-pack or wasm32-unknown-unknown target)
-rustup target add wasm32-unknown-unknown
-cargo build --manifest-path plugin/Cargo.toml --target wasm32-unknown-unknown --release
+# Build the WASM plugin used by Typst
+./build.sh
+
+# Compile the visual test document
+typst compile --root . tests/test.typ tests/test.pdf
 ```
+
+## Architecture
+
+```text
+SMILES string -> Rust WASM plugin -> JSON layout -> CeTZ drawing in Typst
+```
+
+The Rust plugin handles parsing and 2D coordinates. The Typst layer is a thin
+renderer plus reaction-scheme helpers.
 
 ## License
 

@@ -1,11 +1,11 @@
 [package]
-name = "smiles"
+name = "typed-smiles"
 version = "0.1.0"
 entrypoint = "src/lib.typ"
 authors = ["Geronimo Castano"]
 license = "MIT"
-description = "Render SMILES chemical structure strings as 2D molecular diagrams in Typst documents."
-repository = "https://github.com/GeronimoCastano/typst-smiles"
+description = "Render SMILES strings as molecular diagrams."
+repository = "https://github.com/GeronimoCastano/typed-smiles"
 keywords = ["chemistry", "smiles", "molecules", "cheminformatics"]
 categories = ["visualization"]
 
