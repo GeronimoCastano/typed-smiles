@@ -54,10 +54,38 @@ its aspect ratio. Here is the same molecule drawn at three sizes:
 
 ![Bond length scaling examples](assets/readme/scaling.png)
 
+## Chemical formulas and equations
+
+`typed-smiles` re-exports `ce` from `chemformula`, so the same import can handle
+ordinary formulas and text-based chemical equations. This is useful for salts,
+small inorganic species, conditions, and equations where a full molecular
+diagram would be unnecessary.
+
+```typst
+#import "@preview/typed-smiles:0.1.0": ce
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.2em,
+  row-gutter: 1em,
+  align: center,
+
+  [*Formula* \ #text(size: 8pt, `H2SO4`) \ #ce("H2SO4")],
+  [*Ions* \ #text(size: 8pt, `(NH4)2SO4`) \ #ce("(NH4)2SO4")],
+  [*Combustion* \ #text(size: 8pt, `CH4 + 2O2 -> CO2 + 2H2O`) \
+   #ce("CH4 + 2O2 -> CO2 + 2H2O")],
+  [*Equilibrium* \ #text(size: 8pt, `N2 + 3H2 <=> 2NH3`) \
+   #ce("N2 + 3H2 <=> 2NH3")],
+)
+```
+
+![Chemical formula and equation examples](assets/readme/formulas.png)
+
 ## Reaction schemes
 
-`typed-smiles` also re-exports `ce` from `chemformula` and provides small
-helpers for reaction layouts: `reaction`, `rxn-arrow`, and `mol`.
+For structural reaction schemes, use `reaction`, `rxn-arrow`, and `mol`. These
+helpers let you combine SMILES-based molecule diagrams with `ce()` formulas,
+plus signs, labels, and arrow conditions in one layout.
 
 ```typst
 #import "@preview/typed-smiles:0.1.0": smiles, ce, rxn-arrow, mol, reaction
