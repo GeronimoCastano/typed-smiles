@@ -32,7 +32,9 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
         if ch == '{' {
             let mut label = String::new();
             for inner in chars.by_ref() {
-                if inner == '}' { break; }
+                if inner == '}' {
+                    break;
+                }
                 label.push(inner);
             }
             abbrev_labels.push(label);
@@ -42,7 +44,10 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
         }
     }
 
-    Preprocessed { smiles, abbrev_labels }
+    Preprocessed {
+        smiles,
+        abbrev_labels,
+    }
 }
 
 /// Apply collected abbreviation labels to the matching `*` atoms in the graph
@@ -108,6 +113,20 @@ mod tests {
     fn ethanol() {
         let out = layout_native("CCO").expect("ethanol layout failed");
         assert_eq!(out.atoms.len(), 3);
+    }
+
+    #[test]
+    fn implicit_h_counts_ethanol() {
+        let out = layout_native("CCO").expect("ethanol layout failed");
+        let counts: Vec<u8> = out.atoms.iter().map(|a| a.implicit_h).collect();
+        assert_eq!(counts, vec![3, 2, 1]);
+    }
+
+    #[test]
+    fn explicit_h_suppresses_implicit_h() {
+        let out = layout_native("[NH4+]").expect("ammonium layout failed");
+        assert_eq!(out.atoms[0].hcount, 4);
+        assert_eq!(out.atoms[0].implicit_h, 0);
     }
 
     #[test]

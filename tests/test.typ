@@ -126,6 +126,32 @@
   [*-90°* \ #smiles("CC(N)C(=O)O", rotation: -90deg)],
 )
 
+= Implicit Hydrogens
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Default* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2)],
+  [*show-h* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, show-h: true)],
+  [*Carbonyl H* \ #text(size: 8pt, `C=O`) \ #smiles("C=O", bond-length: 1.2, show-h: true)],
+  [*Explicit H* \ #text(size: 8pt, `[NH4+]`) \ #smiles("[NH4+]", bond-length: 1.2)],
+)
+
+= Multiple Bond Rendering
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Linear C=O* \ #text(size: 8pt, `CC=O`) \ #smiles("CC=O", bond-length: 1.4)],
+  [*Branched C=O* \ #text(size: 8pt, `CC(=O)C`) \ #smiles("CC(=O)C", bond-length: 1.4)],
+  [*P-N triple branch* \ #text(size: 8pt, `CP(#N)C`) \ #smiles("CP(#N)C", bond-length: 1.4)],
+  [*P-N triple chain* \ #text(size: 8pt, `CP#N`) \ #smiles("CP#N", bond-length: 1.4)],
+)
+
 = Wedge / Dash Bonds
 
 Syntax: use #raw("/") in SMILES for a solid wedge (toward viewer) and
@@ -157,7 +183,7 @@ Syntax: use #raw("/") in SMILES for a solid wedge (toward viewer) and
 = Abbreviated Groups
 
 Syntax: use #raw("{label}") anywhere an atom would appear. The label is
-rendered as italic text. Standard SMILES bonding rules apply around it.
+rendered as upright text. Standard SMILES bonding rules apply around it.
 
 #grid(
   columns: (1fr, 1fr, 1fr),

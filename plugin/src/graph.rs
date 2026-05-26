@@ -7,13 +7,12 @@
 ///
 /// We walk the Chain tree recursively and handle ring-closure bonds ourselves
 /// via a HashMap keyed on the SMILES ring-opening digit.
-
 use std::collections::HashMap;
 
+use ptable::Element;
 use smiles_parser::{
     chain as parse_chain, Atom as SAtom, Bond as SBond, BondOrDot, BracketAtom, Symbol,
 };
-use ptable::Element;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BondOrder {
@@ -45,8 +44,8 @@ pub enum BondStereo {
 impl BondStereo {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::None      => "none",
-            Self::WedgeUp   => "wedge_up",
+            Self::None => "none",
+            Self::WedgeUp => "wedge_up",
             Self::WedgeDown => "wedge_down",
         }
     }
@@ -59,6 +58,7 @@ pub struct Atom {
     #[allow(dead_code)]
     pub aromatic: bool,
     pub hcount: u8,
+    pub has_explicit_h: bool,
     pub charge: i8,
     /// Non-empty when this atom was created by a `{label}` abbreviation substitution.
     pub abbrev: String,
@@ -122,7 +122,12 @@ impl GraphBuilder {
 
     fn add_bond(&mut self, from: usize, to: usize, order: BondOrder, stereo: BondStereo) {
         let b_idx = self.bonds.len();
-        self.bonds.push(Bond { from, to, order, stereo });
+        self.bonds.push(Bond {
+            from,
+            to,
+            order,
+            stereo,
+        });
         self.adj[from].push((to, b_idx));
         self.adj[to].push((from, b_idx));
     }
@@ -195,6 +200,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             symbol: element_symbol(a.element),
             aromatic: false,
             hcount: 0,
+            has_explicit_h: false,
             charge: 0,
             abbrev: String::new(),
         },
@@ -203,6 +209,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             symbol: "*".to_string(),
             aromatic: false,
             hcount: 0,
+            has_explicit_h: false,
             charge: 0,
             abbrev: String::new(),
         },
@@ -219,6 +226,7 @@ fn bracket_to_atom(b: &BracketAtom) -> Atom {
         symbol,
         aromatic,
         hcount: b.hcount,
+        has_explicit_h: true,
         charge: b.charge,
         abbrev: String::new(),
     }
@@ -239,13 +247,12 @@ fn sparser_bond_to_order(b: &SBond) -> BondOrder {
 
 fn sparser_bond_to_stereo(b: &SBond) -> BondStereo {
     match b {
-        SBond::Up   => BondStereo::WedgeUp,
+        SBond::Up => BondStereo::WedgeUp,
         SBond::Down => BondStereo::WedgeDown,
-        _           => BondStereo::None,
+        _ => BondStereo::None,
     }
 }
 
 fn sparser_to_order_stereo(b: &SBond) -> (BondOrder, BondStereo) {
     (sparser_bond_to_order(b), sparser_bond_to_stereo(b))
 }
-

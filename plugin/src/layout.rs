@@ -8,7 +8,6 @@
 ///   4. Lay out acyclic chains via DFS, extending each bond at ±120° from
 ///      the incoming direction (standard organic chemistry depiction angle).
 ///   5. Translate the whole molecule so the centroid is at the origin.
-
 use std::collections::{HashSet, VecDeque};
 use std::f64::consts::PI;
 
@@ -76,6 +75,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             symbol: a.symbol.clone(),
             pos: coords[i],
             hcount: a.hcount,
+            implicit_h: implicit_h_count(mol, i),
             charge: a.charge,
             abbrev: a.abbrev.clone(),
         })
@@ -105,6 +105,39 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
         bbox_width: bbox_w,
         bbox_height: bbox_h,
     })
+}
+
+fn implicit_h_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {
+    let atom = &mol.atoms[atom_idx];
+    if atom.has_explicit_h {
+        return 0;
+    }
+
+    let Some(valence) = standard_valence(&atom.symbol) else {
+        return 0;
+    };
+
+    let bond_order_sum: i16 = mol.adj[atom_idx]
+        .iter()
+        .map(|&(_, bond_idx)| mol.bonds[bond_idx].order.as_u8() as i16)
+        .sum();
+    let remaining = valence - atom.charge as i16 - bond_order_sum;
+    remaining.max(0) as u8
+}
+
+fn standard_valence(symbol: &str) -> Option<i16> {
+    match symbol {
+        "C" => Some(4),
+        "N" => Some(3),
+        "O" => Some(2),
+        "S" => Some(2),
+        "P" => Some(3),
+        "F" => Some(1),
+        "Cl" => Some(1),
+        "Br" => Some(1),
+        "I" => Some(1),
+        _ => None,
+    }
 }
 
 // ── Ring detection (simple DFS cycle finder) ─────────────────────────────────
@@ -228,7 +261,13 @@ fn place_ring_systems(
             }
         } else {
             // First ring in a new ring system: place as regular polygon
-            place_regular_ring(ring, Vec2::new(0.0, 0.0), 90.0_f64.to_radians(), coords, placed);
+            place_regular_ring(
+                ring,
+                Vec2::new(0.0, 0.0),
+                90.0_f64.to_radians(),
+                coords,
+                placed,
+            );
         }
 
         placed_rings.insert(ring_idx);
@@ -252,10 +291,7 @@ fn place_regular_ring(
     for (i, &atom) in ring.iter().enumerate() {
         if !placed[atom] {
             let angle = start_angle + (2.0 * PI / n) * i as f64;
-            coords[atom] = Vec2::new(
-                center.x + r * angle.cos(),
-                center.y + r * angle.sin(),
-            );
+            coords[atom] = Vec2::new(center.x + r * angle.cos(), center.y + r * angle.sin());
             placed[atom] = true;
         }
     }
@@ -322,10 +358,7 @@ fn place_fused_ring(
             // Compute offset from ei position
             let offset = i as i64 - ei as i64;
             let angle = start_angle + (2.0 * PI / fn_) * offset as f64;
-            coords[atom] = Vec2::new(
-                center.x + r * angle.cos(),
-                center.y + r * angle.sin(),
-            );
+            coords[atom] = Vec2::new(center.x + r * angle.cos(), center.y + r * angle.sin());
             placed[atom] = true;
         }
     }
@@ -348,7 +381,11 @@ fn pick_farther_center(
             count += 1;
         }
     }
-    if count == 0 || sum1 >= sum2 { c1 } else { c2 }
+    if count == 0 || sum1 >= sum2 {
+        c1
+    } else {
+        c2
+    }
 }
 
 fn place_ring_from_anchor(
@@ -420,13 +457,14 @@ fn place_chain(
 
         for (i, &v) in unplaced_neighbors.iter().enumerate() {
             // Alternate ±60° to produce a standard chemistry zigzag (120° bond angles)
-            let turn = if i == 0 { sign * (PI / 3.0) } else { -sign * (PI / 3.0) };
+            let turn = if i == 0 {
+                sign * (PI / 3.0)
+            } else {
+                -sign * (PI / 3.0)
+            };
             let new_dir = dir + turn;
 
-            coords[v] = Vec2::new(
-                coords[u].x + new_dir.cos(),
-                coords[u].y + new_dir.sin(),
-            );
+            coords[v] = Vec2::new(coords[u].x + new_dir.cos(), coords[u].y + new_dir.sin());
             placed[v] = true;
 
             // Alternate turn sign for zigzag

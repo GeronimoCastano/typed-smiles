@@ -17,22 +17,41 @@ A Typst package for rendering SMILES chemical structure strings as 2D molecular 
 #smiles("Cn1cnc2c1c(=O)n(c(=O)n2C)C")
 
 // Custom size
-#smiles("C1=CC=CC=C1", width: 150pt, height: 150pt)
+#smiles("C1=CC=CC=C1", bond-length: 1.4)
 ```
 
 ## API
 
-### `#smiles(smiles-str, width, height, bond-length, atom-font-size)`
+### `#smiles(smiles-str, bond-length, atom-font-size, color, rotation, show-h)`
 
 Renders a SMILES string as a 2D molecular diagram.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `smiles-str` | `str` | required | OpenSMILES string |
-| `width` | `length` | `200pt` | Canvas width |
-| `height` | `length` | `200pt` | Canvas height |
-| `bond-length` | `float` | `1.0` | Bond length scale factor |
-| `atom-font-size` | `length` | `8pt` | Heteroatom label font size |
+| `bond-length` | `float` | `1.0` | Uniform bond length scale factor; `1.0` equals 30pt per bond |
+| `atom-font-size` | `length` | `11pt` | Heteroatom label font size |
+| `color` | `bool` | `true` | Apply Jmol CPK atom colors |
+| `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
+| `show-h` | `bool` | `false` | Show computed implicit hydrogens |
+
+Explicit bracket hydrogens, such as `[NH4+]`, are always shown. Computed
+implicit hydrogens are hidden unless `show-h: true` is set:
+
+```typst
+#smiles("CCO", show-h: true)
+```
+
+### Sizing and aspect ratio
+
+`#smiles` currently does not take `width` or `height` arguments. Use `bond-length` to scale the drawing up or down:
+
+```typst
+#smiles("CCO", bond-length: 0.8)
+#smiles("CCO", bond-length: 1.5)
+```
+
+Scaling is uniform, so the molecule's aspect ratio is preserved. The drawing is not independently stretched along the x and y axes.
 
 `#display-smiles` is an alias for `#smiles`.
 

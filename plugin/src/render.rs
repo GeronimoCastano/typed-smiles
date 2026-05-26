@@ -7,6 +7,9 @@ pub struct AtomOutput {
     pub pos: Vec2,
     /// Explicit hydrogen count (shown as subscript when > 0)
     pub hcount: u8,
+    /// Computed implicit hydrogen count (shown only when requested)
+    #[serde(default)]
+    pub implicit_h: u8,
     /// Formal charge (shown as superscript when != 0)
     pub charge: i8,
     /// Non-empty when this atom was created by a `{label}` abbreviation.
