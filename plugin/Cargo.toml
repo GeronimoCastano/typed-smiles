@@ -1,0 +1,29 @@
+[package]
+name = "typst-smiles-plugin"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# SMILES lexer/parser (nom-based, OpenSMILES spec). We walk the Chain AST
+# ourselves — we do NOT use the `graph` feature because its MoleculeGraph
+# ignores ring closure bonds and panics on N, S, halogens, etc.
+smiles-parser = "0.4"
+# smiles-parser re-exports ptable::Element in its public types; we need it directly
+ptable = { package = "periodic-table-on-an-enum", version = "0.3" }
+
+# Typst WASM plugin protocol macros
+wasm-minimal-protocol = "0.2"
+
+# Serialization for the JSON output returned to Typst
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
