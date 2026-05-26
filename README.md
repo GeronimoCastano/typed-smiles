@@ -22,20 +22,37 @@ skeletal structure.
   align: center,
 
   [*Ethanol* \ #text(size: 8pt, `CCO`) \ #smiles("CCO")],
-  [*Benzene* \ #text(size: 8pt, `C1=CC=CC=C1`) \ #smiles("C1=CC=CC=C1")],
-  [*Acetic acid* \ #text(size: 8pt, `CC(=O)O`) \ #smiles("CC(=O)O")],
+  [*Alanine* \ #text(size: 8pt, `CC(N)C(=O)O`) \ #smiles("CC(N)C(=O)O")],
   [*Chlorobenzene* \ #text(size: 8pt, `ClC1=CC=CC=C1`) \ #smiles("ClC1=CC=CC=C1")],
+  [*Furan* \ #text(size: 8pt, `C1=CC=CO1`) \ #smiles("C1=CC=CO1")],
 )
 ```
 
 ![Basic molecule examples](assets/readme/basics.png)
 
+## Scaling
+
 Use `bond-length` to scale diagrams. The scale is uniform, so the molecule keeps
-its aspect ratio.
+its aspect ratio. Here is the same molecule drawn at three sizes:
 
 ```typst
-#smiles("C1=CC=CC=C1", bond-length: 1.4)
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.2em,
+  align: center,
+
+  [*Small* \ #text(size: 8pt, `bond-length: 0.8`) \
+   #smiles("C1=CC=CC=C1", bond-length: 0.8)],
+
+  [*Default* \ #text(size: 8pt, `bond-length: 1.0`) \
+   #smiles("C1=CC=CC=C1")],
+
+  [*Large* \ #text(size: 8pt, `bond-length: 1.4`) \
+   #smiles("C1=CC=CC=C1", bond-length: 1.4)],
+)
 ```
+
+![Bond length scaling examples](assets/readme/scaling.png)
 
 ## Reaction schemes
 

@@ -18,7 +18,7 @@
   align: center,
 
   example("Ethanol", "CCO", smiles("CCO", bond-length: 1.2)),
-  example("Benzene", "C1=CC=CC=C1", smiles("C1=CC=CC=C1", bond-length: 1.2)),
-  example("Acetic acid", "CC(=O)O", smiles("CC(=O)O", bond-length: 1.2)),
+  example("Alanine", "CC(N)C(=O)O", smiles("CC(N)C(=O)O", bond-length: 1.05)),
   example("Chlorobenzene", "ClC1=CC=CC=C1", smiles("ClC1=CC=CC=C1", bond-length: 1.2)),
+  example("Furan", "C1=CC=CO1", smiles("C1=CC=CO1", bond-length: 1.2)),
 )
