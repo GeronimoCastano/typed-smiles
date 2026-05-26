@@ -1,8 +1,0 @@
-# Rust build artifacts
-plugin/target/
-
-# Compiled test outputs
-tests/*.pdf
-
-# macOS metadata
-.DS_Store

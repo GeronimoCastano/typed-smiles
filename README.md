@@ -119,9 +119,9 @@ wrap-around schemes without manually placing every molecule.
   mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[1]),
   rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
   mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[A]),
-  rxn-arrow(dir: "down", above: [HNO#sub[3]], below: [H#sub[2]SO#sub[4]]),
+  rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
   mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[B]),
-  rxn-arrow(dir: "left", above: [Fe], below: [HCl]),
+  rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
   mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[C]),
 )
 ```
@@ -200,27 +200,16 @@ Current limitations:
 - Bridged bicyclics may have atom overlap; template matching is not implemented.
 - Implicit hydrogen counts use a simple standard-valence model.
 
-## Building
-
-```sh
-# Run native Rust tests
-cargo test --manifest-path plugin/Cargo.toml
-
-# Build the WASM plugin used by Typst
-./build.sh
-
-# Compile the visual test document
-typst compile --root . tests/test.typ tests/test.pdf
-```
-
 ## Architecture
 
 ```text
 SMILES string -> Rust WASM plugin -> JSON layout -> CeTZ drawing in Typst
 ```
 
-The Rust plugin handles parsing and 2D coordinates. The Typst layer is a thin
-renderer plus reaction-scheme helpers.
+The published package bundles the compiled WebAssembly plugin, so documents can
+use `typed-smiles` directly through Typst's package import. The plugin handles
+SMILES parsing and 2D coordinates; the Typst layer is a thin renderer plus
+reaction-scheme helpers.
 
 ## License
 
