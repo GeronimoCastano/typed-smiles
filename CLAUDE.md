@@ -1,87 +1,191 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
 
 ## Commit and Attribution Rules
 
-Never include any of the following in commit messages, PR descriptions, code comments, or any project files:
+Never include any of the following in commit messages, PR descriptions, code comments, or project files:
 - `Co-Authored-By:` lines
-- "Generated with Claude Code" or similar footers
-- Any mention of AI tools or assistants
+- Generated-by or tool-attribution footers
+- Any assistant/tooling attribution
 
-## What This Is
+## Current Status
 
-A Typst package that renders SMILES chemical structure strings as 2D molecular diagrams. Architecture:
+`typed-smiles` is a Typst package that renders SMILES chemical structure strings as 2D molecular diagrams.
 
+Architecture:
+
+```text
+SMILES string -> Rust WASM plugin -> JSON layout data -> CeTZ drawing in Typst
 ```
-SMILES string → [Rust WASM plugin] → JSON layout data → CeTZ drawing in Typst
+
+The Rust plugin parses SMILES and computes 2D coordinates. The Typst layer renders bonds, atom labels, colors, hydrogens, formulas, and reaction helpers.
+
+The current package name is `typed-smiles`. The package submission PR for `0.1.0` lives in the `typst/packages` fork, under:
+
+```text
+packages/preview/typed-smiles/0.1.0/
 ```
 
-The Rust plugin handles the hard parts (parsing + 2D layout). The Typst layer is a thin wrapper.
+Use `main` as the source of truth for development. The `package-submission` branch is only a staging branch for the runtime package bundle.
 
 ## Commands
 
 ```sh
-# Run all tests (native Rust, no WASM needed)
+# Run Rust tests
 cargo test --manifest-path plugin/Cargo.toml
 
-# Type-check without running tests
+# Type-check Rust without running tests
 cargo check --manifest-path plugin/Cargo.toml
 
-# Build WASM plugin (required to use the Typst package)
-rustup target add wasm32-unknown-unknown
-cargo build --manifest-path plugin/Cargo.toml --target wasm32-unknown-unknown --release
-# Output: plugin/target/wasm32-unknown-unknown/release/typst_smiles_plugin.wasm
+# Build the bundled WASM plugin
+./build.sh
 
-# Test a single Rust test by name
-cargo test --manifest-path plugin/Cargo.toml <test_name>
+# Compile the visual smoke test
+typst compile --root . tests/test.typ tests/test.pdf
+
+# Regenerate README assets
+typst compile --root . --ppi 300 assets/readme/basics.typ assets/readme/basics.png
+typst compile --root . --ppi 300 assets/readme/scaling.typ assets/readme/scaling.png
+typst compile --root . --ppi 300 assets/readme/formulas.typ assets/readme/formulas.png
+typst compile --root . --ppi 300 assets/readme/reactions.typ assets/readme/reactions.png
+typst compile --root . --ppi 300 assets/readme/schemes.typ assets/readme/schemes.png
+typst compile --root . --ppi 300 assets/readme/stereo-h.typ assets/readme/stereo-h.png
+
+# Prepare a Typst packages preview copy for a version
+scripts/package-preview.sh 0.1.1 /path/to/typst/packages
 ```
 
 ## Project Structure
 
-```
-typst.toml          — Typst package manifest
-src/lib.typ         — Typst API: #smiles(), #display-smiles()
+```text
+typst.toml          Package manifest
+src/lib.typ         Typst API: #smiles(), #display-smiles, ce, reaction helpers
 plugin/
-  Cargo.toml        — Rust deps: smiles-parser, wasm-minimal-protocol, serde_json
+  Cargo.toml        Rust dependencies
   src/
-    lib.rs          — WASM entrypoint + native test entrypoint
-    graph.rs        — Chain AST walker → MoleculeGraph (atoms + bonds + adj list)
-    layout.rs       — 2D coordinate generation (ring placement + chain DFS)
-    render.rs       — Output types: LayoutOutput, AtomOutput, BondOutput, Vec2
-    error.rs        — SmilesError type
+    lib.rs          WASM entrypoint and native test entrypoint
+    graph.rs        Chain AST walker -> MoleculeGraph
+    layout.rs       2D coordinate generation and implicit H calculation
+    render.rs       JSON output types
+    error.rs        SmilesError type
+assets/readme/      Typst source and rendered PNG README examples
+tests/test.typ      Visual smoke test
+scripts/            Release helper scripts
 ```
+
+## Typst API
+
+Main molecule renderer:
+
+```typst
+#smiles(
+  smiles-str,
+  bond-length: 1.0,
+  atom-font-size: 11pt,
+  color: true,
+  rotation: 0deg,
+  show-h: false,
+)
+```
+
+Also exported:
+
+```typst
+#display-smiles
+#ce
+#rxn-arrow(above: none, below: none, dir: "right")
+#mol(content, label: none)
+#reaction(gap-h: 1.5em, gap-v: 1.5em, ..items)
+```
+
+`ce` is re-exported from `chemformula`.
+
+## Implemented Features
+
+- SMILES molecule rendering through `#smiles(...)`
+- Alias `#display-smiles`
+- Jmol-like CPK atom colors
+- Heteroatom labels
+- Charge labels
+- Abbreviation labels using `{label}` syntax, for example `{PPh3}C=O`
+- Upright abbreviation labels
+- Reaction helpers: `ce`, `rxn-arrow`, `mol`, `reaction`
+- Horizontal and vertical reaction arrows
+- Wrap-around reaction schemes
+- Wedge and hashed wedge rendering from `/` and `\`
+- Wedge direction heuristic with narrow tip at the likely stereocenter
+- Improved acyclic double-bond rendering
+- Triple-bond rendering with shortened outer lines
+- `show-h: true` implicit hydrogen labels
+- Explicit bracket hydrogens such as `[NH4+]`
 
 ## Key Design Decisions
 
-**Why we walk the Chain AST manually (graph.rs)**: `smiles_parser::graph::MoleculeGraph::from_chain` has bugs — it ignores ring-closure bonds, panics on N/S/halogens, and misreads bond order (reads it from the wrong chain node). Our walker fixes all three issues.
+**Manual Chain AST walker:** `smiles_parser::graph::MoleculeGraph::from_chain` ignores ring-closure bonds, panics on some heteroatoms/halogens, and misreads bond order. The local walker in `graph.rs` avoids those issues.
 
-**Bond order invariant**: In the smiles-parser Chain AST, `chain.bond_or_dot` is the bond from the **current** atom **outward** to `chain.chain`. It must be passed **forward** as `incoming_bond` when recursing into `chain.chain`, not read by the child. This is the non-obvious thing that was wrong in the upstream graph module.
+**Bond order invariant:** In the smiles-parser Chain AST, `chain.bond_or_dot` is the bond from the current atom outward to `chain.chain`. It must be passed forward as `incoming_bond` when recursing.
 
-**Aromatic atoms**: `smiles-parser` 0.4 does not parse unbracketed aromatic atoms (`c`, `n`, `o`). Use Kekulé SMILES (`C1=CC=CC=C1`) for aromatic molecules until we add a preprocessing/Kekulization step.
+**Aromatic atoms:** `smiles-parser` 0.4 does not parse unbracketed aromatic atoms such as `c`, `n`, and `o`. Use Kekule SMILES such as `C1=CC=CC=C1` until preprocessing or Kekulization is added.
 
-**2D layout**: No pure-Rust 2D layout library exists. Our algorithm (layout.rs):
-1. DFS ring detection → rings as atom-index lists
-2. Place each ring as a regular n-gon (circumradius = 1/(2·sin(π/n)) for unit bond length)
-3. Fused rings: find the shared edge, compute center on the far side, place remaining atoms
-4. Acyclic chains: DFS from the first placed atom, alternating ±120° zigzag
-5. Center by subtracting centroid
+**2D layout:** Ring placement uses regular polygons, fused rings are placed from shared edges, and acyclic chains are placed with alternating zigzag angles. The layout is centered before rendering.
 
-**WASM entrypoint** (lib.rs): Uses `wasm-minimal-protocol` v0.2 macros. The `initiate_protocol!()` + `#[wasm_func]` macros handle the memory protocol. On non-WASM targets, `layout_native()` is exposed for tests.
+**Hydrogens:** Rust computes `implicit_h` from a small standard valence map and skips implicit hydrogen generation when explicit bracket hydrogens are present.
 
-**JSON contract** (render.rs → lib.typ): The plugin returns JSON matching `LayoutOutput`. Typst reads it via `json(str(raw-bytes))`. Coordinates are in "bond-length units" (1.0 = one bond length); Typst scales with `bond-length * 30pt` as the base.
+**JSON contract:** Rust returns JSON matching `LayoutOutput`. Typst reads it with `json(raw-bytes)`. Coordinates are in bond-length units; Typst scales them with `bond-length * 30pt`.
 
 ## Dependencies
 
-- `smiles-parser = "0.4"` — nom-based OpenSMILES parser
-- `ptable = { package = "periodic-table-on-an-enum" }` — needed to call `.get_symbol()` on elements (smiles-parser uses the same alias)
-- `wasm-minimal-protocol = "0.2"` — Typst plugin protocol macros
-- `serde_json = "1"` — serialize LayoutOutput to JSON bytes
+Rust plugin:
+- `smiles-parser = "0.4"`
+- `ptable = { package = "periodic-table-on-an-enum" }`
+- `wasm-minimal-protocol = "0.2"`
+- `serde` and `serde_json`
+
+Typst imports in `src/lib.typ`:
+- `@preview/cetz:0.5.2`
+- `@preview/chemformula:0.1.3`
+
+Do not add a top-level `[dependencies]` table to `typst.toml`; the Typst package checker rejects unknown manifest sections.
+
+## Packaging Notes
+
+For Typst package PRs, copy only runtime/package files:
+
+```text
+typst.toml
+README.md
+LICENSE
+src/lib.typ
+plugin/typst_smiles_plugin.wasm
+assets/readme/*.png
+```
+
+Do not include development-only files in the Typst package PR:
+
+```text
+plugin/src/*
+plugin/Cargo.toml
+plugin/Cargo.lock
+build.sh
+tests/*
+assets/readme/*.typ
+CLAUDE.md
+AGENTS.md
+.DS_Store
+plugin/target/*
+```
+
+README PNGs should be committed to `typst/packages` for Typst Universe rendering, but excluded from the downloadable package archive with:
+
+```toml
+exclude = ["assets/readme/*.png"]
+```
 
 ## Known Limitations / Next Steps
 
-- Aromatic SMILES (`c1ccccc1`) need a Kekulization preprocessor
-- Stereochemistry (wedge/dash bonds) is parsed but not rendered
-- Bridged bicyclics (e.g., norbornane) may have atom overlap — template matching needed
-- No explicit hydrogen rendering (shown only when in bracket atoms `[NH4+]`)
-- WASM binary not yet built/bundled (the `.wasm` file needs to be placed at `plugin/pkg/`)
+- Aromatic SMILES (`c1ccccc1`) need a Kekulization preprocessor.
+- Directional `/` and `\` bonds are rendered visually as wedge/hash bonds, but full stereochemical interpretation is not implemented.
+- The package does not compute or validate R/S or E/Z descriptors.
+- Ring stereochemistry and stereobonds between stereocenters are not handled semantically.
+- Bridged bicyclics can still have overlap and would benefit from templates.
