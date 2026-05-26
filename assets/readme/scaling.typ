@@ -1,13 +1,12 @@
 #import "../../src/lib.typ": smiles
 
-#set page(width: 16cm, height: 6cm, margin: 0.8cm)
+#set page(width: 16cm, height: 6.5cm, margin: 0.8cm)
 #set text(font: "New Computer Modern", size: 10pt)
 
-#let example(title, code, body) = [
+#let example(title, body) = [
   #stack(
-    spacing: 4pt,
+    spacing: 0.5cm,
     align(center, strong(title)),
-    align(center, text(size: 7pt, raw(code))),
     align(center, body),
   )
 ]
@@ -17,7 +16,7 @@
   gutter: 1.2em,
   align: center,
 
-  example("Small", "bond-length: 0.8", smiles("C1=CC=CC=C1", bond-length: 0.8)),
-  example("Default", "bond-length: 1.0", smiles("C1=CC=CC=C1")),
-  example("Large", "bond-length: 1.4", smiles("C1=CC=CC=C1", bond-length: 1.4)),
+  example("Small", smiles("C1=CC=CC=C1", bond-length: 0.8)),
+  example("Default", smiles("C1=CC=CC=C1")),
+  example("Large", smiles("C1=CC=CC=C1", bond-length: 1.4)),
 )
