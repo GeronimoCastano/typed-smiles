@@ -16,15 +16,21 @@ skeletal structure.
 ```typst
 #import "@preview/typed-smiles:0.2.0": smiles
 
-#grid(
+#table(
   columns: (1fr, 1fr, 1fr, 1fr),
   gutter: 1.2em,
-  align: center,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Ethanol* \ #smiles("CCO")],
-  [*Alanine* \ #smiles("CC(N)C(=O)O")],
-  [*Chlorobenzene* \ #smiles("ClC1=CC=CC=C1")],
-  [*Furan* \ #smiles("C1=CC=CO1")],
+  [*Ethanol*],
+  [*Alanine*],
+  [*Chlorobenzene*],
+  [*Furan*],
+
+  [#smiles("CCO")],
+  [#smiles("CC(N)C(=O)O")],
+  [#smiles("ClC1=CC=CC=C1")],
+  [#smiles("C1=CC=CO1")],
 )
 ```
 
@@ -36,16 +42,19 @@ Use `bond-length` to scale diagrams. The scale is uniform, so the molecule keeps
 its aspect ratio. Here is the same molecule drawn at three sizes:
 
 ```typst
-#grid(
+#table(
   columns: (1fr, 1fr, 1fr),
   gutter: 1.2em,
-  align: center,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Small* \ #smiles("C1=CC=CC=C1", bond-length: 0.8)],
+  [*Small*],
+  [*Default*],
+  [*Large*],
 
-  [*Default* \ #smiles("C1=CC=CC=C1")],
-
-  [*Large* \ #smiles("C1=CC=CC=C1", bond-length: 1.4)],
+  [#smiles("C1=CC=CC=C1", bond-length: 0.8)],
+  [#smiles("C1=CC=CC=C1")],
+  [#smiles("C1=CC=CC=C1", bond-length: 1.4)],
 )
 ```
 
@@ -61,15 +70,21 @@ carbon hydrogens, bracket syntax for explicit hydrogens, and `{label}` for
 custom upright group labels.
 
 ```typst
-#grid(
+#table(
   columns: (1fr, 1fr, 1fr, 1fr),
   gutter: 1.2em,
-  align: center,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Default hetero H* \ #smiles("CC(N)C(=O)O")],
-  [*All H* \ #smiles("CCO", show-all-h: true)],
-  [*Explicit bracket H* \ #smiles("[NH3]")],
-  [*Custom label* \ #smiles("{PPh3}C=O")],
+  [*Default hetero H*],
+  [*All H*],
+  [*Explicit bracket H*],
+  [*Custom label*],
+
+  [#smiles("CC(N)C(=O)O")],
+  [#smiles("CCO", show-all-h: true)],
+  [#smiles("[NH3]")],
+  [#smiles("{PPh3}C=O")],
 )
 ```
 
@@ -85,16 +100,22 @@ diagram would be unnecessary.
 ```typst
 #import "@preview/typed-smiles:0.2.0": ce
 
-#grid(
+#table(
   columns: (1fr, 1fr),
   gutter: 1.2em,
   row-gutter: 1em,
-  align: center,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Formula* \ #ce("H2SO4")],
-  [*Ions* \ #ce("(NH4)2SO4")],
-  [*Combustion* \ #ce("CH4 + 2O2 -> CO2 + 2H2O")],
-  [*Equilibrium* \ #ce("N2 + 3H2 <=> 2NH3")],
+  [*Formula*],
+  [*Ions*],
+  [#ce("H2SO4")],
+  [#ce("(NH4)2SO4")],
+
+  [*Combustion*],
+  [*Equilibrium*],
+  [#ce("CH4 + 2O2 -> CO2 + 2H2O")],
+  [#ce("N2 + 3H2 <=> 2NH3")],
 )
 ```
 
@@ -109,20 +130,24 @@ plus signs, labels, and arrow conditions in one layout.
 ```typst
 #import "@preview/typed-smiles:0.2.0": smiles, ce, rxn-arrow, mol, reaction
 
-#reaction(
-  mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
-  [+],
-  mol(smiles("CCO"), label: text(size: 8pt)[ethanol]),
-  rxn-arrow(above: ce("H+"), below: [heat]),
-  mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ethyl acetate]),
-  [+],
-  ce("H2O"),
-)
-
-#reaction(
-  mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[benzene]),
-  rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
-  mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[bromobenzene]),
+#stack(
+  spacing: 1.2em,
+  align(center, strong[Fischer esterification]),
+  align(center, reaction(
+    mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
+    [+],
+    mol(smiles("CCO"), label: text(size: 8pt)[ethanol]),
+    rxn-arrow(above: ce("H+"), below: [heat]),
+    mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ethyl acetate]),
+    [+],
+    ce("H2O"),
+  )),
+  align(center, strong[Electrophilic aromatic bromination]),
+  align(center, reaction(
+    mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[benzene]),
+    rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+    mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[bromobenzene]),
+  )),
 )
 ```
 
@@ -134,14 +159,18 @@ Reaction arrows can point right, left, up, or down. This lets you write compact
 wrap-around schemes without manually placing every molecule.
 
 ```typst
-#reaction(
-  mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[1]),
-  rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
-  mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[A]),
-  rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
-  mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[B]),
-  rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
-  mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[C]),
+#stack(
+  spacing: 1.2em,
+  align(center, strong[Bromination, nitration, and reduction sequence]),
+  align(center, reaction(
+    mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[1]),
+    rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+    mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[A]),
+    rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
+    mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[B]),
+    rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
+    mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[C]),
+  )),
 )
 ```
 
@@ -154,15 +183,21 @@ markers visually, but it does not yet perform full stereochemical
 interpretation.
 
 ```typst
-#grid(
+#table(
   columns: (1fr, 1fr, 1fr, 1fr),
   gutter: 1.2em,
-  align: center,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Solid wedge* \ #smiles("C/N")],
-  [*Hashed wedge* \ #smiles("C\\N")],
-  [*Mixed* \ #smiles("F/C\\Cl")],
-  [*With carbon H* \ #smiles("CCO", show-all-h: true)],
+  [*Solid wedge*],
+  [*Hashed wedge*],
+  [*Mixed*],
+  [*With carbon H*],
+
+  [#smiles("C/N")],
+  [#smiles("C\\N")],
+  [#smiles("F/C\\Cl")],
+  [#smiles("CCO", show-all-h: true)],
 )
 ```
 

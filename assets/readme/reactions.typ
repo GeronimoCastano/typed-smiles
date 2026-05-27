@@ -1,10 +1,11 @@
 #import "../../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction
 
-#set page(width: 18cm, height: 7.2cm, margin: 0.8cm)
+#set page(width: 18cm, height: 8.5cm, margin: 0.8cm)
 #set text(font: "New Computer Modern", size: 10pt)
 
 #stack(
-  spacing: 0.8em,
+  spacing: 1.2em,
+  align(center, strong[Fischer esterification]),
   align(center, [
     #reaction(
       mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
@@ -16,6 +17,7 @@
       ce("H2O"),
     )
   ]),
+  align(center, strong[Electrophilic aromatic bromination]),
   align(center, [
     #reaction(
       mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[benzene]),

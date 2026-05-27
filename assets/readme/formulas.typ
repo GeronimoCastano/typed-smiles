@@ -1,24 +1,22 @@
 #import "../../src/lib.typ": ce
 
-#set page(width: 16cm, height: 7.6cm, margin: 0.8cm)
+#set page(width: 16cm, height: 8.2cm, margin: 0.8cm)
 #set text(font: "New Computer Modern", size: 10pt)
 
-#let example(title, body) = [
-  #stack(
-    spacing: 0.5cm,
-    align(center, strong(title)),
-    align(center, body),
-  )
-]
-
-#grid(
+#table(
   columns: (1fr, 1fr),
   gutter: 1.2em,
-  row-gutter: 1.8cm,
-  align: center,
+  row-gutter: 0.8cm,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
 
-  example("Formula", ce("H2SO4")),
-  example("Ions", ce("(NH4)2SO4")),
-  example("Combustion", ce("CH4 + 2O2 -> CO2 + 2H2O")),
-  example("Equilibrium", ce("N2 + 3H2 <=> 2NH3")),
+  [*Formula*],
+  [*Ions*],
+  [#ce("H2SO4")],
+  [#ce("(NH4)2SO4")],
+
+  [*Combustion*],
+  [*Equilibrium*],
+  [#ce("CH4 + 2O2 -> CO2 + 2H2O")],
+  [#ce("N2 + 3H2 <=> 2NH3")],
 )
