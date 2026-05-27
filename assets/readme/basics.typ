@@ -5,7 +5,8 @@
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
-  gutter: 1.2em,
+  gutter: 0em,
+  row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 

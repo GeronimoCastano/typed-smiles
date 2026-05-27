@@ -18,7 +18,8 @@ skeletal structure.
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
-  gutter: 1.2em,
+  gutter: 0em,
+  row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
@@ -44,7 +45,8 @@ its aspect ratio. Here is the same molecule drawn at three sizes:
 ```typst
 #table(
   columns: (1fr, 1fr, 1fr),
-  gutter: 1.2em,
+  gutter: 0em,
+  row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
@@ -72,7 +74,8 @@ custom upright group labels.
 ```typst
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
-  gutter: 1.2em,
+  gutter: 0em,
+  row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
@@ -102,20 +105,15 @@ diagram would be unnecessary.
 
 #table(
   columns: (1fr, 1fr),
-  gutter: 1.2em,
-  row-gutter: 1em,
+  gutter: 0em,
+  row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Formula*],
-  [*Ions*],
-  [#ce("H2SO4")],
-  [#ce("(NH4)2SO4")],
-
-  [*Combustion*],
-  [*Equilibrium*],
-  [#ce("CH4 + 2O2 -> CO2 + 2H2O")],
-  [#ce("N2 + 3H2 <=> 2NH3")],
+  [#stack(spacing: 0.35cm, strong[Formula], ce("H2SO4"))],
+  [#stack(spacing: 0.35cm, strong[Ions], ce("(NH4)2SO4"))],
+  [#stack(spacing: 0.35cm, strong[Combustion], ce("CH4 + 2O2 -> CO2 + 2H2O"))],
+  [#stack(spacing: 0.35cm, strong[Equilibrium], ce("N2 + 3H2 <=> 2NH3"))],
 )
 ```
 
@@ -131,23 +129,29 @@ plus signs, labels, and arrow conditions in one layout.
 #import "@preview/typed-smiles:0.2.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
-  spacing: 1.2em,
-  align(center, strong[Fischer esterification]),
-  align(center, reaction(
-    mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
-    [+],
-    mol(smiles("CCO"), label: text(size: 8pt)[ethanol]),
-    rxn-arrow(above: ce("H+"), below: [heat]),
-    mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ethyl acetate]),
-    [+],
-    ce("H2O"),
-  )),
-  align(center, strong[Electrophilic aromatic bromination]),
-  align(center, reaction(
-    mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[benzene]),
-    rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
-    mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[bromobenzene]),
-  )),
+  spacing: 1cm,
+  stack(
+    spacing: 0.4cm,
+    align(center, strong[Fischer esterification]),
+    align(center, reaction(
+      mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
+      [+],
+      mol(smiles("CCO"), label: text(size: 8pt)[ethanol]),
+      rxn-arrow(above: ce("H+"), below: [heat]),
+      mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ethyl acetate]),
+      [+],
+      ce("H2O"),
+    )),
+  ),
+  stack(
+    spacing: 0.4cm,
+    align(center, strong[Electrophilic aromatic bromination]),
+    align(center, reaction(
+      mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[benzene]),
+      rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+      mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[bromobenzene]),
+    )),
+  ),
 )
 ```
 
@@ -185,7 +189,8 @@ interpretation.
 ```typst
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
-  gutter: 1.2em,
+  gutter: 0em,
+  row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
