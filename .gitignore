@@ -4,5 +4,9 @@ plugin/target/
 # Compiled test outputs
 tests/*.pdf
 
+# Local agent context files
+AGENTS.md
+CLAUDE.md
+
 # macOS metadata
 .DS_Store
