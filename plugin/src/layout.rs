@@ -34,20 +34,12 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
     // ── 2. Place ring systems first ───────────────────────────────────────
 
     if !rings.is_empty() {
-        place_ring_systems(mol, &rings, &mut coords, &mut placed);
+        place_initial_ring_system(mol, &rings, &mut coords, &mut placed);
     }
 
     // ── 3. Place ring substituents radially outward ──────────────────────
 
-    for ring in &rings {
-        let n = ring.len() as f64;
-        let cx: f64 = ring.iter().map(|&a| coords[a].x).sum::<f64>() / n;
-        let cy: f64 = ring.iter().map(|&a| coords[a].y).sum::<f64>() / n;
-        for &atom in ring {
-            let outward = (coords[atom].y - cy).atan2(coords[atom].x - cx);
-            place_ring_substituents(mol, atom, outward, &mut coords, &mut placed);
-        }
-    }
+    place_substituents_for_placed_rings(mol, &rings, &mut coords, &mut placed);
 
     // ── 4. Place remaining acyclic atoms (pure chain molecules) ──────────
 
@@ -59,7 +51,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
 
     // Start at -30° so the first bond is horizontal in zigzag depiction
     let initial_dir = -PI / 6.0;
-    place_chain(mol, root, initial_dir, &mut coords, &mut placed);
+    place_chain(mol, root, initial_dir, &rings, &mut coords, &mut placed);
 
     // ── 5. Center the molecule ────────────────────────────────────────────
 
@@ -229,44 +221,56 @@ fn bfs_shortest_ring(mol: &MoleculeGraph, back_from: usize, back_to: usize) -> V
 
 // ── Ring placement ────────────────────────────────────────────────────────────
 
-fn place_ring_systems(
+fn place_initial_ring_system(
     mol: &MoleculeGraph,
     rings: &[Vec<usize>],
     coords: &mut Vec<Vec2>,
     placed: &mut Vec<bool>,
 ) {
+    if rings.is_empty() {
+        return;
+    }
+
+    // Place the first ring system only. Other standalone ring systems in the
+    // same molecule are anchored later when the connecting chain reaches them.
+    place_regular_ring(
+        &rings[0],
+        Vec2::new(0.0, 0.0),
+        90.0_f64.to_radians(),
+        coords,
+        placed,
+    );
+
     let mut placed_rings: HashSet<usize> = HashSet::new();
+    placed_rings.insert(0);
+    place_connected_fused_rings(mol, rings, &mut placed_rings, coords, placed);
+}
 
-    for (ring_idx, ring) in rings.iter().enumerate() {
-        if placed_rings.contains(&ring_idx) {
-            continue;
-        }
+fn place_connected_fused_rings(
+    mol: &MoleculeGraph,
+    rings: &[Vec<usize>],
+    placed_rings: &mut HashSet<usize>,
+    coords: &mut Vec<Vec2>,
+    placed: &mut Vec<bool>,
+) {
+    loop {
+        let mut progressed = false;
+        for (ring_idx, ring) in rings.iter().enumerate() {
+            if placed_rings.contains(&ring_idx) {
+                continue;
+            }
 
-        // Find if any atom in this ring is already placed (fused system)
-        let anchor = ring.iter().find(|&&a| placed[a]).copied();
-
-        if let Some(anchor_atom) = anchor {
-            // Fused ring: find the shared edge and align the new polygon to it
             let placed_count = ring.iter().filter(|&&a| placed[a]).count();
             if placed_count >= 2 {
-                // Multiple atoms already placed; fill in the missing ones
                 place_fused_ring(mol, ring, coords, placed);
-            } else {
-                // Only one anchor atom; extend at right angle to existing bond
-                place_ring_from_anchor(ring, anchor_atom, coords, placed);
+                placed_rings.insert(ring_idx);
+                progressed = true;
             }
-        } else {
-            // First ring in a new ring system: place as regular polygon
-            place_regular_ring(
-                ring,
-                Vec2::new(0.0, 0.0),
-                90.0_f64.to_radians(),
-                coords,
-                placed,
-            );
         }
 
-        placed_rings.insert(ring_idx);
+        if !progressed {
+            break;
+        }
     }
 }
 
@@ -387,11 +391,72 @@ fn pick_farther_center(
 fn place_ring_from_anchor(
     ring: &[usize],
     anchor: usize,
+    center_dir: f64,
     coords: &mut Vec<Vec2>,
     placed: &mut Vec<bool>,
 ) {
-    let pos = coords[anchor];
-    place_regular_ring(ring, pos, 0.0, coords, placed);
+    let Some(anchor_pos) = ring.iter().position(|&a| a == anchor) else {
+        return;
+    };
+
+    let n = ring.len() as f64;
+    let r = 1.0 / (2.0 * (PI / n).sin());
+    let center = Vec2::new(
+        coords[anchor].x + r * center_dir.cos(),
+        coords[anchor].y + r * center_dir.sin(),
+    );
+    let step = 2.0 * PI / n;
+    let anchor_angle = (coords[anchor].y - center.y).atan2(coords[anchor].x - center.x);
+    let start_angle = anchor_angle - step * anchor_pos as f64;
+
+    place_regular_ring(ring, center, start_angle, coords, placed);
+}
+
+fn place_ring_system_from_anchor(
+    mol: &MoleculeGraph,
+    rings: &[Vec<usize>],
+    ring_idx: usize,
+    anchor: usize,
+    center_dir: f64,
+    coords: &mut Vec<Vec2>,
+    placed: &mut Vec<bool>,
+) {
+    place_ring_from_anchor(&rings[ring_idx], anchor, center_dir, coords, placed);
+
+    let mut placed_rings: HashSet<usize> = HashSet::new();
+    placed_rings.insert(ring_idx);
+    place_connected_fused_rings(mol, rings, &mut placed_rings, coords, placed);
+}
+
+fn unfinished_ring_containing_atom(
+    rings: &[Vec<usize>],
+    atom: usize,
+    placed: &[bool],
+) -> Option<usize> {
+    rings.iter().position(|ring| {
+        ring.contains(&atom) && ring.iter().any(|&ring_atom| !placed[ring_atom])
+    })
+}
+
+fn place_substituents_for_placed_rings(
+    mol: &MoleculeGraph,
+    rings: &[Vec<usize>],
+    coords: &mut Vec<Vec2>,
+    placed: &mut Vec<bool>,
+) {
+    for ring in rings {
+        if !ring.iter().all(|&a| placed[a]) {
+            continue;
+        }
+
+        let n = ring.len() as f64;
+        let cx: f64 = ring.iter().map(|&a| coords[a].x).sum::<f64>() / n;
+        let cy: f64 = ring.iter().map(|&a| coords[a].y).sum::<f64>() / n;
+        for &atom in ring {
+            let outward = (coords[atom].y - cy).atan2(coords[atom].x - cx);
+            place_ring_substituents(mol, atom, outward, rings, coords, placed);
+        }
+    }
 }
 
 // ── Ring substituent placement ────────────────────────────────────────────────
@@ -402,6 +467,7 @@ fn place_ring_substituents(
     mol: &MoleculeGraph,
     ring_atom: usize,
     outward_dir: f64,
+    rings: &[Vec<usize>],
     coords: &mut Vec<Vec2>,
     placed: &mut Vec<bool>,
 ) {
@@ -424,7 +490,12 @@ fn place_ring_substituents(
             coords[ring_atom].y + dir.sin(),
         );
         placed[v] = true;
-        place_chain(mol, v, dir, coords, placed);
+        if let Some(ring_idx) = unfinished_ring_containing_atom(rings, v, placed) {
+            place_ring_system_from_anchor(mol, rings, ring_idx, v, dir, coords, placed);
+            place_substituents_for_placed_rings(mol, rings, coords, placed);
+        } else {
+            place_chain(mol, v, dir, rings, coords, placed);
+        }
     }
 }
 
@@ -435,6 +506,7 @@ fn place_chain(
     mol: &MoleculeGraph,
     start: usize,
     incoming_angle: f64,
+    rings: &[Vec<usize>],
     coords: &mut Vec<Vec2>,
     placed: &mut Vec<bool>,
 ) {
@@ -463,8 +535,13 @@ fn place_chain(
             coords[v] = Vec2::new(coords[u].x + new_dir.cos(), coords[u].y + new_dir.sin());
             placed[v] = true;
 
-            // Alternate turn sign for zigzag
-            stack.push((v, new_dir, -sign));
+            if let Some(ring_idx) = unfinished_ring_containing_atom(rings, v, placed) {
+                place_ring_system_from_anchor(mol, rings, ring_idx, v, new_dir, coords, placed);
+                place_substituents_for_placed_rings(mol, rings, coords, placed);
+            } else {
+                // Alternate turn sign for zigzag
+                stack.push((v, new_dir, -sign));
+            }
         }
     }
 }

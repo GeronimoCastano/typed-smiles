@@ -31,6 +31,31 @@
   [*Phenylalanine* \ #text(size: 8pt, `NC(CC1=CC=CC=C1)C(=O)O`) \ #smiles("NC(CC1=CC=CC=C1)C(=O)O")],
 )
 
+= Ring System Regression Tests
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*Two separated rings* \
+   #text(size: 7pt, `CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1`) \
+   #smiles("CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1", bond-length: 0.9)],
+
+  [*Biphenyl* \
+   #text(size: 7pt, `C1=CC=CC=C1C2=CC=CC=C2`) \
+   #smiles("C1=CC=CC=C1C2=CC=CC=C2", bond-length: 0.95)],
+
+  [*Three separated rings* \
+   #text(size: 7pt, `C1=CC=CC=C1CC2=CC=CC=C2CC3=CC=CC=C3`) \
+   #smiles("C1=CC=CC=C1CC2=CC=CC=C2CC3=CC=CC=C3", bond-length: 0.75)],
+
+  [*Fused bicyclic* \
+   #text(size: 7pt, `C1=CC=CC(CCC2)=C12`) \
+   #smiles("C1=CC=CC(CCC2)=C12", bond-length: 0.95)],
+)
+
 = Atom Charges
 
 #grid(
@@ -96,9 +121,9 @@
   mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[*1*]),
   rxn-arrow(above: ce("Br2")),
   mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[*A*]),
-  rxn-arrow(dir: "down", above: [HNO#sub[3], H#sub[2]SO#sub[4]]),
+  rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
   mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[*B*]),
-  rxn-arrow(dir: "left", above: [Fe, HCl]),
+  rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
   mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[*C*]),
 )
 

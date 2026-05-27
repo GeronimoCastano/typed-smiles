@@ -143,6 +143,13 @@ mod tests {
     }
 
     #[test]
+    fn separated_ring_systems_do_not_overlap() {
+        let out = layout_native("CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1")
+            .expect("two-ring molecule layout failed");
+        assert!(max_bond_length(&out) < 1.2);
+    }
+
+    #[test]
     fn isobutane() {
         let out = layout_native("CC(C)C").expect("isobutane layout failed");
         assert_eq!(out.atoms.len(), 4);
@@ -232,5 +239,16 @@ mod tests {
         // B (organic subset, valence 3): B bonded to one C → 2 implicit H
         let out = layout_native("BC").expect("boron layout failed");
         assert_eq!(out.atoms[0].implicit_h, 2);
+    }
+
+    fn max_bond_length(out: &LayoutOutput) -> f64 {
+        out.bonds
+            .iter()
+            .map(|bond| {
+                let from = out.atoms[bond.from].pos;
+                let to = out.atoms[bond.to].pos;
+                from.dist(to)
+            })
+            .fold(0.0, f64::max)
     }
 }

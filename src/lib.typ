@@ -358,25 +358,23 @@
   align(center + horizon, stack(spacing: 3pt, ..arrow-parts))
 }
 
-// Render a vertical arrow (↓ or ↑) with optional labels to the right
+// Render a vertical arrow (↓ or ↑). `above` is shown to the right, `below` to the left.
 #let _vert-arrow(above, below, dir) = {
   let (from-y, to-y) = if dir == "up" { (0, 52) } else { (52, 0) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
     line((0, from-y), (0, to-y), mark: (end: ">", fill: black, size: 5), stroke: 0.8pt + black)
   })
-  let label-parts = ()
-  if above != none { label-parts.push(text(size: 8pt, above)) }
-  if below != none { label-parts.push(text(size: 8pt, below)) }
-  if label-parts.len() == 0 {
+  if above == none and below == none {
     align(center + horizon, arrow-canvas)
   } else {
     grid(
-      columns: (auto, auto),
+      columns: (auto, auto, auto),
       column-gutter: 4pt,
       align: center + horizon,
+      if below != none { text(size: 8pt, below) } else { [] },
       arrow-canvas,
-      stack(spacing: 2pt, ..label-parts),
+      if above != none { text(size: 8pt, above) } else { [] },
     )
   }
 }

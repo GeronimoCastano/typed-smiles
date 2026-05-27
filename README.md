@@ -14,17 +14,17 @@ Start by importing `smiles`. Pass a SMILES string and the package will draw the
 skeletal structure.
 
 ```typst
-#import "@preview/typed-smiles:0.1.0": smiles
+#import "@preview/typed-smiles:0.1.1": smiles
 
 #grid(
   columns: (1fr, 1fr, 1fr, 1fr),
   gutter: 1.2em,
   align: center,
 
-  [*Ethanol* \ #text(size: 8pt, `CCO`) \ #smiles("CCO")],
-  [*Alanine* \ #text(size: 8pt, `CC(N)C(=O)O`) \ #smiles("CC(N)C(=O)O")],
-  [*Chlorobenzene* \ #text(size: 8pt, `ClC1=CC=CC=C1`) \ #smiles("ClC1=CC=CC=C1")],
-  [*Furan* \ #text(size: 8pt, `C1=CC=CO1`) \ #smiles("C1=CC=CO1")],
+  [*Ethanol* \ #smiles("CCO")],
+  [*Alanine* \ #smiles("CC(N)C(=O)O")],
+  [*Chlorobenzene* \ #smiles("ClC1=CC=CC=C1")],
+  [*Furan* \ #smiles("C1=CC=CO1")],
 )
 ```
 
@@ -41,14 +41,11 @@ its aspect ratio. Here is the same molecule drawn at three sizes:
   gutter: 1.2em,
   align: center,
 
-  [*Small* \ #text(size: 8pt, `bond-length: 0.8`) \
-   #smiles("C1=CC=CC=C1", bond-length: 0.8)],
+  [*Small* \ #smiles("C1=CC=CC=C1", bond-length: 0.8)],
 
-  [*Default* \ #text(size: 8pt, `bond-length: 1.0`) \
-   #smiles("C1=CC=CC=C1")],
+  [*Default* \ #smiles("C1=CC=CC=C1")],
 
-  [*Large* \ #text(size: 8pt, `bond-length: 1.4`) \
-   #smiles("C1=CC=CC=C1", bond-length: 1.4)],
+  [*Large* \ #smiles("C1=CC=CC=C1", bond-length: 1.4)],
 )
 ```
 
@@ -62,7 +59,7 @@ small inorganic species, conditions, and equations where a full molecular
 diagram would be unnecessary.
 
 ```typst
-#import "@preview/typed-smiles:0.1.0": ce
+#import "@preview/typed-smiles:0.1.1": ce
 
 #grid(
   columns: (1fr, 1fr),
@@ -70,12 +67,10 @@ diagram would be unnecessary.
   row-gutter: 1em,
   align: center,
 
-  [*Formula* \ #text(size: 8pt, `H2SO4`) \ #ce("H2SO4")],
-  [*Ions* \ #text(size: 8pt, `(NH4)2SO4`) \ #ce("(NH4)2SO4")],
-  [*Combustion* \ #text(size: 8pt, `CH4 + 2O2 -> CO2 + 2H2O`) \
-   #ce("CH4 + 2O2 -> CO2 + 2H2O")],
-  [*Equilibrium* \ #text(size: 8pt, `N2 + 3H2 <=> 2NH3`) \
-   #ce("N2 + 3H2 <=> 2NH3")],
+  [*Formula* \ #ce("H2SO4")],
+  [*Ions* \ #ce("(NH4)2SO4")],
+  [*Combustion* \ #ce("CH4 + 2O2 -> CO2 + 2H2O")],
+  [*Equilibrium* \ #ce("N2 + 3H2 <=> 2NH3")],
 )
 ```
 
@@ -88,7 +83,7 @@ helpers let you combine SMILES-based molecule diagrams with `ce()` formulas,
 plus signs, labels, and arrow conditions in one layout.
 
 ```typst
-#import "@preview/typed-smiles:0.1.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.1.1": smiles, ce, rxn-arrow, mol, reaction
 
 #reaction(
   mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
@@ -119,9 +114,9 @@ wrap-around schemes without manually placing every molecule.
   mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[1]),
   rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
   mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[A]),
-  rxn-arrow(dir: "down", above: [HNO#sub[3]], below: [H#sub[2]SO#sub[4]]),
+  rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
   mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[B]),
-  rxn-arrow(dir: "left", above: [Fe], below: [HCl]),
+  rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
   mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[C]),
 )
 ```
@@ -140,10 +135,10 @@ hydrogens. Explicit bracket hydrogens, such as `[NH4+]`, are always shown.
   gutter: 1.2em,
   align: center,
 
-  [*Solid wedge* \ #text(size: 8pt, `C/N`) \ #smiles("C/N")],
-  [*Hashed wedge* \ #text(size: 8pt, `C\N`) \ #smiles("C\\N")],
-  [*Implicit H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", show-h: true)],
-  [*Explicit H* \ #text(size: 8pt, `[NH4+]`) \ #smiles("[NH4+]")],
+  [*Solid wedge* \ #smiles("C/N")],
+  [*Hashed wedge* \ #smiles("C\\N")],
+  [*Implicit H* \ #smiles("CCO", show-h: true)],
+  [*Explicit H* \ #smiles("[NH4+]")],
 )
 ```
 
