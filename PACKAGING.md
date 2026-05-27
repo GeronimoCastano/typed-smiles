@@ -1,4 +1,4 @@
-# Release Checklist
+# Packaging And Release Checklist
 
 Use `main` as the source of truth. The `package-submission` branch and the `typst/packages` fork are release artifacts, not development branches.
 
