@@ -18,6 +18,6 @@
 
   example("Solid wedge", smiles("C/N", bond-length: 1.6)),
   example("Hashed wedge", smiles("C\\N", bond-length: 1.6)),
-  example("Implicit H", smiles("CCO", bond-length: 1.2, show-h: true)),
-  example("Explicit H", smiles("[NH4+]", bond-length: 1.4)),
+  example("Mixed", smiles("F/C\\Cl", bond-length: 1.4)),
+  example("With carbon H", smiles("CCO", bond-length: 1.2, show-all-h: true)),
 )

@@ -14,7 +14,7 @@ Start by importing `smiles`. Pass a SMILES string and the package will draw the
 skeletal structure.
 
 ```typst
-#import "@preview/typed-smiles:0.1.1": smiles
+#import "@preview/typed-smiles:0.2.0": smiles
 
 #grid(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -51,6 +51,30 @@ its aspect ratio. Here is the same molecule drawn at three sizes:
 
 ![Bond length scaling examples](assets/readme/scaling.png)
 
+## Hydrogens and labels
+
+By default, `typed-smiles` follows the usual skeletal drawing convention:
+hydrogens on heteroatoms are shown, while carbon hydrogens stay implicit. This
+means ordinary SMILES such as `CC(N)C(=O)O` produces the expected `NH2` and
+`OH` labels without bracket syntax. Use `show-all-h: true` when you also want
+carbon hydrogens, bracket syntax for explicit hydrogens, and `{label}` for
+custom upright group labels.
+
+```typst
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.2em,
+  align: center,
+
+  [*Default hetero H* \ #smiles("CC(N)C(=O)O")],
+  [*All H* \ #smiles("CCO", show-all-h: true)],
+  [*Explicit bracket H* \ #smiles("[NH3]")],
+  [*Custom label* \ #smiles("{PPh3}C=O")],
+)
+```
+
+![Hydrogen and custom label examples](assets/readme/hydrogens-labels.png)
+
 ## Chemical formulas and equations
 
 `typed-smiles` re-exports `ce` from `chemformula`, so the same import can handle
@@ -59,7 +83,7 @@ small inorganic species, conditions, and equations where a full molecular
 diagram would be unnecessary.
 
 ```typst
-#import "@preview/typed-smiles:0.1.1": ce
+#import "@preview/typed-smiles:0.2.0": ce
 
 #grid(
   columns: (1fr, 1fr),
@@ -83,7 +107,7 @@ helpers let you combine SMILES-based molecule diagrams with `ce()` formulas,
 plus signs, labels, and arrow conditions in one layout.
 
 ```typst
-#import "@preview/typed-smiles:0.1.1": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.2.0": smiles, ce, rxn-arrow, mol, reaction
 
 #reaction(
   mol(smiles("CC(=O)O"), label: text(size: 8pt)[acetic acid]),
@@ -123,11 +147,11 @@ wrap-around schemes without manually placing every molecule.
 
 ![Wrap-around reaction scheme](assets/readme/schemes.png)
 
-## Wedges, dashed bonds, and hydrogens
+## Wedges and dashed bonds
 
-Use `/` for a solid wedge and `\` for a hashed wedge. By default, carbon
-hydrogens stay implicit, but `show-h: true` displays computed implicit
-hydrogens. Explicit bracket hydrogens, such as `[NH4+]`, are always shown.
+Use `/` for a solid wedge and `\` for a hashed wedge. The renderer draws these
+markers visually, but it does not yet perform full stereochemical
+interpretation.
 
 ```typst
 #grid(
@@ -137,16 +161,16 @@ hydrogens. Explicit bracket hydrogens, such as `[NH4+]`, are always shown.
 
   [*Solid wedge* \ #smiles("C/N")],
   [*Hashed wedge* \ #smiles("C\\N")],
-  [*Implicit H* \ #smiles("CCO", show-h: true)],
-  [*Explicit H* \ #smiles("[NH4+]")],
+  [*Mixed* \ #smiles("F/C\\Cl")],
+  [*With carbon H* \ #smiles("CCO", show-all-h: true)],
 )
 ```
 
-![Stereochemistry and hydrogen examples](assets/readme/stereo-h.png)
+![Wedge and dashed bond examples](assets/readme/stereo-h.png)
 
 ## API
 
-### `#smiles(smiles-str, bond-length, atom-font-size, color, rotation, show-h)`
+### `#smiles(smiles-str, bond-length, atom-font-size, color, rotation, show-hetero-h, show-all-h)`
 
 Renders a SMILES string as a 2D skeletal molecular diagram.
 
@@ -157,7 +181,8 @@ Renders a SMILES string as a 2D skeletal molecular diagram.
 | `atom-font-size` | `length` | `11pt` | Atom label font size |
 | `color` | `bool` | `true` | Apply Jmol CPK atom colors |
 | `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
-| `show-h` | `bool` | `false` | Show computed implicit hydrogens |
+| `show-hetero-h` | `bool` | `true` | Show computed implicit hydrogens on non-carbon atoms |
+| `show-all-h` | `bool` | `false` | Show computed implicit hydrogens on all atoms, including carbon |
 
 `#display-smiles` is an alias for `#smiles`.
 

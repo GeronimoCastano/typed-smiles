@@ -13,11 +13,30 @@
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-#let _has-label(atom, show-h: false) = {
+#let _is-carbon(atom) = atom.symbol == "C" or atom.symbol == "c"
+
+#let _visible-implicit-h(atom, show-hetero-h: true, show-all-h: false) = {
+  let count = atom.at("implicit_h", default: 0)
+  if count == 0 {
+    0
+  } else if show-all-h {
+    count
+  } else if show-hetero-h and not _is-carbon(atom) and atom.symbol != "*" {
+    count
+  } else {
+    0
+  }
+}
+
+#let _has-label(atom, show-hetero-h: true, show-all-h: false) = {
   let has-abbrev = atom.at("abbrev", default: "") != ""
-  let has-hetero = (atom.symbol != "C" and atom.symbol != "c" and atom.symbol != "*") or (atom.charge != 0)
+  let has-hetero = (not _is-carbon(atom) and atom.symbol != "*") or (atom.charge != 0)
   let has-explicit-h = atom.hcount > 0
-  let has-implicit-h = show-h and atom.at("implicit_h", default: 0) > 0
+  let has-implicit-h = _visible-implicit-h(
+    atom,
+    show-hetero-h: show-hetero-h,
+    show-all-h: show-all-h,
+  ) > 0
   has-abbrev or has-hetero or has-explicit-h or has-implicit-h
 }
 
@@ -44,8 +63,10 @@
 /// - color (bool): Apply Jmol CPK atom colors. Default: true.
 /// - rotation (angle): Rotate the molecule by this angle. Atom labels stay upright.
 ///   Example: rotation: 90deg. Default: 0deg.
-/// - show-h (bool): Show computed implicit hydrogens. Explicit bracket hydrogens
-///   are always shown. Default: false.
+/// - show-hetero-h (bool): Show computed implicit hydrogens on non-carbon
+///   atoms. Default: true.
+/// - show-all-h (bool): Show computed implicit hydrogens on all atoms,
+///   including carbon. Default: false.
 /// -> content
 #let smiles(
   smiles-str,
@@ -53,7 +74,8 @@
   atom-font-size: 11pt,
   color: true,
   rotation: 0deg,
-  show-h: false,
+  show-hetero-h: true,
+  show-all-h: false,
 ) = {
   let raw-bytes = smiles-plugin.layout(bytes(smiles-str))
   let layout = json(raw-bytes)
@@ -93,8 +115,8 @@
       let ux = if len > 0.001 { dx / len } else { 1.0 }
       let uy = if len > 0.001 { dy / len } else { 0.0 }
 
-      let s1 = if _has-label(af, show-h: show-h) { label-margin } else { 0.0 }
-      let s2 = if _has-label(at, show-h: show-h) { label-margin } else { 0.0 }
+      let s1 = if _has-label(af, show-hetero-h: show-hetero-h, show-all-h: show-all-h) { label-margin } else { 0.0 }
+      let s2 = if _has-label(at, show-hetero-h: show-hetero-h, show-all-h: show-all-h) { label-margin } else { 0.0 }
       let q1x = p1x + ux * s1
       let q1y = p1y + uy * s1
       let q2x = p2x - ux * s2
@@ -252,7 +274,7 @@
     // Atom labels — heteroatoms, charged atoms, and abbreviated groups.
     // Positions are rotated; text content stays upright.
     for atom in layout.atoms {
-      if _has-label(atom, show-h: show-h) {
+      if _has-label(atom, show-hetero-h: show-hetero-h, show-all-h: show-all-h) {
         let abbrev = atom.at("abbrev", default: "")
         let fill   = atom-clr(atom.symbol)
 
@@ -272,7 +294,11 @@
                            else if atom.charge > 1    { str(atom.charge) + "+" }
                            else if atom.charge < -1   { str(-atom.charge) + "\u{2212}" }
                            else                       { "" }
-          let h-count = atom.hcount + if show-h { atom.at("implicit_h", default: 0) } else { 0 }
+          let h-count = atom.hcount + _visible-implicit-h(
+            atom,
+            show-hetero-h: show-hetero-h,
+            show-all-h: show-all-h,
+          )
 
           let sym-text = text(
             size: atom-font-size,

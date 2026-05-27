@@ -151,17 +151,67 @@
   [*-90°* \ #smiles("CC(N)C(=O)O", rotation: -90deg)],
 )
 
-= Implicit Hydrogens
+= Heteroatom Hydrogen Defaults
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*Alcohol OH* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2)],
+  [*Carboxylic OH* \ #text(size: 8pt, `CC(=O)O`) \ #smiles("CC(=O)O", bond-length: 1.2)],
+  [*Thiol SH* \ #text(size: 8pt, `CCS`) \ #smiles("CCS", bond-length: 1.2)],
+
+  [*Primary amine* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.2)],
+  [*Secondary amine* \ #text(size: 8pt, `CNC`) \ #smiles("CNC", bond-length: 1.2)],
+  [*Tertiary amine* \ #text(size: 8pt, `CN(C)C`) \ #smiles("CN(C)C", bond-length: 1.2)],
+)
+
+#v(1em)
+*Regression molecule with NH#sub[2] and NH labels by default:*
+
+#align(center)[
+  #text(size: 7pt, `CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1`) \
+  #smiles("CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1", bond-length: 0.85)
+]
+
+= Hydrogen Display Options
 
 #grid(
   columns: (1fr, 1fr, 1fr, 1fr),
   gutter: 1.5em,
   align: center,
 
-  [*Default* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2)],
-  [*show-h* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, show-h: true)],
-  [*Carbonyl H* \ #text(size: 8pt, `C=O`) \ #smiles("C=O", bond-length: 1.2, show-h: true)],
+  [*Default hetero H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2)],
+  [*No hetero H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, show-hetero-h: false)],
+  [*All H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, show-all-h: true)],
   [*Explicit H* \ #text(size: 8pt, `[NH4+]`) \ #smiles("[NH4+]", bond-length: 1.2)],
+)
+
+#v(1em)
+*Heteroatom H on/off comparisons:*
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*OH shown* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.15)],
+  [*OH hidden* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.15, show-hetero-h: false)],
+  [*NH#sub[2] shown* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.15)],
+  [*NH#sub[2] hidden* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.15, show-hetero-h: false)],
+
+  [*NH shown* \ #text(size: 8pt, `CNC`) \ #smiles("CNC", bond-length: 1.15)],
+  [*NH hidden* \ #text(size: 8pt, `CNC`) \ #smiles("CNC", bond-length: 1.15, show-hetero-h: false)],
+  [*SH shown* \ #text(size: 8pt, `CCS`) \ #smiles("CCS", bond-length: 1.15)],
+  [*SH hidden* \ #text(size: 8pt, `CCS`) \ #smiles("CCS", bond-length: 1.15, show-hetero-h: false)],
+
+  [*PH#sub[2] shown* \ #text(size: 8pt, `CP`) \ #smiles("CP", bond-length: 1.15)],
+  [*PH#sub[2] hidden* \ #text(size: 8pt, `CP`) \ #smiles("CP", bond-length: 1.15, show-hetero-h: false)],
+  [*BH#sub[2] shown* \ #text(size: 8pt, `CB`) \ #smiles("CB", bond-length: 1.15)],
+  [*BH#sub[2] hidden* \ #text(size: 8pt, `CB`) \ #smiles("CB", bond-length: 1.15, show-hetero-h: false)],
 )
 
 = Multiple Bond Rendering

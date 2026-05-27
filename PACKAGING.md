@@ -37,6 +37,7 @@ typst compile --root . tests/test.typ tests/test.pdf
 ```sh
 typst compile --root . --ppi 300 assets/readme/basics.typ assets/readme/basics.png
 typst compile --root . --ppi 300 assets/readme/scaling.typ assets/readme/scaling.png
+typst compile --root . --ppi 300 assets/readme/hydrogens-labels.typ assets/readme/hydrogens-labels.png
 typst compile --root . --ppi 300 assets/readme/formulas.typ assets/readme/formulas.png
 typst compile --root . --ppi 300 assets/readme/reactions.typ assets/readme/reactions.png
 typst compile --root . --ppi 300 assets/readme/schemes.typ assets/readme/schemes.png
@@ -51,39 +52,39 @@ typst compile --root . --ppi 300 assets/readme/stereo-h.typ assets/readme/stereo
 2. Create a new branch in that fork, for example:
 
 ```sh
-git switch -c add-typed-smiles-0.1.1
+git switch -c add-typed-smiles-0.2.0
 ```
 
 3. Copy the package files:
 
 ```sh
-scripts/package-preview.sh 0.1.1 /path/to/typst/packages
+scripts/package-preview.sh 0.2.0 /path/to/typst/packages
 ```
 
 This creates:
 
 ```text
-/path/to/typst/packages/packages/preview/typed-smiles/0.1.1/
+/path/to/typst/packages/packages/preview/typed-smiles/0.2.0/
 ```
 
 4. From the `typst/packages/packages` directory, run:
 
 ```sh
-typst-package-check check @preview/typed-smiles:0.1.1
+typst-package-check check @preview/typed-smiles:0.2.0
 ```
 
 5. Commit the new version directory in the fork:
 
 ```sh
-git add packages/preview/typed-smiles/0.1.1
-git commit -m "Add typed-smiles 0.1.1"
-git push -u fork add-typed-smiles-0.1.1
+git add packages/preview/typed-smiles/0.2.0
+git commit -m "Add typed-smiles 0.2.0"
+git push -u fork add-typed-smiles-0.2.0
 ```
 
 6. Open a PR to `typst/packages:main` with the title format:
 
 ```text
-typed-smiles:0.1.1
+typed-smiles:0.2.0
 ```
 
 Use the official package submission checklist in the PR body.
