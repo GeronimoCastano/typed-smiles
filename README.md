@@ -39,8 +39,10 @@ skeletal structure.
 
 ## Scaling
 
-Use `bond-length` to scale diagrams. The scale is uniform, so the molecule keeps
-its aspect ratio. Here is the same molecule drawn at three sizes:
+Use `scale` to enlarge or shrink a diagram while keeping bond length, atom label
+size, and bond stroke balanced. You can still override `bond-length`,
+`font-size`, or `bond-stroke` individually when a figure needs manual tuning.
+Here is the same molecule drawn at three sizes:
 
 ```typst
 #table(
@@ -54,13 +56,13 @@ its aspect ratio. Here is the same molecule drawn at three sizes:
   [*Default*],
   [*Large*],
 
-  [#smiles("C1=CC=CC=C1", bond-length: 0.8)],
+  [#smiles("C1=CC=CC=C1", scale: 0.8)],
   [#smiles("C1=CC=CC=C1")],
-  [#smiles("C1=CC=CC=C1", bond-length: 1.4)],
+  [#smiles("C1=CC=CC=C1", scale: 1.4)],
 )
 ```
 
-![Bond length scaling examples](assets/readme/scaling.png)
+![Balanced scaling examples](assets/readme/scaling.png)
 
 ## Hydrogens and labels
 
@@ -70,7 +72,7 @@ means ordinary SMILES such as `CC(N)C(=O)O` produces the expected `NH2` and
 `OH` labels without bracket syntax. Use `show-all-h: true` when you also want
 carbon hydrogens, bracket syntax for explicit hydrogens, and `{label}` for
 custom upright group labels. Atom labels can also use a custom typeface with
-`atom-font`.
+`font`.
 
 ```typst
 #table(
@@ -90,7 +92,7 @@ custom upright group labels. Atom labels can also use a custom typeface with
   [#smiles("CCO", show-all-h: true)],
   [#smiles("[NH3]")],
   [#smiles("{PPh3}C=O")],
-  [#smiles("CCN", atom-font: "Libertinus Serif")],
+  [#smiles("CCN", font: "Libertinus Serif")],
 )
 ```
 
@@ -100,7 +102,7 @@ custom upright group labels. Atom labels can also use a custom typeface with
 
 `typed-smiles` re-exports `ce` from `chemformula`, so the same import can handle
 ordinary formulas and text-based chemical equations. It also accepts `font` and
-`size` for local formula styling; use a math-capable font for formulas and
+`font-size` for local formula styling; use a math-capable font for formulas and
 equations. This is useful for salts, small inorganic
 species, conditions, and equations where a full molecular diagram would be
 unnecessary.
@@ -215,16 +217,18 @@ interpretation.
 
 ## API
 
-### `#smiles(smiles-str, bond-length, atom-font-size, atom-font, color, rotation, show-hetero-h, show-all-h)`
+### `#smiles(smiles-str, scale, bond-length, font-size, font, bond-stroke, color, rotation, show-hetero-h, show-all-h)`
 
 Renders a SMILES string as a 2D skeletal molecular diagram.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `smiles-str` | `str` | required | OpenSMILES string |
-| `bond-length` | `float` | `1.0` | Uniform bond length scale factor; `1.0` equals 30pt per bond |
-| `atom-font-size` | `length` | `11pt` | Atom label font size |
-| `atom-font` | `str` | `"New Computer Modern"` | Atom label font |
+| `scale` | `float` | `1.0` | Balanced scale for bond length, atom labels, and bond stroke |
+| `bond-length` | `float` | `scale` | Bond length scale factor; `1.0` equals 30pt per bond |
+| `font-size` | `length` | `11pt * scale` | Atom label font size |
+| `font` | `str` | `"New Computer Modern"` | Atom label font |
+| `bond-stroke` | `length` | `0.9pt * scale` | Bond stroke width |
 | `color` | `bool` | `true` | Apply Jmol CPK atom colors |
 | `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
 | `show-hetero-h` | `bool` | `true` | Show computed implicit hydrogens on non-carbon atoms |
@@ -232,11 +236,14 @@ Renders a SMILES string as a 2D skeletal molecular diagram.
 
 `#display-smiles` is an alias for `#smiles`.
 
-### `#ce(chem, font: none, size: none, ..args)`
+Explicit `bond-length`, `font-size`, and `bond-stroke` values override the
+corresponding value derived from `scale`.
+
+### `#ce(chem, font: none, font-size: none, ..args)`
 
 Re-exports `chemformula`'s `ch` function as `ce`. Passes through the usual
-`chemformula` arguments and adds optional `font` and `size` arguments for local
-formula styling. Formula fonts should support math rendering.
+`chemformula` arguments and adds optional `font` and `font-size` arguments for
+local formula styling. Formula fonts should support math rendering.
 
 ### `#rxn-arrow(above, below, dir)`
 

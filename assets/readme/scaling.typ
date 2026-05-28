@@ -14,7 +14,7 @@
   [*Default*],
   [*Large*],
 
-  [#smiles("C1=CC=CC=C1", bond-length: 0.8)],
+  [#smiles("C1=CC=CC=C1", scale: 0.8)],
   [#smiles("C1=CC=CC=C1")],
-  [#smiles("C1=CC=CC=C1", bond-length: 1.4)],
+  [#smiles("C1=CC=CC=C1", scale: 1.4)],
 )

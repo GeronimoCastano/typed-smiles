@@ -223,15 +223,56 @@
 
   [*Large default label* \
    #text(size: 8pt, `CCN`) \
-   #smiles("CCN", atom-font-size: 36pt, bond-length: 1.35)],
+   #smiles("CCN", font-size: 36pt, bond-length: 1.35)],
 
   [*Custom atom font* \
-   #text(size: 8pt, `atom-font: "Libertinus Serif"`) \
-   #smiles("CC(=O)N", atom-font: "Libertinus Serif", atom-font-size: 20pt, bond-length: 1.25)],
+   #text(size: 8pt, `font: "Libertinus Serif"`) \
+   #smiles("CC(=O)N", font: "Libertinus Serif", font-size: 20pt, bond-length: 1.25)],
 
   [*Formula font* \
-   #text(size: 8pt, `ce(..., font: ..., size: 24pt)`) \
-   #ce("NH4+ + Cl- -> NH4Cl", font: "New Computer Modern Math", size: 24pt)],
+   #text(size: 8pt, `ce(..., font: ..., font-size: 24pt)`) \
+   #ce("NH4+ + Cl- -> NH4Cl", font: "New Computer Modern Math", font-size: 24pt)],
+)
+
+= Scale and Bond Stroke Options
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*Default* \
+   #text(size: 8pt, `C1=CC=CC=C1`) \
+   #smiles("C1=CC=CC=C1")],
+
+  [*Scale only* \
+   #text(size: 8pt, `scale: 1.6`) \
+   #smiles("C1=CC=CC=C1", scale: 1.6)],
+
+  [*Scale + font override* \
+   #text(size: 8pt, `scale: 1.6, font-size: 11pt`) \
+   #smiles("CCN", scale: 1.6, font-size: 11pt)],
+
+  [*Scale + stroke override* \
+   #text(size: 8pt, `scale: 1.6, bond-stroke: 0.8pt`) \
+   #smiles("C1=CC=CC=C1", scale: 1.6, bond-stroke: 0.8pt)],
+
+  [*Thick bonds* \
+   #text(size: 8pt, `bond-stroke: 2pt`) \
+   #smiles("C1=CC=CC=C1", bond-stroke: 2pt)],
+
+  [*Long thin bonds* \
+   #text(size: 8pt, `bond-length: 1.6, bond-stroke: 0.8pt`) \
+   #smiles("C1=CC=CC=C1", bond-length: 1.6, bond-stroke: 0.8pt)],
+
+  [*Large labels only* \
+   #text(size: 8pt, `font-size: 24pt`) \
+   #smiles("CCN", font-size: 24pt)],
+
+  [*Scale + all overrides* \
+   #text(size: 8pt, `scale: 1.6, manual values`) \
+   #smiles("CCN", scale: 1.6, bond-length: 1.15, font-size: 14pt, bond-stroke: 1.8pt)],
 )
 
 = Multiple Bond Rendering

@@ -9,22 +9,22 @@
 
 // Re-export as ce so users only need one import line.
 // chemformula uses math mode internally, giving proper operator spacing.
-#let ce(chem, font: none, size: none, ..args) = {
-  if font == none and size == none {
+#let ce(chem, font: none, font-size: none, ..args) = {
+  if font == none and font-size == none {
     ch(chem, ..args)
   } else if font == none {
     [
-      #show math.equation: set text(size: size)
+      #show math.equation: set text(size: font-size)
       #ch(chem, ..args)
     ]
-  } else if size == none {
+  } else if font-size == none {
     [
       #show math.equation: set text(font: font)
       #ch(chem, ..args)
     ]
   } else {
     [
-      #show math.equation: set text(font: font, size: size)
+      #show math.equation: set text(font: font, size: font-size)
       #ch(chem, ..args)
     ]
   }
@@ -77,9 +77,13 @@
 ///
 /// - smiles-str (str): A valid SMILES string, e.g. "C1=CC=CC=C1" for benzene.
 ///   Use Kekulé notation for aromatic rings (C not c) until aromatic support lands.
-/// - bond-length (float): Scale factor; 1.0 = 30 pt per bond. Default: 1.0.
-/// - atom-font-size (length): Font size for heteroatom labels. Default: 11pt.
-/// - atom-font (str): Font for atom labels. Default: "New Computer Modern".
+/// - scale (float): Balanced scale for bond length, atom labels, and bond stroke.
+///   Explicit bond-length, font-size, or bond-stroke values override it.
+///   Default: 1.0.
+/// - bond-length (float): Bond length scale factor; 1.0 = 30 pt per bond.
+/// - font-size (length): Font size for atom labels.
+/// - font (str): Font for atom labels. Default: "New Computer Modern".
+/// - bond-stroke (length): Bond stroke width.
 /// - color (bool): Apply Jmol CPK atom colors. Default: true.
 /// - rotation (angle): Rotate the molecule by this angle. Atom labels stay upright.
 ///   Example: rotation: 90deg. Default: 0deg.
@@ -90,9 +94,11 @@
 /// -> content
 #let smiles(
   smiles-str,
-  bond-length: 1.0,
-  atom-font-size: 11pt,
-  atom-font: "New Computer Modern",
+  scale: 1.0,
+  bond-length: none,
+  font-size: none,
+  font: "New Computer Modern",
+  bond-stroke: none,
   color: true,
   rotation: 0deg,
   show-hetero-h: true,
@@ -101,21 +107,25 @@
   let raw-bytes = smiles-plugin.layout(bytes(smiles-str))
   let layout = json(raw-bytes)
 
-  let scale = bond-length * 30pt
+  let actual-bond-length = if bond-length == none { scale } else { bond-length }
+  let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
+  let actual-bond-stroke = if bond-stroke == none { 0.9pt * scale } else { bond-stroke }
+  let canvas-scale = actual-bond-length * 30pt
+  let stroke-units = actual-bond-stroke / canvas-scale
 
-  let label-margin    = 0.27
-  let double-gap      = 0.065
-  let ring-double-gap = 0.09
+  let label-margin    = calc.max(0.27, actual-font-size / canvas-scale * 0.70)
+  let double-gap      = calc.max(0.065, stroke-units * 2.30)
+  let ring-double-gap = calc.max(0.09, stroke-units * 3.00)
   let inner-trim      = 0.07
   let multiple-bond-trim = 0.10
-  let stroke-w        = 0.9pt
-  let subscript-size  = atom-font-size * 0.62
-  let superscript-size = atom-font-size * 0.62
+  let stroke-w        = actual-bond-stroke
+  let subscript-size  = actual-font-size * 0.62
+  let superscript-size = actual-font-size * 0.62
 
   let atom-clr = if color { _atom-color } else { (sym) => black }
-  let atom-label(body, fill: black, size: atom-font-size) = text(
+  let atom-label(body, fill: black, size: actual-font-size) = text(
     size: size,
-    font: atom-font,
+    font: font,
     style: "normal",
     weight: "regular",
     fill: fill,
@@ -127,7 +137,7 @@
   let rx(x, y) = x * cos-a - y * sin-a
   let ry(x, y) = x * sin-a + y * cos-a
 
-  cetz.canvas(length: scale, {
+  cetz.canvas(length: canvas-scale, {
     import cetz.draw: *
 
     for bond in layout.bonds {
