@@ -9,12 +9,22 @@
 
 // Re-export as ce so users only need one import line.
 // chemformula uses math mode internally, giving proper operator spacing.
-#let ce(chem, font: none, ..args) = {
-  if font == none {
+#let ce(chem, font: none, size: none, ..args) = {
+  if font == none and size == none {
     ch(chem, ..args)
-  } else {
+  } else if font == none {
+    [
+      #show math.equation: set text(size: size)
+      #ch(chem, ..args)
+    ]
+  } else if size == none {
     [
       #show math.equation: set text(font: font)
+      #ch(chem, ..args)
+    ]
+  } else {
+    [
+      #show math.equation: set text(font: font, size: size)
       #ch(chem, ..args)
     ]
   }

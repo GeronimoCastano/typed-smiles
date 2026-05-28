@@ -99,8 +99,8 @@ custom upright group labels. Atom labels can also use a custom typeface with
 ## Chemical formulas and equations
 
 `typed-smiles` re-exports `ce` from `chemformula`, so the same import can handle
-ordinary formulas and text-based chemical equations. It also accepts `font` for
-local formula typeface changes; use a math-capable font for formulas and
+ordinary formulas and text-based chemical equations. It also accepts `font` and
+`size` for local formula styling; use a math-capable font for formulas and
 equations. This is useful for salts, small inorganic
 species, conditions, and equations where a full molecular diagram would be
 unnecessary.
@@ -232,11 +232,11 @@ Renders a SMILES string as a 2D skeletal molecular diagram.
 
 `#display-smiles` is an alias for `#smiles`.
 
-### `#ce(chem, font: none, ..args)`
+### `#ce(chem, font: none, size: none, ..args)`
 
 Re-exports `chemformula`'s `ch` function as `ce`. Passes through the usual
-`chemformula` arguments and adds an optional `font` argument for local formula
-font selection. Formula fonts should support math rendering.
+`chemformula` arguments and adds optional `font` and `size` arguments for local
+formula styling. Formula fonts should support math rendering.
 
 ### `#rxn-arrow(above, below, dir)`
 

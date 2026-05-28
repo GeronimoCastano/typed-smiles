@@ -230,8 +230,8 @@
    #smiles("CC(=O)N", atom-font: "Libertinus Serif", atom-font-size: 20pt, bond-length: 1.25)],
 
   [*Formula font* \
-   #text(size: 8pt, `ce(..., font: "New Computer Modern Math")`) \
-   #text(size: 24pt, ce("NH4+ + Cl- -> NH4Cl", font: "New Computer Modern Math"))],
+   #text(size: 8pt, `ce(..., font: ..., size: 24pt)`) \
+   #ce("NH4+ + Cl- -> NH4Cl", font: "New Computer Modern Math", size: 24pt)],
 )
 
 = Multiple Bond Rendering
