@@ -234,6 +234,39 @@
    #ce("NH4+ + Cl- -> NH4Cl", font: "New Computer Modern Math", font-size: 24pt)],
 )
 
+= Hidden Junction Overlap Regression
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*CC=O small* \
+   #text(size: 8pt, `scale: 0.7`) \
+   #smiles("CC=O", scale: 0.7)],
+
+  [*CC=O default* \
+   #text(size: 8pt, `scale: 1.0`) \
+   #smiles("CC=O")],
+
+  [*CC=O large* \
+   #text(size: 8pt, `scale: 2.0`) \
+   #smiles("CC=O", scale: 2.0)],
+
+  [*Benzene small* \
+   #text(size: 8pt, `scale: 0.7`) \
+   #smiles("C1=CC=CC=C1", scale: 0.7)],
+
+  [*Benzene default* \
+   #text(size: 8pt, `scale: 1.0`) \
+   #smiles("C1=CC=CC=C1")],
+
+  [*Benzene large* \
+   #text(size: 8pt, `scale: 2.0`) \
+   #smiles("C1=CC=CC=C1", scale: 2.0)],
+)
+
 = Scale and Bond Stroke Options
 
 #grid(
@@ -350,3 +383,10 @@ rendered as upright text. Standard SMILES bonding rules apply around it.
   [*With stereo* \ #text(size: 8pt, `{Nu}/C({LG})=O`) \
    #smiles("{Nu}/C({LG})=O")],
 )
+
+// #pagebreak()
+
+
+// #align(center)[
+//   #smiles("CC(=O)C", scale : 1)
+// ]

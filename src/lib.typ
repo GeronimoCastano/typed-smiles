@@ -116,6 +116,7 @@
   let label-margin    = calc.max(0.27, actual-font-size / canvas-scale * 0.70)
   let double-gap      = calc.max(0.065, stroke-units * 2.30)
   let ring-double-gap = calc.max(0.09, stroke-units * 3.00)
+  let junction-overlap = calc.min(0.006, calc.max(0.00875, stroke-units * 0.49))
   let inner-trim      = 0.07
   let multiple-bond-trim = 0.10
   let stroke-w        = actual-bond-stroke
@@ -155,18 +156,22 @@
       let len = calc.sqrt(dx * dx + dy * dy)
       let ux = if len > 0.001 { dx / len } else { 1.0 }
       let uy = if len > 0.001 { dy / len } else { 0.0 }
+      let atom-degree(i) = layout.bonds.filter(b => b.from == i or b.to == i).len()
 
-      let s1 = if _has-label(af, show-hetero-h: show-hetero-h, show-all-h: show-all-h) { label-margin } else { 0.0 }
-      let s2 = if _has-label(at, show-hetero-h: show-hetero-h, show-all-h: show-all-h) { label-margin } else { 0.0 }
-      let q1x = p1x + ux * s1
-      let q1y = p1y + uy * s1
-      let q2x = p2x - ux * s2
-      let q2y = p2y - uy * s2
+      let af-has-label = _has-label(af, show-hetero-h: show-hetero-h, show-all-h: show-all-h)
+      let at-has-label = _has-label(at, show-hetero-h: show-hetero-h, show-all-h: show-all-h)
+      let s1 = if af-has-label { label-margin } else { 0.0 }
+      let s2 = if at-has-label { label-margin } else { 0.0 }
+      let e1 = if not af-has-label and atom-degree(bond.from) > 1 { junction-overlap } else { 0.0 }
+      let e2 = if not at-has-label and atom-degree(bond.to) > 1 { junction-overlap } else { 0.0 }
+      let q1x = p1x + ux * s1 - ux * e1
+      let q1y = p1y + uy * s1 - uy * e1
+      let q2x = p2x - ux * s2 + ux * e2
+      let q2y = p2y - uy * s2 + uy * e2
       let mx = (q1x + q2x) / 2
       let my = (q1y + q2y) / 2
 
       let stereo = bond.at("stereo", default: "none")
-      let atom-degree(i) = layout.bonds.filter(b => b.from == i or b.to == i).len()
       let split-line(x1, y1, x2, y2, from-color, to-color) = {
         let xmid = (x1 + x2) / 2
         let ymid = (y1 + y2) / 2
