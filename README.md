@@ -69,11 +69,12 @@ hydrogens on heteroatoms are shown, while carbon hydrogens stay implicit. This
 means ordinary SMILES such as `CC(N)C(=O)O` produces the expected `NH2` and
 `OH` labels without bracket syntax. Use `show-all-h: true` when you also want
 carbon hydrogens, bracket syntax for explicit hydrogens, and `{label}` for
-custom upright group labels.
+custom upright group labels. Atom labels can also use a custom typeface with
+`atom-font`.
 
 ```typst
 #table(
-  columns: (1fr, 1fr, 1fr, 1fr),
+  columns: (1fr, 1fr, 1fr, 1fr, 1fr),
   gutter: 0em,
   row-gutter: 0em,
   align: center + horizon,
@@ -83,11 +84,13 @@ custom upright group labels.
   [*All H*],
   [*Explicit bracket H*],
   [*Custom label*],
+  [*Custom font*],
 
   [#smiles("CC(N)C(=O)O")],
   [#smiles("CCO", show-all-h: true)],
   [#smiles("[NH3]")],
   [#smiles("{PPh3}C=O")],
+  [#smiles("CCN", atom-font: "Libertinus Serif")],
 )
 ```
 
@@ -96,9 +99,11 @@ custom upright group labels.
 ## Chemical formulas and equations
 
 `typed-smiles` re-exports `ce` from `chemformula`, so the same import can handle
-ordinary formulas and text-based chemical equations. This is useful for salts,
-small inorganic species, conditions, and equations where a full molecular
-diagram would be unnecessary.
+ordinary formulas and text-based chemical equations. It also accepts `font` for
+local formula typeface changes; use a math-capable font for formulas and
+equations. This is useful for salts, small inorganic
+species, conditions, and equations where a full molecular diagram would be
+unnecessary.
 
 ```typst
 #import "@preview/typed-smiles:0.2.0": ce
@@ -210,7 +215,7 @@ interpretation.
 
 ## API
 
-### `#smiles(smiles-str, bond-length, atom-font-size, color, rotation, show-hetero-h, show-all-h)`
+### `#smiles(smiles-str, bond-length, atom-font-size, atom-font, color, rotation, show-hetero-h, show-all-h)`
 
 Renders a SMILES string as a 2D skeletal molecular diagram.
 
@@ -219,12 +224,19 @@ Renders a SMILES string as a 2D skeletal molecular diagram.
 | `smiles-str` | `str` | required | OpenSMILES string |
 | `bond-length` | `float` | `1.0` | Uniform bond length scale factor; `1.0` equals 30pt per bond |
 | `atom-font-size` | `length` | `11pt` | Atom label font size |
+| `atom-font` | `str` | `"New Computer Modern"` | Atom label font |
 | `color` | `bool` | `true` | Apply Jmol CPK atom colors |
 | `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
 | `show-hetero-h` | `bool` | `true` | Show computed implicit hydrogens on non-carbon atoms |
 | `show-all-h` | `bool` | `false` | Show computed implicit hydrogens on all atoms, including carbon |
 
 `#display-smiles` is an alias for `#smiles`.
+
+### `#ce(chem, font: none, ..args)`
+
+Re-exports `chemformula`'s `ch` function as `ce`. Passes through the usual
+`chemformula` arguments and adds an optional `font` argument for local formula
+font selection. Formula fonts should support math rendering.
 
 ### `#rxn-arrow(above, below, dir)`
 

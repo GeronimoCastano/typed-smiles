@@ -9,7 +9,16 @@
 
 // Re-export as ce so users only need one import line.
 // chemformula uses math mode internally, giving proper operator spacing.
-#let ce = ch
+#let ce(chem, font: none, ..args) = {
+  if font == none {
+    ch(chem, ..args)
+  } else {
+    [
+      #show math.equation: set text(font: font)
+      #ch(chem, ..args)
+    ]
+  }
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -60,6 +69,7 @@
 ///   Use Kekulé notation for aromatic rings (C not c) until aromatic support lands.
 /// - bond-length (float): Scale factor; 1.0 = 30 pt per bond. Default: 1.0.
 /// - atom-font-size (length): Font size for heteroatom labels. Default: 11pt.
+/// - atom-font (str): Font for atom labels. Default: "New Computer Modern".
 /// - color (bool): Apply Jmol CPK atom colors. Default: true.
 /// - rotation (angle): Rotate the molecule by this angle. Atom labels stay upright.
 ///   Example: rotation: 90deg. Default: 0deg.
@@ -72,6 +82,7 @@
   smiles-str,
   bond-length: 1.0,
   atom-font-size: 11pt,
+  atom-font: "New Computer Modern",
   color: true,
   rotation: 0deg,
   show-hetero-h: true,
@@ -88,8 +99,18 @@
   let inner-trim      = 0.07
   let multiple-bond-trim = 0.10
   let stroke-w        = 0.9pt
+  let subscript-size  = atom-font-size * 0.62
+  let superscript-size = atom-font-size * 0.62
 
   let atom-clr = if color { _atom-color } else { (sym) => black }
+  let atom-label(body, fill: black, size: atom-font-size) = text(
+    size: size,
+    font: atom-font,
+    style: "normal",
+    weight: "regular",
+    fill: fill,
+    body,
+  )
 
   let cos-a = calc.cos(rotation)
   let sin-a = calc.sin(rotation)
@@ -279,15 +300,8 @@
         let fill   = atom-clr(atom.symbol)
 
         let label-content = if abbrev != "" {
-          // Abbreviated group: render the label text in black, upright, serif.
-          text(
-            size: atom-font-size,
-            font: "New Computer Modern",
-            style: "normal",
-            weight: "regular",
-            fill: black,
-            abbrev,
-          )
+          // Abbreviated groups stay black and upright, using the atom font.
+          atom-label(abbrev)
         } else {
           let charge-str = if atom.charge == 1        { "+" }
                            else if atom.charge == -1  { "\u{2212}" }
@@ -300,35 +314,16 @@
             show-all-h: show-all-h,
           )
 
-          let sym-text = text(
-            size: atom-font-size,
-            font: "New Computer Modern",
-            weight: "regular",
-            fill: fill,
-            atom.symbol,
-          )
+          let sym-text = atom-label(atom.symbol, fill: fill)
           let h-text = if h-count == 0 {
             []
           } else if h-count == 1 {
-            text(
-              size: atom-font-size,
-              font: "New Computer Modern",
-              weight: "regular",
-              fill: fill,
-              "H",
-            )
+            atom-label("H", fill: fill)
           } else {
-            text(
-              size: atom-font-size,
-              font: "New Computer Modern",
-              weight: "regular",
-              fill: fill,
-              "H",
-            ) + sub(text(
-              fill: fill,
-              font: "New Computer Modern",
-              weight: "regular",
+            atom-label("H", fill: fill) + sub(atom-label(
               str(h-count),
+              fill: fill,
+              size: subscript-size,
             ))
           }
           let atom-text = sym-text + h-text
@@ -336,11 +331,10 @@
           if charge-str == "" {
             atom-text
           } else {
-            atom-text + super(text(
-              fill: fill,
-              font: "New Computer Modern",
-              weight: "regular",
+            atom-text + super(atom-label(
               charge-str,
+              fill: fill,
+              size: superscript-size,
             ))
           }
         }

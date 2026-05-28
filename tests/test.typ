@@ -214,6 +214,26 @@
   [*BH#sub[2] hidden* \ #text(size: 8pt, `CB`) \ #smiles("CB", bond-length: 1.15, show-hetero-h: false)],
 )
 
+= Font Options and Large Atom Labels
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Large default label* \
+   #text(size: 8pt, `CCN`) \
+   #smiles("CCN", atom-font-size: 36pt, bond-length: 1.35)],
+
+  [*Custom atom font* \
+   #text(size: 8pt, `atom-font: "Libertinus Serif"`) \
+   #smiles("CC(=O)N", atom-font: "Libertinus Serif", atom-font-size: 20pt, bond-length: 1.25)],
+
+  [*Formula font* \
+   #text(size: 8pt, `ce(..., font: "New Computer Modern Math")`) \
+   #text(size: 24pt, ce("NH4+ + Cl- -> NH4Cl", font: "New Computer Modern Math"))],
+)
+
 = Multiple Bond Rendering
 
 #grid(
