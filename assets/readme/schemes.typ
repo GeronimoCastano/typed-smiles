@@ -1,6 +1,6 @@
 #import "../../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction
 
-#set page(width: 18cm, height: 12cm, margin: 0.8cm)
+#set page(width: 18cm, height: 13.4cm, margin: 0.8cm)
 #set text(font: "New Computer Modern", size: 10pt)
 
 #stack(

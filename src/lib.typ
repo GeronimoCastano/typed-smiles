@@ -461,10 +461,13 @@
                          else if atom.charge > 1    { str(atom.charge) + "+" }
                          else if atom.charge < -1   { str(-atom.charge) + "\u{2212}" }
                          else                       { "" }
+        // A small gap before the superscript so the sign sits to the right of a
+        // preceding subscript (e.g. the "3" in NH3+) instead of reading as that
+        // digit's exponent.
         let charge-content = if charge-str == "" {
           []
         } else {
-          super(atom-label(charge-str, fill: fill, size: superscript-size))
+          h(0.12em) + super(atom-label(charge-str, fill: fill, size: superscript-size))
         }
 
         let sym-text = atom-label(atom.symbol, fill: fill)
@@ -500,16 +503,22 @@
               ("west", (left: pad-bond), "east", "west")
             }
           } else if dy > 0 {
-            ("north", (top: pad-bond), "east", "west")
+            // No vertical padding: it would skew the top anchor and lift the H
+            // out of line with the symbol. The bond trim supplies the gap.
+            ("north", 0pt, "east", "west")
           } else {
-            ("south", (bottom: pad-bond), "east", "west")
+            ("south", 0pt, "east", "west")
           }
+          // Keep the charge on the rightmost element so it reads as the group
+          // charge: with the symbol when the H sits to its left, else with the H.
+          let sym-content = if h-at == "west" { sym-text + charge-content } else { sym-text }
+          let h-content = if h-at == "west" { h-text } else { h-text + charge-content }
           let sname = "atom-" + str(i)
-          content((px, py), sym-text, anchor: sym-anchor, padding: sym-pad, name: sname)
+          content((px, py), sym-content, anchor: sym-anchor, padding: sym-pad, name: sname)
           // Attach the H at the symbol's top corner so their baselines align.
           content(
             sname + ".north-" + h-at,
-            h-text + charge-content,
+            h-content,
             anchor: "north-" + h-self,
             padding: 0pt,
           )
@@ -714,6 +723,3 @@
     ..flat-cells,
   )
 }
-
-/// Alias for #smiles.
-#let display-smiles = smiles

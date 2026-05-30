@@ -237,8 +237,6 @@ Renders a SMILES string as a 2D skeletal molecular diagram.
 | `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
 | `show-all-h` | `bool` | `false` | Show computed implicit hydrogens on all atoms, including carbon |
 
-`#display-smiles` is an alias for `#smiles`.
-
 Explicit `bond-length`, `font-size`, and `bond-stroke` values override the
 corresponding value derived from `scale`.
 

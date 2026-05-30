@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, display-smiles
+#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction
 
 #set text(font: "New Computer Modern", size: 11pt)
 #set page(margin: 2cm)
