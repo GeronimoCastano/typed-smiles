@@ -71,8 +71,9 @@ hydrogens on heteroatoms are shown, while carbon hydrogens stay implicit. This
 means ordinary SMILES such as `CC(N)C(=O)O` produces the expected `NH2` and
 `OH` labels without bracket syntax. Use `show-all-h: true` when you also want
 carbon hydrogens, bracket syntax for explicit hydrogens, and `{label}` for
-custom upright group labels. Atom labels can also use a custom typeface with
-`font`.
+custom upright group labels. Use `{label|style}` to color a label and its bonds
+by element symbol or named color. Atom labels can also use a custom typeface
+with `font`.
 
 ```typst
 #table(
@@ -85,13 +86,13 @@ custom upright group labels. Atom labels can also use a custom typeface with
   [*Default hetero H*],
   [*All H*],
   [*Explicit bracket H*],
-  [*Custom label*],
+  [*Colored label*],
   [*Custom font*],
 
   [#smiles("CC(N)C(=O)O")],
   [#smiles("CCO", show-all-h: true)],
   [#smiles("[NH3]")],
-  [#smiles("{PPh3}C=O")],
+  [#smiles("{PPh3|P}C=O")],
   [#smiles("CCN", font: "Libertinus Serif")],
 )
 ```
@@ -187,11 +188,14 @@ wrap-around schemes without manually placing every molecule.
 
 ![Wrap-around reaction scheme](assets/readme/schemes.png)
 
-## Wedges and dashed bonds
+## Stereochemistry and drawing extensions
 
-Use `/` for a solid wedge and `\` for a hashed wedge. The renderer draws these
-markers visually, but it does not yet perform full stereochemical
-interpretation.
+`typed-smiles` treats SMILES stereochemistry as chemistry: `[C@H]` and
+`[C@@H]` mark tetrahedral centers, while `/` and `\` describe cis/trans
+geometry around double bonds. For intentionally manual drawings, use
+typed-smiles extensions: `!w` forces a solid wedge and `!h` forces a hashed
+wedge on the following single bond. Bracket atoms such as `[N]` remain real
+SMILES bracket atoms; use `{N}` for a literal label.
 
 ```typst
 #table(
@@ -201,23 +205,23 @@ interpretation.
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Solid wedge*],
-  [*Hashed wedge*],
-  [*Mixed*],
-  [*With carbon H*],
+  [*Manual wedge*],
+  [*Manual hash*],
+  [*Tetrahedral @@*],
+  [*trans alkene*],
 
-  [#smiles("C/N")],
-  [#smiles("C\\N")],
-  [#smiles("F/C\\Cl")],
-  [#smiles("CCO", show-all-h: true)],
+  [#smiles("C!wN")],
+  [#smiles("C!hN")],
+  [#smiles("N[C@@H](C)C(=O)O")],
+  [#smiles("F/C=C/F")],
 )
 ```
 
-![Wedge and dashed bond examples](assets/readme/stereo-h.png)
+![Stereochemistry and drawing extension examples](assets/readme/stereo-h.png)
 
 ## API
 
-### `#smiles(smiles-str, scale, bond-length, font-size, font, bond-stroke, color, rotation, show-hetero-h, show-all-h)`
+### `#smiles(smiles-str, scale, bond-length, font-size, font, bond-stroke, color, rotation, show-all-h)`
 
 Renders a SMILES string as a 2D skeletal molecular diagram.
 
@@ -231,13 +235,22 @@ Renders a SMILES string as a 2D skeletal molecular diagram.
 | `bond-stroke` | `length` | `0.9pt * scale` | Bond stroke width |
 | `color` | `bool` | `true` | Apply Jmol CPK atom colors |
 | `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
-| `show-hetero-h` | `bool` | `true` | Show computed implicit hydrogens on non-carbon atoms |
 | `show-all-h` | `bool` | `false` | Show computed implicit hydrogens on all atoms, including carbon |
 
 `#display-smiles` is an alias for `#smiles`.
 
 Explicit `bond-length`, `font-size`, and `bond-stroke` values override the
 corresponding value derived from `scale`.
+
+typed-smiles extensions inside `smiles-str`:
+
+| Syntax | Meaning |
+|---|---|
+| `{label}` | Literal upright label at an atom position |
+| `{label\|N}` | Literal label and bonds colored like an element, here nitrogen |
+| `{label\|red}` | Literal label and bonds colored with a named color |
+| `!w` | Force a solid wedge on the next single bond |
+| `!h` | Force a hashed wedge on the next single bond |
 
 ### `#ce(chem, font: none, font-size: none, ..args)`
 
@@ -274,8 +287,11 @@ Current limitations:
 
 - Aromatic lowercase atoms are not parsed by `smiles-parser` 0.4. Use Kekule
   forms such as `C1=CC=CC=C1` instead of `c1ccccc1`.
-- Directional `/` and `\` bonds are rendered as wedge/hash bonds, but the
-  package does not yet perform full stereochemical interpretation.
+- Tetrahedral `@`/`@@` and alkene `/`/`\` stereochemistry are depicted for
+  common acyclic cases, but the package does not compute or validate R/S or E/Z
+  descriptors.
+- Allene, square-planar, trigonal-bipyramidal, octahedral, and complex ring
+  stereochemistry are not yet supported.
 - Bridged bicyclics may have atom overlap; template matching is not implemented.
 - Implicit hydrogen counts use a simple standard-valence model.
 

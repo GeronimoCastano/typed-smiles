@@ -11,7 +11,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::f64::consts::PI;
 
-use crate::graph::MoleculeGraph;
+use crate::graph::{AtomChirality, BondDirection, BondOrder, BondStereo, MoleculeGraph};
 use crate::render::{AtomOutput, BondOutput, LayoutOutput, Vec2};
 
 pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
@@ -53,11 +53,31 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
     let initial_dir = -PI / 6.0;
     place_chain(mol, root, initial_dir, &rings, &mut coords, &mut placed);
 
+    apply_cis_trans_layout(mol, &mut coords)?;
+
     // ── 5. Center the molecule ────────────────────────────────────────────
 
     center_coords(&mut coords);
 
-    // ── 5. Build output ───────────────────────────────────────────────────
+    // Mirror to match the layout handedness used by RDKit/PubChem, so wedges read
+    // in the conventional orientation. Done before stereo assignment, so the
+    // recomputed wedges still depict the correct enantiomer.
+    for c in coords.iter_mut() {
+        c.x = -c.x;
+    }
+
+    // ── 6. Build output ───────────────────────────────────────────────────
+
+    let ring_bonds = ring_bond_set(mol, &rings);
+    let mut rendered_stereo: Vec<BondStereo> = mol.bonds.iter().map(|b| b.stereo).collect();
+    let mut stereo_h: Vec<Option<(BondStereo, Vec2)>> = vec![None; mol.n_atoms()];
+    apply_tetrahedral_stereo(
+        mol,
+        &coords,
+        &ring_bonds,
+        &mut rendered_stereo,
+        &mut stereo_h,
+    )?;
 
     let atoms: Vec<AtomOutput> = mol
         .atoms
@@ -70,6 +90,12 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             implicit_h: implicit_h_count(mol, i),
             charge: a.charge,
             abbrev: a.abbrev.clone(),
+            abbrev_style: a.abbrev_style.clone(),
+            chirality: a.chirality.as_str().to_string(),
+            stereo_h: stereo_h[i]
+                .map(|(stereo, _)| stereo.as_str().to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            stereo_h_dir: stereo_h[i].map(|(_, dir)| dir).unwrap_or_default(),
         })
         .collect();
 
@@ -83,7 +109,8 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             from: b.from,
             to: b.to,
             order: b.order.as_u8(),
-            stereo: b.stereo.as_str().to_string(),
+            stereo: rendered_stereo[i].as_str().to_string(),
+            direction: direction_as_str(b.direction).to_string(),
             inner_x: inner_dirs[i].0,
             inner_y: inner_dirs[i].1,
         })
@@ -99,7 +126,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
     })
 }
 
-fn implicit_h_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {
+pub(crate) fn implicit_h_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {
     let atom = &mol.atoms[atom_idx];
     if atom.has_explicit_h {
         return 0;
@@ -128,67 +155,524 @@ fn standard_valence(symbol: &str) -> Option<i16> {
     }
 }
 
-// ── Ring detection (simple DFS cycle finder) ─────────────────────────────────
+fn direction_as_str(direction: BondDirection) -> &'static str {
+    match direction {
+        BondDirection::None => "none",
+        BondDirection::Up => "up",
+        BondDirection::Down => "down",
+    }
+}
+
+// ── OpenSMILES stereochemistry layout ────────────────────────────────────────
+
+fn apply_cis_trans_layout(mol: &MoleculeGraph, coords: &mut Vec<Vec2>) -> Result<(), String> {
+    let mut handled_directional_bonds = HashSet::new();
+
+    for double_bond in &mol.bonds {
+        if double_bond.order != BondOrder::Double {
+            continue;
+        }
+
+        let left = directional_neighbor(mol, double_bond.from, double_bond.to)?;
+        let right = directional_neighbor(mol, double_bond.to, double_bond.from)?;
+
+        let (Some(left), Some(right)) = (left, right) else {
+            if left.is_some() || right.is_some() {
+                return Err(
+                    "Directional / and \\ bonds must mark both ends of a double bond".into(),
+                );
+            }
+            continue;
+        };
+
+        handled_directional_bonds.insert(left.bond_idx);
+        handled_directional_bonds.insert(right.bond_idx);
+
+        let axis_from = coords[double_bond.from];
+        let axis_to = coords[double_bond.to];
+        orient_subtree_to_side(
+            mol,
+            coords,
+            left.neighbor,
+            double_bond.from,
+            double_bond.to,
+            axis_from,
+            axis_to,
+            left.side,
+        );
+        orient_subtree_to_side(
+            mol,
+            coords,
+            right.neighbor,
+            double_bond.to,
+            double_bond.from,
+            axis_from,
+            axis_to,
+            right.side,
+        );
+    }
+
+    for (idx, bond) in mol.bonds.iter().enumerate() {
+        if bond.direction != BondDirection::None && !handled_directional_bonds.contains(&idx) {
+            return Err("Directional / and \\ bonds are only supported around double bonds; use !w or !h for manual wedge drawing".into());
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct DirectionalNeighbor {
+    bond_idx: usize,
+    neighbor: usize,
+    side: i8,
+}
+
+fn directional_neighbor(
+    mol: &MoleculeGraph,
+    center: usize,
+    double_partner: usize,
+) -> Result<Option<DirectionalNeighbor>, String> {
+    let mut found = None;
+    for &(neighbor, bond_idx) in &mol.adj[center] {
+        if neighbor == double_partner {
+            continue;
+        }
+        let bond = &mol.bonds[bond_idx];
+        if bond.direction == BondDirection::None {
+            continue;
+        }
+        if bond.order != BondOrder::Single {
+            return Err(
+                "Directional / and \\ markers must be on single bonds adjacent to a double bond"
+                    .into(),
+            );
+        }
+        let raw = match bond.direction {
+            BondDirection::Up => 1,
+            BondDirection::Down => -1,
+            BondDirection::None => 0,
+        };
+        let side = if bond.from == center { raw } else { -raw };
+        let candidate = DirectionalNeighbor {
+            bond_idx,
+            neighbor,
+            side,
+        };
+        if found.is_some() {
+            return Err(
+                "Conflicting or unsupported multiple directional bonds on one end of a double bond"
+                    .into(),
+            );
+        }
+        found = Some(candidate);
+    }
+    Ok(found)
+}
+
+fn orient_subtree_to_side(
+    mol: &MoleculeGraph,
+    coords: &mut Vec<Vec2>,
+    root: usize,
+    parent: usize,
+    blocked: usize,
+    axis_from: Vec2,
+    axis_to: Vec2,
+    desired_side: i8,
+) {
+    let root_side = side_of_point(axis_from, axis_to, coords[root]);
+    if root_side == 0 || root_side == desired_side {
+        return;
+    }
+
+    let atoms = collect_subtree(mol, root, parent, blocked);
+    for atom in atoms {
+        coords[atom] = reflect_point_across_line(coords[atom], axis_from, axis_to);
+    }
+}
+
+fn side_of_point(a: Vec2, b: Vec2, p: Vec2) -> i8 {
+    let cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    if cross > 1e-8 {
+        1
+    } else if cross < -1e-8 {
+        -1
+    } else {
+        0
+    }
+}
+
+fn reflect_point_across_line(p: Vec2, a: Vec2, b: Vec2) -> Vec2 {
+    let dx = b.x - a.x;
+    let dy = b.y - a.y;
+    let len2 = dx * dx + dy * dy;
+    if len2 < 1e-10 {
+        return p;
+    }
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    let proj = Vec2::new(a.x + t * dx, a.y + t * dy);
+    Vec2::new(2.0 * proj.x - p.x, 2.0 * proj.y - p.y)
+}
+
+fn collect_subtree(mol: &MoleculeGraph, root: usize, parent: usize, blocked: usize) -> Vec<usize> {
+    let mut atoms = Vec::new();
+    let mut seen = vec![false; mol.n_atoms()];
+    seen[parent] = true;
+    seen[blocked] = true;
+
+    let mut stack = vec![root];
+    seen[root] = true;
+    while let Some(atom) = stack.pop() {
+        atoms.push(atom);
+        for &(neighbor, _) in &mol.adj[atom] {
+            if !seen[neighbor] {
+                seen[neighbor] = true;
+                stack.push(neighbor);
+            }
+        }
+    }
+    atoms
+}
+
+/// Assigns wedge/hash bonds for tetrahedral stereocenters.
+///
+/// Chooses wedge vs. hash from the signed volume of the four neighbor directions
+/// (in OpenSMILES order) so the depicted 3D structure reproduces the requested
+/// chirality on our 2D layout. `@` requires a negative signed volume, `@@` a
+/// positive one.
+fn apply_tetrahedral_stereo(
+    mol: &MoleculeGraph,
+    coords: &[Vec2],
+    ring_bonds: &HashSet<usize>,
+    rendered_stereo: &mut Vec<BondStereo>,
+    stereo_h: &mut Vec<Option<(BondStereo, Vec2)>>,
+) -> Result<(), String> {
+    for (center, atom) in mol.atoms.iter().enumerate() {
+        let parity = match atom.chirality {
+            AtomChirality::None => continue,
+            AtomChirality::Unsupported => {
+                return Err(
+                    "Only tetrahedral @, @@, @TH1, and @TH2 stereochemistry is supported".into(),
+                );
+            }
+            AtomChirality::TetraAnti => -1.0,      // @  ⇒ negative signed volume
+            AtomChirality::TetraClockwise => 1.0,  // @@ ⇒ positive signed volume
+        };
+
+        let neighbor_bonds = &mol.neighbor_bonds[center];
+        let n_h = (atom.hcount + implicit_h_count(mol, center)) as usize;
+
+        // Only clean tetrahedral centers (4 substituents, at most one of them H)
+        // can be depicted unambiguously.
+        if neighbor_bonds.len() + n_h != 4 || n_h > 1 {
+            continue;
+        }
+
+        // Neighbors in OpenSMILES order, with the implicit/bracket hydrogen placed
+        // after the "from" atom (or first if there is none).
+        let mut order: Vec<Slot> = neighbor_bonds
+            .iter()
+            .map(|&bond| {
+                let b = &mol.bonds[bond];
+                let other = if b.from == center { b.to } else { b.from };
+                Slot::Bond { bond, other }
+            })
+            .collect();
+        if n_h == 1 {
+            let h_pos = if mol.has_preceding[center] { 1 } else { 0 };
+            order.insert(h_pos.min(order.len()), Slot::Hydrogen);
+        }
+
+        // Direction the implicit hydrogen points (largest angular gap).
+        let h_dir = stereo_h_direction(mol, center, coords, None);
+
+        // Draw one neighbor out of plane: prefer an exocyclic substituent, else the H.
+        let selected_bond = preferred_tetrahedral_bond(mol, center, ring_bonds, rendered_stereo);
+        let out_idx = if let Some(bond_idx) = selected_bond {
+            order
+                .iter()
+                .position(|s| matches!(s, Slot::Bond { bond, .. } if *bond == bond_idx))
+                .unwrap()
+        } else if let Some(pos) = order.iter().position(|s| matches!(s, Slot::Hydrogen)) {
+            pos
+        } else {
+            continue; // No exocyclic substituent and no hydrogen: cannot depict.
+        };
+
+        // Trial geometry with the out-of-plane neighbor toward the viewer (z = +1);
+        // an undrawn implicit hydrogen sits on the far side (z = -1).
+        let mut dirs = [[0.0_f64; 3]; 4];
+        for (i, slot) in order.iter().enumerate() {
+            dirs[i] = if i == out_idx {
+                let d = match slot {
+                    Slot::Bond { other, .. } => unit(sub(coords[*other], coords[center])),
+                    Slot::Hydrogen => h_dir,
+                };
+                [d.x, d.y, 1.0]
+            } else {
+                match slot {
+                    Slot::Bond { other, .. } => {
+                        let d = unit(sub(coords[*other], coords[center]));
+                        [d.x, d.y, 0.0]
+                    }
+                    Slot::Hydrogen => [h_dir.x, h_dir.y, -1.0],
+                }
+            };
+        }
+
+        let volume = signed_volume(&dirs);
+        if volume.abs() < 1e-9 {
+            continue; // Degenerate 2D geometry; leave undecorated.
+        }
+        // z = +1 reproduces the requested parity ⇒ the bond points at the viewer.
+        let stereo = if volume.signum() == parity {
+            BondStereo::WedgeUp
+        } else {
+            BondStereo::WedgeDown
+        };
+
+        if let Some(bond_idx) = selected_bond {
+            rendered_stereo[bond_idx] = stereo;
+        } else {
+            stereo_h[center] = Some((stereo, h_dir));
+        }
+    }
+    Ok(())
+}
+
+/// One neighbor of a tetrahedral center in OpenSMILES ordering.
+#[derive(Clone, Copy)]
+enum Slot {
+    Bond { bond: usize, other: usize },
+    Hydrogen,
+}
+
+fn sub(a: Vec2, b: Vec2) -> Vec2 {
+    Vec2::new(a.x - b.x, a.y - b.y)
+}
+
+fn unit(v: Vec2) -> Vec2 {
+    let len = (v.x * v.x + v.y * v.y).sqrt();
+    if len > 1e-12 {
+        Vec2::new(v.x / len, v.y / len)
+    } else {
+        v
+    }
+}
+
+/// Signed volume `(d1-d0)·((d2-d0)×(d3-d0))` of four 3D points.
+pub(crate) fn signed_volume(d: &[[f64; 3]; 4]) -> f64 {
+    let a = [d[1][0] - d[0][0], d[1][1] - d[0][1], d[1][2] - d[0][2]];
+    let b = [d[2][0] - d[0][0], d[2][1] - d[0][1], d[2][2] - d[0][2]];
+    let c = [d[3][0] - d[0][0], d[3][1] - d[0][1], d[3][2] - d[0][2]];
+    a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+        + a[2] * (b[0] * c[1] - b[1] * c[0])
+}
+
+pub(crate) fn stereo_h_direction(
+    mol: &MoleculeGraph,
+    atom_idx: usize,
+    coords: &[Vec2],
+    preferred_dir: Option<f64>,
+) -> Vec2 {
+    let mut occupied: Vec<f64> = mol.adj[atom_idx]
+        .iter()
+        .map(|&(neighbor, _)| {
+            (coords[neighbor].y - coords[atom_idx].y).atan2(coords[neighbor].x - coords[atom_idx].x)
+        })
+        .collect();
+
+    if occupied.is_empty() {
+        return Vec2::new(0.0, -1.0);
+    }
+
+    if let Some(dir) = preferred_dir {
+        if occupied
+            .iter()
+            .all(|&angle| angle_delta(dir, angle).abs() > PI / 5.0)
+        {
+            return Vec2::new(dir.cos(), dir.sin());
+        }
+    }
+
+    occupied.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut best_start = occupied[0];
+    let mut best_gap = 0.0;
+    for i in 0..occupied.len() {
+        let start = occupied[i];
+        let end = if i + 1 < occupied.len() {
+            occupied[i + 1]
+        } else {
+            occupied[0] + 2.0 * PI
+        };
+        let gap = end - start;
+        if gap > best_gap {
+            best_gap = gap;
+            best_start = start;
+        }
+    }
+
+    let dir = normalize_angle(best_start + best_gap / 2.0);
+    Vec2::new(dir.cos(), dir.sin())
+}
+
+fn preferred_tetrahedral_bond(
+    mol: &MoleculeGraph,
+    atom_idx: usize,
+    ring_bonds: &HashSet<usize>,
+    rendered_stereo: &[BondStereo],
+) -> Option<usize> {
+    let mut best: Option<(usize, i32)> = None;
+    for &(neighbor, bond_idx) in &mol.adj[atom_idx] {
+        let bond = &mol.bonds[bond_idx];
+        if bond.order != BondOrder::Single || rendered_stereo[bond_idx] != BondStereo::None {
+            continue;
+        }
+
+        let score = tetrahedral_bond_score(mol, neighbor, bond_idx, ring_bonds);
+        if best.map(|(_, best_score)| score > best_score).unwrap_or(true) {
+            best = Some((bond_idx, score));
+        }
+    }
+    best.and_then(|(bond_idx, score)| if score > 0 { Some(bond_idx) } else { None })
+}
+
+fn tetrahedral_bond_score(
+    mol: &MoleculeGraph,
+    neighbor: usize,
+    bond_idx: usize,
+    ring_bonds: &HashSet<usize>,
+) -> i32 {
+    let neighbor_atom = &mol.atoms[neighbor];
+    let in_ring = ring_bonds.contains(&bond_idx);
+    let is_carbon = neighbor_atom.symbol == "C" || neighbor_atom.symbol == "c";
+    let is_visible = !is_carbon || neighbor_atom.abbrev != "" || neighbor_atom.charge != 0;
+    let is_terminal = mol.adj[neighbor].len() == 1;
+
+    let mut score = 0;
+    if !in_ring {
+        score += 100;
+    }
+    if is_visible {
+        score += 50;
+    }
+    if is_terminal {
+        score += 10;
+    }
+    if neighbor_atom.chirality != AtomChirality::None {
+        score -= 20;
+    }
+    if in_ring {
+        score -= 100;
+    }
+    score
+}
+
+fn ring_bond_set(mol: &MoleculeGraph, rings: &[Vec<usize>]) -> HashSet<usize> {
+    let mut ring_bonds = HashSet::new();
+    for ring in rings {
+        for i in 0..ring.len() {
+            let a = ring[i];
+            let b = ring[(i + 1) % ring.len()];
+            if let Some(bond_idx) = bond_between(mol, a, b) {
+                ring_bonds.insert(bond_idx);
+            }
+        }
+    }
+    ring_bonds
+}
+
+// ── Ring detection ────────────────────────────────────────────────────────────
 
 /// Returns cycles as lists of atom indices (the ring path).
 fn find_rings(mol: &MoleculeGraph) -> Vec<Vec<usize>> {
-    let n = mol.n_atoms();
-    let mut visited = vec![false; n];
-    let mut rings: Vec<Vec<usize>> = Vec::new();
+    let target_count = cycle_rank(mol);
+    if target_count == 0 {
+        return Vec::new();
+    }
 
-    for start in 0..n {
-        if !visited[start] {
-            dfs_rings(mol, start, usize::MAX, &mut visited, &mut rings);
+    let bit_words = (mol.bonds.len() + 63) / 64;
+    let mut seen_cycles: HashSet<Vec<u64>> = HashSet::new();
+    let mut candidates: Vec<(Vec<usize>, Vec<u64>)> = Vec::new();
+
+    for (bond_idx, bond) in mol.bonds.iter().enumerate() {
+        if let Some(ring) = shortest_path_excluding_bond(mol, bond.from, bond.to, bond_idx) {
+            if ring.len() < 3 {
+                continue;
+            }
+            let bits = ring_bond_bits(mol, &ring, bit_words);
+            if seen_cycles.insert(bits.clone()) {
+                candidates.push((ring, bits));
+            }
         }
     }
 
-    // Deduplicate and keep only SSSR candidates (shortest rings)
-    rings.sort_by_key(|r| r.len());
-    rings.dedup();
+    candidates.sort_by(|(ring_a, bits_a), (ring_b, bits_b)| {
+        ring_a
+            .len()
+            .cmp(&ring_b.len())
+            .then_with(|| bits_a.cmp(bits_b))
+    });
+
+    let mut basis: Vec<Vec<u64>> = Vec::new();
+    let mut rings = Vec::new();
+    for (ring, bits) in candidates {
+        if add_independent_cycle(&mut basis, bits) {
+            rings.push(ring);
+            if rings.len() == target_count {
+                break;
+            }
+        }
+    }
+
     rings
 }
 
-fn dfs_rings(
-    mol: &MoleculeGraph,
-    u: usize,
-    prev: usize,
-    visited: &mut Vec<bool>,
-    rings: &mut Vec<Vec<usize>>,
-) {
-    visited[u] = true;
-    for &(v, _) in &mol.adj[u] {
-        if v == prev {
+fn cycle_rank(mol: &MoleculeGraph) -> usize {
+    if mol.n_atoms() == 0 {
+        return 0;
+    }
+
+    let mut seen = vec![false; mol.n_atoms()];
+    let mut components = 0;
+    for start in 0..mol.n_atoms() {
+        if seen[start] {
             continue;
         }
-        if visited[v] {
-            // Back edge u→v. Find the SMALLEST ring through this edge via BFS
-            // on the full graph so that fused bicyclics are detected correctly.
-            // (Walking the DFS parent tree instead would give the outer perimeter
-            // of fused systems, not each individual ring.)
-            let ring = bfs_shortest_ring(mol, u, v);
-            if ring.len() >= 3 {
-                rings.push(ring);
+        components += 1;
+        let mut stack = vec![start];
+        seen[start] = true;
+        while let Some(atom) = stack.pop() {
+            for &(neighbor, _) in &mol.adj[atom] {
+                if !seen[neighbor] {
+                    seen[neighbor] = true;
+                    stack.push(neighbor);
+                }
             }
-        } else {
-            dfs_rings(mol, v, u, visited, rings);
         }
     }
+
+    mol.bonds.len() + components - mol.n_atoms()
 }
 
-/// BFS from `back_to` to `back_from`, intentionally skipping the direct
-/// `back_to → back_from` edge so that the path goes through the ring body.
-fn bfs_shortest_ring(mol: &MoleculeGraph, back_from: usize, back_to: usize) -> Vec<usize> {
+/// BFS from `from` to `to`, intentionally skipping one bond so the path plus
+/// that skipped bond is a ring candidate.
+fn shortest_path_excluding_bond(
+    mol: &MoleculeGraph,
+    from: usize,
+    to: usize,
+    excluded_bond: usize,
+) -> Option<Vec<usize>> {
     let n = mol.n_atoms();
     let mut bfs_parent: Vec<Option<usize>> = vec![None; n];
 
-    bfs_parent[back_to] = Some(back_to); // root sentinel
+    bfs_parent[from] = Some(from); // root sentinel
     let mut queue = VecDeque::new();
-    queue.push_back(back_to);
+    queue.push_back(from);
 
     while let Some(u) = queue.pop_front() {
-        for &(v, _) in &mol.adj[u] {
-            // Skip the direct back edge so BFS must find the ring path
-            if u == back_to && v == back_from {
+        for &(v, bond_idx) in &mol.adj[u] {
+            if bond_idx == excluded_bond {
                 continue;
             }
             if bfs_parent[v].is_some() {
@@ -196,27 +680,88 @@ fn bfs_shortest_ring(mol: &MoleculeGraph, back_from: usize, back_to: usize) -> V
             }
             bfs_parent[v] = Some(u);
 
-            if v == back_from {
-                // Reconstruct ring atoms from back_from back to back_to
-                let mut ring = Vec::new();
-                let mut cur = back_from;
+            if v == to {
+                let mut path = Vec::new();
+                let mut cur = to;
                 loop {
-                    ring.push(cur);
-                    if cur == back_to {
+                    path.push(cur);
+                    if cur == from {
                         break;
                     }
                     cur = match bfs_parent[cur] {
                         Some(p) => p,
-                        None => break,
+                        None => return None,
                     };
                 }
-                return ring;
+                path.reverse();
+                return Some(path);
             }
             queue.push_back(v);
         }
     }
 
-    vec![] // unreachable for a real ring
+    None
+}
+
+fn ring_bond_bits(mol: &MoleculeGraph, ring: &[usize], bit_words: usize) -> Vec<u64> {
+    let mut bits = vec![0_u64; bit_words];
+    for i in 0..ring.len() {
+        let a = ring[i];
+        let b = ring[(i + 1) % ring.len()];
+        if let Some(bond_idx) = bond_between(mol, a, b) {
+            bits[bond_idx / 64] |= 1_u64 << (bond_idx % 64);
+        }
+    }
+    bits
+}
+
+fn bond_between(mol: &MoleculeGraph, a: usize, b: usize) -> Option<usize> {
+    mol.adj[a]
+        .iter()
+        .find_map(|&(neighbor, bond_idx)| if neighbor == b { Some(bond_idx) } else { None })
+}
+
+fn add_independent_cycle(basis: &mut Vec<Vec<u64>>, bits: Vec<u64>) -> bool {
+    let mut candidate = bits;
+    for existing in basis.iter() {
+        if let Some(pivot) = pivot_bit(existing) {
+            if bit_is_set(&candidate, pivot) {
+                xor_assign(&mut candidate, existing);
+            }
+        }
+    }
+
+    let Some(pivot) = pivot_bit(&candidate) else {
+        return false;
+    };
+
+    for existing in basis.iter_mut() {
+        if bit_is_set(existing, pivot) {
+            xor_assign(existing, &candidate);
+        }
+    }
+    basis.push(candidate);
+    basis.sort_by_key(|bits| pivot_bit(bits).unwrap_or(usize::MAX));
+    true
+}
+
+fn pivot_bit(bits: &[u64]) -> Option<usize> {
+    for (word_idx, word) in bits.iter().enumerate() {
+        if *word != 0 {
+            return Some(word_idx * 64 + word.trailing_zeros() as usize);
+        }
+    }
+    None
+}
+
+fn bit_is_set(bits: &[u64], bit: usize) -> bool {
+    bits[bit / 64] & (1_u64 << (bit % 64)) != 0
+}
+
+fn xor_assign(lhs: &mut [u64], rhs: &[u64]) {
+    for (a, b) in lhs.iter_mut().zip(rhs.iter()) {
+        *a ^= *b;
+    }
 }
 
 // ── Ring placement ────────────────────────────────────────────────────────────
@@ -231,10 +776,12 @@ fn place_initial_ring_system(
         return;
     }
 
-    // Place the first ring system only. Other standalone ring systems in the
-    // same molecule are anchored later when the connecting chain reaches them.
+    // Place a central ring in the first ring system. Other standalone ring
+    // systems in the same molecule are anchored later when the connecting
+    // chain reaches them.
+    let initial_ring = initial_ring_index(rings);
     place_regular_ring(
-        &rings[0],
+        &rings[initial_ring],
         Vec2::new(0.0, 0.0),
         90.0_f64.to_radians(),
         coords,
@@ -242,8 +789,50 @@ fn place_initial_ring_system(
     );
 
     let mut placed_rings: HashSet<usize> = HashSet::new();
-    placed_rings.insert(0);
+    placed_rings.insert(initial_ring);
     place_connected_fused_rings(mol, rings, &mut placed_rings, coords, placed);
+}
+
+fn initial_ring_index(rings: &[Vec<usize>]) -> usize {
+    let mut best_idx = 0;
+    let mut best_score = (0_usize, 0_usize);
+    for (idx, ring) in rings.iter().enumerate() {
+        let fused_neighbors = rings
+            .iter()
+            .enumerate()
+            .filter(|(other_idx, other)| *other_idx != idx && rings_share_edge(ring, other))
+            .count();
+        let score = (fused_neighbors, ring.len());
+        if score > best_score {
+            best_idx = idx;
+            best_score = score;
+        }
+    }
+    best_idx
+}
+
+fn rings_share_edge(a: &[usize], b: &[usize]) -> bool {
+    shared_atoms(a, b)
+        .windows(2)
+        .any(|pair| ring_has_edge(a, pair[0], pair[1]) && ring_has_edge(b, pair[0], pair[1]))
+}
+
+fn shared_atoms(a: &[usize], b: &[usize]) -> Vec<usize> {
+    let mut atoms: Vec<usize> = a.iter().copied().filter(|atom| b.contains(atom)).collect();
+    atoms.sort_unstable();
+    atoms.dedup();
+    atoms
+}
+
+fn ring_has_edge(ring: &[usize], a: usize, b: usize) -> bool {
+    for i in 0..ring.len() {
+        let x = ring[i];
+        let y = ring[(i + 1) % ring.len()];
+        if (x == a && y == b) || (x == b && y == a) {
+            return true;
+        }
+    }
+    false
 }
 
 fn place_connected_fused_rings(
@@ -260,8 +849,7 @@ fn place_connected_fused_rings(
                 continue;
             }
 
-            let placed_count = ring.iter().filter(|&&a| placed[a]).count();
-            if placed_count >= 2 {
+            if placed_shared_edge(ring, placed).is_some() {
                 place_fused_ring(mol, ring, coords, placed);
                 placed_rings.insert(ring_idx);
                 progressed = true;
@@ -307,16 +895,7 @@ fn place_fused_ring(
     let n = ring.len();
 
     // Find the first pair of consecutive already-placed atoms (the shared edge)
-    let mut shared_edge: Option<(usize, usize)> = None; // (ring_pos_i, ring_pos_j)
-    for i in 0..n {
-        let j = (i + 1) % n;
-        if placed[ring[i]] && placed[ring[j]] {
-            shared_edge = Some((i, j));
-            break;
-        }
-    }
-
-    let Some((ei, ej)) = shared_edge else {
+    let Some((ei, ej)) = placed_shared_edge(ring, placed) else {
         // Fallback: place as standalone (shouldn't happen)
         place_regular_ring(ring, Vec2::new(0.0, 0.0), 0.0, coords, placed);
         return;
@@ -347,37 +926,66 @@ fn place_fused_ring(
     );
 
     // Pick the side farther from existing placed atoms (avoid overlap)
-    let center = pick_farther_center(perp1, perp2, ring, placed, coords);
+    let center = pick_farther_center(perp1, perp2, placed, coords);
 
     // The angle from center to ring[ei]
     let start_angle = (p1.y - center.y).atan2(p1.x - center.x);
+    let next_angle = (p2.y - center.y).atan2(p2.x - center.x);
+    let step = 2.0 * PI / fn_;
+    let sweep = if angle_delta(start_angle + step, next_angle).abs()
+        <= angle_delta(start_angle - step, next_angle).abs()
+    {
+        1.0
+    } else {
+        -1.0
+    };
 
     let r = 1.0 / (2.0 * (PI / fn_).sin());
     for (i, &atom) in ring.iter().enumerate() {
         if !placed[atom] {
             // Compute offset from ei position
             let offset = i as i64 - ei as i64;
-            let angle = start_angle + (2.0 * PI / fn_) * offset as f64;
+            let angle = start_angle + sweep * step * offset as f64;
             coords[atom] = Vec2::new(center.x + r * angle.cos(), center.y + r * angle.sin());
             placed[atom] = true;
         }
     }
 }
 
+fn angle_delta(a: f64, b: f64) -> f64 {
+    let mut delta = a - b;
+    while delta > PI {
+        delta -= 2.0 * PI;
+    }
+    while delta < -PI {
+        delta += 2.0 * PI;
+    }
+    delta
+}
+
+fn placed_shared_edge(ring: &[usize], placed: &[bool]) -> Option<(usize, usize)> {
+    for i in 0..ring.len() {
+        let j = (i + 1) % ring.len();
+        if placed[ring[i]] && placed[ring[j]] {
+            return Some((i, j));
+        }
+    }
+    None
+}
+
 fn pick_farther_center(
     c1: Vec2,
     c2: Vec2,
-    ring: &[usize],
     placed: &[bool],
     coords: &[Vec2],
 ) -> Vec2 {
     let mut sum1 = 0.0_f64;
     let mut sum2 = 0.0_f64;
     let mut count = 0;
-    for &a in ring {
-        if placed[a] {
-            sum1 += c1.dist(coords[a]);
-            sum2 += c2.dist(coords[a]);
+    for (atom_idx, was_placed) in placed.iter().enumerate() {
+        if *was_placed {
+            sum1 += c1.dist(coords[atom_idx]);
+            sum2 += c2.dist(coords[atom_idx]);
             count += 1;
         }
     }
@@ -433,9 +1041,9 @@ fn unfinished_ring_containing_atom(
     atom: usize,
     placed: &[bool],
 ) -> Option<usize> {
-    rings.iter().position(|ring| {
-        ring.contains(&atom) && ring.iter().any(|&ring_atom| !placed[ring_atom])
-    })
+    rings
+        .iter()
+        .position(|ring| ring.contains(&atom) && ring.iter().any(|&ring_atom| !placed[ring_atom]))
 }
 
 fn place_substituents_for_placed_rings(
@@ -476,15 +1084,17 @@ fn place_ring_substituents(
         .filter(|&&(v, _)| !placed[v])
         .map(|&(v, _)| v)
         .collect();
+    let dirs = free_substituent_directions(
+        mol,
+        ring_atom,
+        unplaced.len(),
+        outward_dir,
+        coords,
+        placed,
+    );
 
     for (i, &v) in unplaced.iter().enumerate() {
-        let turn = if unplaced.len() == 1 {
-            0.0
-        } else {
-            let spread = PI / 3.0;
-            -spread / 2.0 + spread * i as f64 / (unplaced.len() as f64 - 1.0)
-        };
-        let dir = outward_dir + turn;
+        let dir = dirs[i];
         coords[v] = Vec2::new(
             coords[ring_atom].x + dir.cos(),
             coords[ring_atom].y + dir.sin(),
@@ -499,6 +1109,85 @@ fn place_ring_substituents(
     }
 }
 
+fn free_substituent_directions(
+    mol: &MoleculeGraph,
+    atom_idx: usize,
+    count: usize,
+    fallback_dir: f64,
+    coords: &[Vec2],
+    placed: &[bool],
+) -> Vec<f64> {
+    if count == 0 {
+        return Vec::new();
+    }
+
+    let mut occupied: Vec<f64> = mol.adj[atom_idx]
+        .iter()
+        .filter(|&&(neighbor, _)| placed[neighbor])
+        .map(|&(neighbor, _)| {
+            (coords[neighbor].y - coords[atom_idx].y)
+                .atan2(coords[neighbor].x - coords[atom_idx].x)
+        })
+        .collect();
+
+    if occupied.len() < 2 {
+        return spread_around_direction(fallback_dir, count, PI / 3.0);
+    }
+
+    occupied.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut best_start = occupied[0];
+    let mut best_gap = 0.0;
+    for i in 0..occupied.len() {
+        let start = occupied[i];
+        let end = if i + 1 < occupied.len() {
+            occupied[i + 1]
+        } else {
+            occupied[0] + 2.0 * PI
+        };
+        let gap = end - start;
+        if gap > best_gap {
+            best_gap = gap;
+            best_start = start;
+        }
+    }
+
+    let usable_gap = (best_gap - PI / 6.0).max(PI / 6.0);
+    if count == 1 {
+        vec![normalize_angle(best_start + best_gap / 2.0)]
+    } else {
+        (0..count)
+            .map(|i| {
+                let t = (i + 1) as f64 / (count + 1) as f64;
+                normalize_angle(best_start + (best_gap - usable_gap) / 2.0 + usable_gap * t)
+            })
+            .collect()
+    }
+}
+
+fn spread_around_direction(center: f64, count: usize, spread: f64) -> Vec<f64> {
+    if count == 1 {
+        return vec![center];
+    }
+    (0..count)
+        .map(|i| {
+            normalize_angle(
+                center - spread / 2.0 + spread * i as f64 / (count.saturating_sub(1)) as f64,
+            )
+        })
+        .collect()
+}
+
+fn normalize_angle(angle: f64) -> f64 {
+    let mut angle = angle;
+    while angle > PI {
+        angle -= 2.0 * PI;
+    }
+    while angle <= -PI {
+        angle += 2.0 * PI;
+    }
+    angle
+}
+
 // ── Chain layout via DFS ──────────────────────────────────────────────────────
 
 /// DFS traversal that extends unplaced atoms at ±120° from the incoming direction.
@@ -511,26 +1200,37 @@ fn place_chain(
     placed: &mut Vec<bool>,
 ) {
     // Iterative DFS to avoid stack overflow on long chains
-    // Stack entries: (atom_idx, incoming_direction_radians, turn_sign)
+    // Stack entries: (atom_idx, incoming_bond_idx, incoming_direction_radians, turn_sign)
     // turn_sign alternates to produce a zigzag: +1 = turn left, -1 = turn right
-    let mut stack: Vec<(usize, f64, f64)> = Vec::new();
-    stack.push((start, incoming_angle, 1.0));
+    let mut stack: Vec<(usize, Option<usize>, f64, f64)> = Vec::new();
+    stack.push((start, None, incoming_angle, 1.0));
 
-    while let Some((u, dir, sign)) = stack.pop() {
-        let unplaced_neighbors: Vec<usize> = mol.adj[u]
+    while let Some((u, incoming_bond_idx, dir, sign)) = stack.pop() {
+        let mut unplaced_neighbors: Vec<(usize, usize, usize)> = mol.adj[u]
             .iter()
-            .filter(|&&(v, _)| !placed[v])
-            .map(|&(v, _)| v)
+            .enumerate()
+            .filter(|(_, &(v, _))| !placed[v])
+            .map(|(order, &(v, bond_idx))| (v, bond_idx, order))
             .collect();
 
-        for (i, &v) in unplaced_neighbors.iter().enumerate() {
-            // Alternate ±60° to produce a standard chemistry zigzag (120° bond angles)
-            let turn = if i == 0 {
-                sign * (PI / 3.0)
+        unplaced_neighbors.sort_by(|a, b| {
+            let size_a = unplaced_subtree_size(mol, a.0, u, placed);
+            let size_b = unplaced_subtree_size(mol, b.0, u, placed);
+            size_b.cmp(&size_a).then_with(|| a.2.cmp(&b.2))
+        });
+
+        for (i, &(v, bond_idx, _)) in unplaced_neighbors.iter().enumerate() {
+            let new_dir = if is_linear_atom(mol, u) && incoming_bond_idx.is_some() {
+                dir
             } else {
-                -sign * (PI / 3.0)
+                // Alternate ±60° to produce a standard chemistry zigzag (120° bond angles)
+                let turn = if i == 0 {
+                    sign * (PI / 3.0)
+                } else {
+                    -sign * (PI / 3.0)
+                };
+                dir + turn
             };
-            let new_dir = dir + turn;
 
             coords[v] = Vec2::new(coords[u].x + new_dir.cos(), coords[u].y + new_dir.sin());
             placed[v] = true;
@@ -540,10 +1240,56 @@ fn place_chain(
                 place_substituents_for_placed_rings(mol, rings, coords, placed);
             } else {
                 // Alternate turn sign for zigzag
-                stack.push((v, new_dir, -sign));
+                stack.push((v, Some(bond_idx), new_dir, -sign));
             }
         }
     }
+}
+
+fn unplaced_subtree_size(
+    mol: &MoleculeGraph,
+    root: usize,
+    parent: usize,
+    placed: &[bool],
+) -> usize {
+    let mut size = 0;
+    let mut seen = vec![false; mol.n_atoms()];
+    seen[parent] = true;
+    let mut stack = vec![root];
+    seen[root] = true;
+
+    while let Some(atom) = stack.pop() {
+        if placed[atom] {
+            continue;
+        }
+        size += 1;
+        for &(neighbor, _) in &mol.adj[atom] {
+            if !seen[neighbor] {
+                seen[neighbor] = true;
+                stack.push(neighbor);
+            }
+        }
+    }
+
+    size
+}
+
+fn is_linear_atom(mol: &MoleculeGraph, atom_idx: usize) -> bool {
+    if mol.adj[atom_idx].len() != 2 {
+        return false;
+    }
+
+    let mut double_count = 0;
+    let mut has_triple = false;
+    for &(_, bond_idx) in &mol.adj[atom_idx] {
+        match mol.bonds[bond_idx].order {
+            BondOrder::Double => double_count += 1,
+            BondOrder::Triple => has_triple = true,
+            BondOrder::Single | BondOrder::Aromatic => {}
+        }
+    }
+
+    has_triple || double_count == 2
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -571,11 +1317,7 @@ fn ring_inner_directions(
     let mut dirs = vec![(0.0_f64, 0.0_f64); mol.bonds.len()];
 
     for (b_idx, bond) in mol.bonds.iter().enumerate() {
-        // Find the smallest ring containing both endpoints of this bond
-        let best_ring = rings
-            .iter()
-            .filter(|r| r.contains(&bond.from) && r.contains(&bond.to))
-            .min_by_key(|r| r.len());
+        let best_ring = best_ring_for_inner_bond(mol, rings, bond.from, bond.to);
 
         if let Some(ring) = best_ring {
             let n = ring.len() as f64;
@@ -595,6 +1337,85 @@ fn ring_inner_directions(
     }
 
     dirs
+}
+
+fn best_ring_for_inner_bond<'a>(
+    mol: &MoleculeGraph,
+    rings: &'a [Vec<usize>],
+    from: usize,
+    to: usize,
+) -> Option<&'a Vec<usize>> {
+    rings
+        .iter()
+        .filter(|ring| ring_has_edge(ring, from, to))
+        .max_by(|a, b| {
+            ring_unsaturation_score(mol, a)
+                .cmp(&ring_unsaturation_score(mol, b))
+                .then_with(|| b.len().cmp(&a.len()))
+        })
+}
+
+fn ring_unsaturation_score(mol: &MoleculeGraph, ring: &[usize]) -> usize {
+    (0..ring.len())
+        .filter_map(|i| bond_between(mol, ring[i], ring[(i + 1) % ring.len()]))
+        .filter(|&bond_idx| {
+            matches!(
+                mol.bonds[bond_idx].order,
+                BondOrder::Double | BondOrder::Aromatic
+            )
+        })
+        .count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::MoleculeGraph;
+
+    #[test]
+    fn steroid_ring_system_detects_four_rings() {
+        let mol = MoleculeGraph::from_smiles(
+            "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O",
+            Vec::new(),
+        )
+        .expect("steroid-like molecule should parse");
+        let rings = find_rings(&mol);
+        assert_eq!(rings.len(), 4, "rings: {rings:?}");
+    }
+
+    #[test]
+    fn fused_double_bond_prefers_unsaturated_ring_side() {
+        let mol = MoleculeGraph::from_smiles(
+            "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O",
+            Vec::new(),
+        )
+        .expect("steroid-like molecule should parse");
+        let rings = find_rings(&mol);
+        let mut checked_shared_double = false;
+
+        for bond in mol.bonds.iter().filter(|bond| bond.order == BondOrder::Double) {
+            let containing: Vec<&Vec<usize>> = rings
+                .iter()
+                .filter(|ring| ring_has_edge(ring, bond.from, bond.to))
+                .collect();
+            if containing.len() < 2 {
+                continue;
+            }
+
+            let selected =
+                best_ring_for_inner_bond(&mol, &rings, bond.from, bond.to).expect("ring missing");
+            let selected_score = ring_unsaturation_score(&mol, selected);
+            let max_score = containing
+                .iter()
+                .map(|ring| ring_unsaturation_score(&mol, ring))
+                .max()
+                .unwrap();
+            assert_eq!(selected_score, max_score);
+            checked_shared_double = true;
+        }
+
+        assert!(checked_shared_double, "expected a fused/shared double bond");
+    }
 }
 
 fn bounding_box(coords: &[Vec2]) -> (f64, f64) {

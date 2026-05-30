@@ -7,11 +7,11 @@
 ///
 /// We walk the Chain tree recursively and handle ring-closure bonds ourselves
 /// via a HashMap keyed on the SMILES ring-opening digit.
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use ptable::Element;
 use smiles_parser::{
-    chain as parse_chain, Atom as SAtom, Bond as SBond, BondOrDot, BracketAtom, Symbol,
+    chain as parse_chain, Atom as SAtom, Bond as SBond, BondOrDot, BracketAtom, Chirality, Symbol,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,12 +33,11 @@ impl BondOrder {
     }
 }
 
-/// Stereochemistry on a single bond, derived from `/` and `\` in the SMILES string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BondStereo {
     None,
-    WedgeUp,   // `/` → solid filled wedge toward viewer
-    WedgeDown, // `\` → hashed wedge away from viewer
+    WedgeUp,
+    WedgeDown,
 }
 
 impl BondStereo {
@@ -47,6 +46,49 @@ impl BondStereo {
             Self::None => "none",
             Self::WedgeUp => "wedge_up",
             Self::WedgeDown => "wedge_down",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BondDirection {
+    None,
+    Up,
+    Down,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BondSpec {
+    pub order: BondOrder,
+    pub stereo: BondStereo,
+    pub direction: BondDirection,
+}
+
+impl BondSpec {
+    fn single() -> Self {
+        Self {
+            order: BondOrder::Single,
+            stereo: BondStereo::None,
+            direction: BondDirection::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtomChirality {
+    None,
+    TetraAnti,
+    TetraClockwise,
+    Unsupported,
+}
+
+impl AtomChirality {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::TetraAnti => "tetra_anti",
+            Self::TetraClockwise => "tetra_clockwise",
+            Self::Unsupported => "unsupported",
         }
     }
 }
@@ -60,8 +102,10 @@ pub struct Atom {
     pub hcount: u8,
     pub has_explicit_h: bool,
     pub charge: i8,
+    pub chirality: AtomChirality,
     /// Non-empty when this atom was created by a `{label}` abbreviation substitution.
     pub abbrev: String,
+    pub abbrev_style: String,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +114,7 @@ pub struct Bond {
     pub to: usize,
     pub order: BondOrder,
     pub stereo: BondStereo,
+    pub direction: BondDirection,
 }
 
 #[derive(Debug, Default)]
@@ -78,21 +123,44 @@ pub struct MoleculeGraph {
     pub bonds: Vec<Bond>,
     /// adj[i] = [(neighbor_atom_idx, bond_idx), ...]
     pub adj: Vec<Vec<(usize, usize)>>,
+    /// Bond indices per atom in SMILES writing order (ring bonds ordered by digit
+    /// position). Used for OpenSMILES tetrahedral neighbor ordering.
+    pub neighbor_bonds: Vec<Vec<usize>>,
+    /// Whether each atom has a preceding ("from") atom to its left in the SMILES.
+    pub has_preceding: Vec<bool>,
 }
 
 impl MoleculeGraph {
-    pub fn from_smiles(smiles: &str) -> Result<Self, String> {
+    pub fn from_smiles(smiles: &str, forced_direction_markers: Vec<bool>) -> Result<Self, String> {
         // smiles_parser::chain takes &[u8] and returns IResult<&[u8], Chain>
         let (_, chain_ast) = parse_chain(smiles.as_bytes())
             .map_err(|e| format!("SMILES parse failed for {:?}: {e:?}", smiles))?;
 
-        let mut builder = GraphBuilder::default();
+        let mut builder = GraphBuilder {
+            forced_direction_markers: VecDeque::from(forced_direction_markers),
+            ..GraphBuilder::default()
+        };
         builder.walk_chain(&chain_ast, None, None);
+
+        // Drop any unpatched ring-opening slot (only possible for malformed SMILES).
+        let neighbor_bonds = builder
+            .neighbor_slots
+            .into_iter()
+            .map(|slots| {
+                slots
+                    .into_iter()
+                    .filter(|&b| b >= 0)
+                    .map(|b| b as usize)
+                    .collect()
+            })
+            .collect();
 
         Ok(MoleculeGraph {
             atoms: builder.atoms,
             bonds: builder.bonds,
             adj: builder.adj,
+            neighbor_bonds,
+            has_preceding: builder.has_preceding,
         })
     }
 
@@ -108,8 +176,16 @@ struct GraphBuilder {
     atoms: Vec<Atom>,
     bonds: Vec<Bond>,
     adj: Vec<Vec<(usize, usize)>>,
-    /// ring_number → (atom_idx, bond_order_or_none)
-    open_rings: HashMap<u8, (usize, Option<BondOrder>)>,
+    /// Per-atom bond indices in SMILES writing order. A value of -1 is a
+    /// placeholder reserved for a ring-opening bond, patched when the ring closes.
+    neighbor_slots: Vec<Vec<i64>>,
+    /// has_preceding[i] = atom `i` had a "from" atom to its left.
+    has_preceding: Vec<bool>,
+    /// ring_number → (atom_idx, bond_spec_or_none, slot_index_in_opener)
+    open_rings: HashMap<u8, (usize, Option<BondSpec>, usize)>,
+    /// One flag for every `/` or `\` bond token seen by smiles-parser.
+    /// `true` means the token originated from typed-smiles `!w`/`!h`, not SMILES.
+    forced_direction_markers: VecDeque<bool>,
 }
 
 impl GraphBuilder {
@@ -117,16 +193,19 @@ impl GraphBuilder {
         let idx = self.atoms.len();
         self.atoms.push(atom);
         self.adj.push(Vec::new());
+        self.neighbor_slots.push(Vec::new());
+        self.has_preceding.push(false);
         idx
     }
 
-    fn add_bond(&mut self, from: usize, to: usize, order: BondOrder, stereo: BondStereo) {
+    fn add_bond(&mut self, from: usize, to: usize, spec: BondSpec) {
         let b_idx = self.bonds.len();
         self.bonds.push(Bond {
             from,
             to,
-            order,
-            stereo,
+            order: spec.order,
+            stereo: spec.stereo,
+            direction: spec.direction,
         });
         self.adj[from].push((to, b_idx));
         self.adj[to].push((from, b_idx));
@@ -145,7 +224,7 @@ impl GraphBuilder {
         &mut self,
         chain: &smiles_parser::Chain,
         prev_atom: Option<usize>,
-        incoming: Option<(BondOrder, BondStereo)>,
+        incoming: Option<BondSpec>,
     ) {
         let ba = &chain.branched_atom;
 
@@ -153,41 +232,75 @@ impl GraphBuilder {
         let atom = smiles_atom_to_atom(&ba.atom);
         let cur = self.add_atom(atom);
 
-        // Bond to the previous atom using the bond the PARENT passed down
+        // Bond to the previous atom using the bond the PARENT passed down; the
+        // incoming bond is the first neighbor slot for `cur`.
         if let Some(prev) = prev_atom {
-            let (order, stereo) = incoming.unwrap_or((BondOrder::Single, BondStereo::None));
-            self.add_bond(prev, cur, order, stereo);
+            self.has_preceding[cur] = true;
+            let b_idx = self.bonds.len();
+            self.add_bond(prev, cur, incoming.unwrap_or_else(BondSpec::single));
+            self.neighbor_slots[cur].push(b_idx as i64);
         }
 
-        // Process ring-closure bonds (stereo not supported on ring-closure bonds for now)
+        // Process ring-closure bonds. The digit is written here, so it occupies a
+        // neighbor slot at this position even though the bond is created later at
+        // the closing atom (reserved as -1, patched on close).
         for rb in &ba.ring_bonds {
             let ring_num = rb.ring_number;
-            let ring_order = rb.bond.as_ref().map(|b| sparser_bond_to_order(b));
+            let ring_spec = rb.bond.as_ref().map(|b| self.sparser_to_bond_spec(b));
 
-            if let Some((open_atom, open_order)) = self.open_rings.remove(&ring_num) {
-                let order = ring_order.or(open_order).unwrap_or(BondOrder::Single);
-                self.add_bond(open_atom, cur, order, BondStereo::None);
+            if let Some((open_atom, open_spec, open_slot)) = self.open_rings.remove(&ring_num) {
+                let spec = ring_spec.or(open_spec).unwrap_or_else(BondSpec::single);
+                let b_idx = self.bonds.len();
+                self.add_bond(open_atom, cur, spec);
+                self.neighbor_slots[open_atom][open_slot] = b_idx as i64;
+                self.neighbor_slots[cur].push(b_idx as i64);
             } else {
-                self.open_rings.insert(ring_num, (cur, ring_order));
+                let slot = self.neighbor_slots[cur].len();
+                self.neighbor_slots[cur].push(-1);
+                self.open_rings.insert(ring_num, (cur, ring_spec, slot));
             }
         }
 
-        // Process branches — each branch starts from `cur`
+        // Process branches — each branch starts from `cur`.
         for branch in &ba.branches {
             let branch_bond = branch.bond_or_dot.as_ref().and_then(|bod| match bod {
-                BondOrDot::Bond(b) => Some(sparser_to_order_stereo(b)),
+                BondOrDot::Bond(b) => Some(self.sparser_to_bond_spec(b)),
                 BondOrDot::Dot(_) => None,
             });
+            self.neighbor_slots[cur].push(self.bonds.len() as i64);
             self.walk_chain(&branch.chain, Some(cur), branch_bond);
         }
 
         // Continue the main chain, forwarding THIS node's outgoing bond
         if let Some(next) = &chain.chain {
             let outgoing = chain.bond_or_dot.as_ref().and_then(|bod| match bod {
-                BondOrDot::Bond(b) => Some(sparser_to_order_stereo(b)),
+                BondOrDot::Bond(b) => Some(self.sparser_to_bond_spec(b)),
                 BondOrDot::Dot(_) => None,
             });
+            self.neighbor_slots[cur].push(self.bonds.len() as i64);
             self.walk_chain(next, Some(cur), outgoing);
+        }
+    }
+
+    fn sparser_to_bond_spec(&mut self, b: &SBond) -> BondSpec {
+        let direction = sparser_bond_to_direction(b);
+        let forced = if matches!(b, SBond::Up | SBond::Down) {
+            self.forced_direction_markers.pop_front().unwrap_or(false)
+        } else {
+            false
+        };
+        BondSpec {
+            order: sparser_bond_to_order(b),
+            stereo: if forced {
+                sparser_bond_to_forced_stereo(b)
+            } else {
+                BondStereo::None
+            },
+            direction: if forced {
+                BondDirection::None
+            } else {
+                direction
+            },
         }
     }
 }
@@ -202,7 +315,9 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             hcount: 0,
             has_explicit_h: false,
             charge: 0,
+            chirality: AtomChirality::None,
             abbrev: String::new(),
+            abbrev_style: String::new(),
         },
         SAtom::Bracket(b) => bracket_to_atom(b),
         SAtom::Unknown => Atom {
@@ -211,7 +326,9 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             hcount: 0,
             has_explicit_h: false,
             charge: 0,
+            chirality: AtomChirality::None,
             abbrev: String::new(),
+            abbrev_style: String::new(),
         },
     }
 }
@@ -228,7 +345,20 @@ fn bracket_to_atom(b: &BracketAtom) -> Atom {
         hcount: b.hcount,
         has_explicit_h: true,
         charge: b.charge,
+        chirality: b
+            .chiral
+            .map(chirality_to_atom_chirality)
+            .unwrap_or(AtomChirality::None),
         abbrev: String::new(),
+        abbrev_style: String::new(),
+    }
+}
+
+fn chirality_to_atom_chirality(chirality: Chirality) -> AtomChirality {
+    match chirality {
+        Chirality::Anticlockwise | Chirality::Tetrahedral(1) => AtomChirality::TetraAnti,
+        Chirality::Clockwise | Chirality::Tetrahedral(2) => AtomChirality::TetraClockwise,
+        _ => AtomChirality::Unsupported,
     }
 }
 
@@ -245,14 +375,18 @@ fn sparser_bond_to_order(b: &SBond) -> BondOrder {
     }
 }
 
-fn sparser_bond_to_stereo(b: &SBond) -> BondStereo {
+fn sparser_bond_to_direction(b: &SBond) -> BondDirection {
+    match b {
+        SBond::Up => BondDirection::Up,
+        SBond::Down => BondDirection::Down,
+        _ => BondDirection::None,
+    }
+}
+
+fn sparser_bond_to_forced_stereo(b: &SBond) -> BondStereo {
     match b {
         SBond::Up => BondStereo::WedgeUp,
         SBond::Down => BondStereo::WedgeDown,
         _ => BondStereo::None,
     }
-}
-
-fn sparser_to_order_stereo(b: &SBond) -> (BondOrder, BondStereo) {
-    (sparser_bond_to_order(b), sparser_bond_to_stereo(b))
 }

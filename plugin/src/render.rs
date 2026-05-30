@@ -16,6 +16,18 @@ pub struct AtomOutput {
     /// The renderer displays this text instead of `symbol`.
     #[serde(default)]
     pub abbrev: String,
+    /// Optional color/style token from `{label|style}`.
+    #[serde(default)]
+    pub abbrev_style: String,
+    /// Parsed bracket chirality, e.g. "tetra_anti" or "tetra_clockwise".
+    #[serde(default)]
+    pub chirality: String,
+    /// Stereochemical implicit/explicit hydrogen: "none" | "wedge_up" | "wedge_down".
+    #[serde(default)]
+    pub stereo_h: String,
+    /// Unit direction from this atom toward the rendered stereochemical hydrogen.
+    #[serde(default)]
+    pub stereo_h_dir: Vec2,
 }
 
 /// A bond between two atoms by their index in `LayoutOutput::atoms`.
@@ -25,8 +37,11 @@ pub struct BondOutput {
     pub to: usize,
     /// 1 = single, 2 = double, 3 = triple, 4 = aromatic
     pub order: u8,
-    /// Stereochemistry: "none" | "wedge_up" | "wedge_down"
+    /// Rendered stereochemistry: "none" | "wedge_up" | "wedge_down"
     pub stereo: String,
+    /// OpenSMILES directional marker: "none" | "up" | "down"
+    #[serde(default)]
+    pub direction: String,
     /// For double bonds that are part of a ring: unit vector pointing from the
     /// bond midpoint toward the ring centroid (i.e., the "inside" direction).
     /// Both components are 0.0 for non-ring bonds → use symmetric offset.
@@ -35,7 +50,7 @@ pub struct BondOutput {
 }
 
 /// 2D coordinate pair in layout-space units (1 unit = 1 bond length).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct Vec2 {
     pub x: f64,
     pub y: f64,

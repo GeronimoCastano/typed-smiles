@@ -1,6 +1,6 @@
 #import "../../src/lib.typ": smiles
 
-#set page(width: 17cm, height: 5.7cm, margin: 0.8cm)
+#set page(width: 18cm, height: 5.8cm, margin: 0.8cm)
 #set text(font: "New Computer Modern", size: 10pt)
 
 #table(
@@ -10,13 +10,13 @@
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Solid wedge*],
-  [*Hashed wedge*],
-  [*Mixed*],
-  [*With carbon H*],
+  [*Manual wedge*],
+  [*Manual hash*],
+  [*Tetrahedral @@*],
+  [*trans alkene*],
 
-  [#smiles("C/N", bond-length: 1.6)],
-  [#smiles("C\\N", bond-length: 1.6)],
-  [#smiles("F/C\\Cl", bond-length: 1.4)],
-  [#smiles("CCO", bond-length: 1.2, show-all-h: true)],
+  [#smiles("C!wN", bond-length: 1.6)],
+  [#smiles("C!hN", bond-length: 1.6)],
+  [#smiles("N[C@@H](C)C(=O)O", bond-length: 0.9)],
+  [#smiles("F/C=C/F", bond-length: 1.25)],
 )

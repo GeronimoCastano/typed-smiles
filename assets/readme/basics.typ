@@ -1,6 +1,6 @@
 #import "../../src/lib.typ": smiles
 
-#set page(width: 17cm, height: 5.7cm, margin: 0.8cm)
+#set page(width: 17cm, height: 8cm, margin: 0.8cm)
 #set text(font: "New Computer Modern", size: 10pt)
 
 #table(
