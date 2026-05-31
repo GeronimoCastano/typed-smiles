@@ -1249,10 +1249,8 @@ fn place_chain(
 
 /// Computes outgoing bond directions for the `count` unplaced neighbors of `u`.
 ///
-/// One or two substituents keep the classic ±60° zigzag (120° bond angles). With
-/// three or more, the directions are spread evenly across the angular space left
-/// free by already-placed neighbors, so branch atoms like the carbon in
-/// `C(Cl)(Cl)N` no longer stack two substituents on the same direction.
+/// One or two substituents use the ±60° zigzag; three or more are spread across
+/// the angular space left free by already-placed neighbors.
 fn chain_neighbor_directions(
     mol: &MoleculeGraph,
     u: usize,
@@ -1274,9 +1272,6 @@ fn chain_neighbor_directions(
     }
 
     match count {
-        // One substituent turns ±60° from `dir` to keep the standard zigzag, even
-        // when this is a fresh DFS root (e.g. a chain grown off a ring atom) where
-        // `dir` is the radial outward direction rather than an incoming bond.
         1 => vec![dir + sign * (PI / 3.0)],
         2 => vec![dir + sign * (PI / 3.0), dir - sign * (PI / 3.0)],
         _ => {
@@ -1325,8 +1320,7 @@ fn distribute_in_free_space(occupied: &[f64], count: usize, fallback: f64) -> Ve
         }
     }
 
-    // Divide the free gap into `count + 1` equal segments so the new bonds keep a
-    // margin away from the existing ones on either side.
+    // Split the gap into `count + 1` segments so bonds keep a margin from the edges.
     let segments = (count + 1) as f64;
     (1..=count)
         .map(|i| normalize_angle(best_start + best_gap * i as f64 / segments))
