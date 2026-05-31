@@ -1219,18 +1219,19 @@ fn place_chain(
             size_b.cmp(&size_a).then_with(|| a.2.cmp(&b.2))
         });
 
+        let dirs = chain_neighbor_directions(
+            mol,
+            u,
+            dir,
+            sign,
+            unplaced_neighbors.len(),
+            incoming_bond_idx.is_some(),
+            coords,
+            placed,
+        );
+
         for (i, &(v, bond_idx, _)) in unplaced_neighbors.iter().enumerate() {
-            let new_dir = if is_linear_atom(mol, u) && incoming_bond_idx.is_some() {
-                dir
-            } else {
-                // Alternate ±60° to produce a standard chemistry zigzag (120° bond angles)
-                let turn = if i == 0 {
-                    sign * (PI / 3.0)
-                } else {
-                    -sign * (PI / 3.0)
-                };
-                dir + turn
-            };
+            let new_dir = dirs[i];
 
             coords[v] = Vec2::new(coords[u].x + new_dir.cos(), coords[u].y + new_dir.sin());
             placed[v] = true;
@@ -1244,6 +1245,92 @@ fn place_chain(
             }
         }
     }
+}
+
+/// Computes outgoing bond directions for the `count` unplaced neighbors of `u`.
+///
+/// One or two substituents keep the classic ±60° zigzag (120° bond angles). With
+/// three or more, the directions are spread evenly across the angular space left
+/// free by already-placed neighbors, so branch atoms like the carbon in
+/// `C(Cl)(Cl)N` no longer stack two substituents on the same direction.
+fn chain_neighbor_directions(
+    mol: &MoleculeGraph,
+    u: usize,
+    dir: f64,
+    sign: f64,
+    count: usize,
+    has_incoming: bool,
+    coords: &[Vec2],
+    placed: &[bool],
+) -> Vec<f64> {
+    if count == 0 {
+        return Vec::new();
+    }
+
+    // A linear atom (cumulene/alkyne center) keeps the incoming direction so the
+    // chain stays straight through it.
+    if is_linear_atom(mol, u) && has_incoming {
+        return vec![dir; count];
+    }
+
+    match count {
+        // One substituent turns ±60° from `dir` to keep the standard zigzag, even
+        // when this is a fresh DFS root (e.g. a chain grown off a ring atom) where
+        // `dir` is the radial outward direction rather than an incoming bond.
+        1 => vec![dir + sign * (PI / 3.0)],
+        2 => vec![dir + sign * (PI / 3.0), dir - sign * (PI / 3.0)],
+        _ => {
+            let occupied: Vec<f64> = mol.adj[u]
+                .iter()
+                .filter(|&&(neighbor, _)| placed[neighbor])
+                .map(|&(neighbor, _)| {
+                    (coords[neighbor].y - coords[u].y).atan2(coords[neighbor].x - coords[u].x)
+                })
+                .collect();
+            distribute_in_free_space(&occupied, count, dir)
+        }
+    }
+}
+
+/// Spreads `count` directions across the largest angular gap left by `occupied`
+/// (the directions of already-placed neighbors). With nothing placed, the
+/// directions are spaced evenly around the full circle starting at `fallback`.
+fn distribute_in_free_space(occupied: &[f64], count: usize, fallback: f64) -> Vec<f64> {
+    if count == 0 {
+        return Vec::new();
+    }
+
+    if occupied.is_empty() {
+        return (0..count)
+            .map(|i| normalize_angle(fallback + 2.0 * PI * i as f64 / count as f64))
+            .collect();
+    }
+
+    let mut occ = occupied.to_vec();
+    occ.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut best_start = occ[0];
+    let mut best_gap = 0.0;
+    for i in 0..occ.len() {
+        let start = occ[i];
+        let end = if i + 1 < occ.len() {
+            occ[i + 1]
+        } else {
+            occ[0] + 2.0 * PI
+        };
+        let gap = end - start;
+        if gap > best_gap {
+            best_gap = gap;
+            best_start = start;
+        }
+    }
+
+    // Divide the free gap into `count + 1` equal segments so the new bonds keep a
+    // margin away from the existing ones on either side.
+    let segments = (count + 1) as f64;
+    (1..=count)
+        .map(|i| normalize_angle(best_start + best_gap * i as f64 / segments))
+        .collect()
 }
 
 fn unplaced_subtree_size(

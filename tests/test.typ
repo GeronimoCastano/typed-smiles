@@ -488,9 +488,39 @@ Standard SMILES bonding rules apply around it.
    #smiles("{Nu}!wC({LG|red})=O")],
 )
 
-// #pagebreak()
+#pagebreak()
 
 
-// #align(center)[
-//   #smiles("CC(=O)C", scale : 1)
-// ]
+#align(center)[
+  #reaction(
+    smiles("C(=O)C1=CC=C(O)C(OC)=C1", rotation:-60deg),
+    [+],
+    smiles("{NHAc}CC(=O)O"),
+    rxn-arrow(above : [1.#ce("Ac2O") \ 2.#ce("H2O")]),
+    smiles("OC(=O)C({NHAc})=CC1=CC(OC)=C({AcO})C=C1"),
+    rxn-arrow(dir : "down", above : [1. Ligand, Rh#upper("(I)")-Salz / #ce("H2") \ 2. #ce("H+")]),
+    mol(smiles("OC(=O)C(!hN)CC1=CC(OC)=C({AcO})C=C1"), label : [*L-DOPA Parkinsonsmittel*])
+  )
+]
+
+
+#pagebreak()
+
+#align(center)[
+  #smiles("R({H})({H})CC{Rh}({Ph3P})({Ph3P})(Cl)")
+]
+
+
+#pagebreak()
+
+= Branch atoms with 3+ substituents (no overlap)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Aminodichloromethane* \ #text(size: 8pt, `C(Cl)(Cl)N`) \ #smiles("C(Cl)(Cl)N")],
+  [*Chloroform* \ #text(size: 8pt, `C(Cl)(Cl)Cl`) \ #smiles("C(Cl)(Cl)Cl")],
+  [*Neopentane* \ #text(size: 8pt, `CC(C)(C)C`) \ #smiles("CC(C)(C)C")],
+)
