@@ -8,25 +8,33 @@ The package is meant for chemistry notes, reaction schemes, reports, and
 teaching material where you want molecules to live directly in your Typst
 source instead of copying diagrams from a separate editor.
 
-## Basic molecule drawing
+**Full documentation:** [`docs/documentation.pdf`](docs/documentation.pdf) — covers every argument, syntax extension, color options, and reaction-scheme feature with live examples.
 
-Start by importing `smiles`. Pass a SMILES string and the package will draw the
-skeletal structure.
+---
+
+## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.2.0": smiles
+#import "@preview/typed-smiles:0.3.0": *
+```
+
+A wildcard import gives you all five public symbols: `smiles`, `ce`, `mol`,
+`rxn-arrow`, and `reaction`.
+
+## Basic molecule drawing
+
+Pass a SMILES string to `#smiles()` and it draws the skeletal structure.
+
+```typst
+#import "@preview/typed-smiles:0.3.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
-  gutter: 0em,
-  row-gutter: 0em,
+  gutter: 0em, row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Ethanol*],
-  [*Alanine*],
-  [*Chlorobenzene*],
-  [*Furan*],
+  [*Ethanol*], [*Alanine*], [*Chlorobenzene*], [*Furan*],
 
   [#smiles("CCO")],
   [#smiles("CC(N)C(=O)O")],
@@ -39,22 +47,18 @@ skeletal structure.
 
 ## Scaling
 
-Use `scale` to enlarge or shrink a diagram while keeping bond length, atom label
-size, and bond stroke balanced. You can still override `bond-length`,
-`font-size`, or `bond-stroke` individually when a figure needs manual tuning.
-Here is the same molecule drawn at three sizes:
+`scale` resizes bond length, atom label size, and stroke together. Individual
+overrides (`bond-length`, `font-size`, `bond-stroke`) let you tune one dimension
+on its own.
 
 ```typst
 #table(
   columns: (1fr, 1fr, 1fr),
-  gutter: 0em,
-  row-gutter: 0em,
+  gutter: 0em, row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Small*],
-  [*Default*],
-  [*Large*],
+  [*Small*], [*Default*], [*Large*],
 
   [#smiles("C1=CC=CC=C1", scale: 0.8)],
   [#smiles("C1=CC=CC=C1")],
@@ -64,30 +68,21 @@ Here is the same molecule drawn at three sizes:
 
 ![Balanced scaling examples](assets/readme/scaling.png)
 
-## Hydrogens and labels
+## Hydrogens, labels, and fonts
 
-By default, `typed-smiles` follows the usual skeletal drawing convention:
-hydrogens on heteroatoms are shown, while carbon hydrogens stay implicit. This
-means ordinary SMILES such as `CC(N)C(=O)O` produces the expected `NH2` and
-`OH` labels without bracket syntax. Use `show-all-h: true` when you also want
-carbon hydrogens, bracket syntax for explicit hydrogens, and `{label}` for
-custom upright group labels. Use `{label|style}` to color a label and its bonds
-by element symbol or named color. Atom labels can also use a custom typeface
-with `font`.
+Heteroatom hydrogens are shown by default; carbon hydrogens stay implicit.
+Use `show-all-h: true` for carbon hydrogens, `[NH3]` bracket syntax for
+explicit hydrogens, and `{label}` / `{label|style}` for custom group labels.
+`font` sets the atom-label typeface.
 
 ```typst
 #table(
   columns: (1fr, 1fr, 1fr, 1fr, 1fr),
-  gutter: 0em,
-  row-gutter: 0em,
+  gutter: 0em, row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Default hetero H*],
-  [*All H*],
-  [*Explicit bracket H*],
-  [*Colored label*],
-  [*Custom font*],
+  [*Default hetero H*], [*All H*], [*Explicit H*], [*Colored label*], [*Custom font*],
 
   [#smiles("CC(N)C(=O)O")],
   [#smiles("CCO", show-all-h: true)],
@@ -99,22 +94,44 @@ with `font`.
 
 ![Hydrogen and custom label examples](assets/readme/hydrogens-labels.png)
 
-## Chemical formulas and equations
+## Colors
 
-`typed-smiles` re-exports `ce` from `chemformula`, so the same import can handle
-ordinary formulas and text-based chemical equations. It also accepts `font` and
-`font-size` for local formula styling; use a math-capable font for formulas and
-equations. This is useful for salts, small inorganic
-species, conditions, and equations where a full molecular diagram would be
-unnecessary.
+Atoms are colored with the Jmol CPK palette. Use `atom-colors` to override
+specific elements or labeled groups per call, or use `.with()` to set
+project-wide defaults. Label colors in `{label|style}` accept 17 named colors
+or any `#RRGGBB` hex code. See the documentation for the full color reference.
 
 ```typst
-#import "@preview/typed-smiles:0.2.0": ce
+// Override an element and a specific label group:
+#smiles("{PPh3}C({OEt})=O",
+  atom-colors: (O: rgb("#8B4513"), "{PPh3}": rgb("#7B2D8B")))
+
+// Set defaults for the whole document in the preamble:
+#let smiles = smiles.with(
+  bond-length: 0.9,
+  atom-colors: (O: rgb("#8B4513"), N: rgb("#008080")),
+)
+
+// Hex and extra named colors in labels:
+#smiles("{Cat|teal}C(=O){Nuc|#E040FB}")
+```
+
+> **Note:** `color: false` is a hard override — it makes everything black
+> regardless of any `atom-colors` entries or inline label styles.
+> To selectively highlight a group in an otherwise black-and-white diagram,
+> keep `color: true` and drive everything through `atom-colors`.
+
+## Chemical formulas and equations
+
+`ce` is re-exported from `chemformula`, so one import covers both structures
+and formulas.
+
+```typst
+#import "@preview/typed-smiles:0.3.0": ce
 
 #table(
   columns: (1fr, 1fr),
-  gutter: 0em,
-  row-gutter: 0em,
+  gutter: 0em, row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
@@ -129,12 +146,13 @@ unnecessary.
 
 ## Reaction schemes
 
-For structural reaction schemes, use `reaction`, `rxn-arrow`, and `mol`. These
-helpers let you combine SMILES-based molecule diagrams with `ce()` formulas,
-plus signs, labels, and arrow conditions in one layout.
+`reaction`, `rxn-arrow`, and `mol` compose molecules, formulas, and arrows into
+schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
+`reaction` is non-breakable — the entire block moves to the next page as a unit
+if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.2.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.3.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -167,8 +185,8 @@ plus signs, labels, and arrow conditions in one layout.
 
 ## Multi-step mechanisms
 
-Reaction arrows can point right, left, up, or down. This lets you write compact
-wrap-around schemes without manually placing every molecule.
+Reaction arrows can point right, left, up, or down for compact wrap-around
+schemes.
 
 ```typst
 #stack(
@@ -190,25 +208,17 @@ wrap-around schemes without manually placing every molecule.
 
 ## Stereochemistry and drawing extensions
 
-`typed-smiles` treats SMILES stereochemistry as chemistry: `[C@H]` and
-`[C@@H]` mark tetrahedral centers, while `/` and `\` describe cis/trans
-geometry around double bonds. For intentionally manual drawings, use
-typed-smiles extensions: `!w` forces a solid wedge and `!h` forces a hashed
-wedge on the following single bond. Bracket atoms such as `[N]` remain real
-SMILES bracket atoms; use `{N}` for a literal label.
+`[C@H]` / `[C@@H]` mark tetrahedral centers; `/` and `\` describe cis/trans
+geometry. `!w` forces a solid wedge and `!h` a hashed wedge.
 
 ```typst
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
-  gutter: 0em,
-  row-gutter: 0em,
+  gutter: 0em, row-gutter: 0em,
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Manual wedge*],
-  [*Manual hash*],
-  [*Tetrahedral @@*],
-  [*trans alkene*],
+  [*Manual wedge*], [*Manual hash*], [*Tetrahedral @@*], [*trans alkene*],
 
   [#smiles("C!wN")],
   [#smiles("C!hN")],
@@ -219,62 +229,59 @@ SMILES bracket atoms; use `{N}` for a literal label.
 
 ![Stereochemistry and drawing extension examples](assets/readme/stereo-h.png)
 
-## API
+## API summary
 
-### `#smiles(smiles-str, scale, bond-length, font-size, font, bond-stroke, color, rotation, show-all-h)`
+### `#smiles(smiles-str, …)`
 
-Renders a SMILES string as a 2D skeletal molecular diagram.
+| Parameter | Default | Description |
+|---|---|---|
+| `smiles-str` | required | OpenSMILES string |
+| `scale` | `1.0` | Balanced scale for bond length, labels, and stroke |
+| `bond-length` | `none` | Bond length only (`1.0` = 30 pt per bond) |
+| `font-size` | `none` | Atom-label size only |
+| `font` | `"New Computer Modern"` | Atom-label font |
+| `bond-stroke` | `none` | Bond width only |
+| `color` | `true` | Apply Jmol CPK atom colors |
+| `rotation` | `0deg` | Rotate molecule; labels stay upright |
+| `show-all-h` | `false` | Label carbon implicit hydrogens |
+| `atom-colors` | `(:)` | Color overrides: element key `O: red` or label key `"{PPh3}": blue` |
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `smiles-str` | `str` | required | OpenSMILES string |
-| `scale` | `float` | `1.0` | Balanced scale for bond length, atom labels, and bond stroke |
-| `bond-length` | `float` | `scale` | Bond length scale factor; `1.0` equals 30pt per bond |
-| `font-size` | `length` | `11pt * scale` | Atom label font size |
-| `font` | `str` | `"New Computer Modern"` | Atom label font |
-| `bond-stroke` | `length` | `0.9pt * scale` | Bond stroke width |
-| `color` | `bool` | `true` | Apply Jmol CPK atom colors |
-| `rotation` | `angle` | `0deg` | Rotate the molecule while keeping atom labels upright |
-| `show-all-h` | `bool` | `false` | Show computed implicit hydrogens on all atoms, including carbon |
-
-Explicit `bond-length`, `font-size`, and `bond-stroke` values override the
-corresponding value derived from `scale`.
-
-typed-smiles extensions inside `smiles-str`:
+SMILES string extensions:
 
 | Syntax | Meaning |
 |---|---|
 | `{label}` | Literal upright label at an atom position |
-| `{label\|N}` | Literal label and bonds colored like an element, here nitrogen |
-| `{label\|red}` | Literal label and bonds colored with a named color |
+| `{label\|N}` | Label and bonds colored like element N |
+| `{label\|red}` | Label colored with a named color (17 names supported) |
+| `{label\|#RRGGBB}` | Label colored with a hex code |
 | `!w` | Force a solid wedge on the next single bond |
 | `!h` | Force a hashed wedge on the next single bond |
 
-### `#ce(chem, font: none, font-size: none, ..args)`
+### `#reaction(gap-h, gap-v, scale, breakable, …items)`
 
-Re-exports `chemformula`'s `ch` function as `ce`. Passes through the usual
-`chemformula` arguments and adds optional `font` and `font-size` arguments for
-local formula styling. Formula fonts should support math rendering.
+| Parameter | Default | Description |
+|---|---|---|
+| `gap-h` | `1.5em` | Horizontal gap between items |
+| `gap-v` | `1.5em` | Vertical gap between rows |
+| `scale` | `1.0` | Uniform scale applied to the entire scheme |
+| `breakable` | `false` | Allow splitting across pages |
 
 ### `#rxn-arrow(above, below, dir)`
 
-Creates an arrow for `#reaction`.
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `above` | `content` | `none` | Label above a horizontal arrow, or right of a vertical arrow |
-| `below` | `content` | `none` | Label below a horizontal arrow, or left of a vertical arrow |
-| `dir` | `str` | `"right"` | One of `"right"`, `"left"`, `"down"`, or `"up"` |
+| Parameter | Default | Description |
+|---|---|---|
+| `above` | `none` | Label above a horizontal arrow (or right of vertical) |
+| `below` | `none` | Label below a horizontal arrow (or left of vertical) |
+| `dir` | `"right"` | `"right"`, `"left"`, `"down"`, or `"up"` |
 
 ### `#mol(content, label: none)`
 
-Wraps a molecule or formula with an optional centered label below it.
+Wraps a molecule with an optional centered caption below it.
 
-### `#reaction(gap-h, gap-v, ..items)`
+### `#ce(chem, font: none, font-size: none, …)`
 
-Lays out molecules, formulas, plus signs, and `rxn-arrow` values in a reaction
-scheme. Directional arrows move the placement cursor, so multi-line schemes can
-be written as a single sequence.
+Re-exports `chemformula`'s `ch`. Accepts `font` and `font-size` for local
+styling; other arguments pass through to chemformula.
 
 ## SMILES support
 
@@ -283,37 +290,25 @@ crate for parsing.
 
 Current limitations:
 
-- Aromatic lowercase atoms are not parsed by `smiles-parser` 0.4. Use Kekule
-  forms such as `C1=CC=CC=C1` instead of `c1ccccc1`.
-- Tetrahedral `@`/`@@` and alkene `/`/`\` stereochemistry are depicted for
-  common acyclic cases, but the package does not compute or validate R/S or E/Z
-  descriptors.
-- Allene, square-planar, trigonal-bipyramidal, octahedral, and complex ring
-  stereochemistry are not yet supported.
-- Bridged bicyclics may have atom overlap; template matching is not implemented.
-- Implicit hydrogen counts use a simple standard-valence model.
+- Aromatic lowercase atoms are not parsed (`c1ccccc1` → use `C1=CC=CC=C1`).
+- `@`/`@@` and `/`/`\` stereochemistry is depicted but R/S and E/Z descriptors are not computed.
+- Bridged bicyclics may overlap; template matching is not implemented.
+- Allene, square-planar, and octahedral stereochemistry are not supported.
 
 ## Building
 
 ```sh
-# Run native Rust tests
-cargo test --manifest-path plugin/Cargo.toml
-
-# Build the WASM plugin used by Typst
-./build.sh
-
-# Compile the visual test document
-typst compile --root . tests/test.typ tests/test.pdf
+cargo test --manifest-path plugin/Cargo.toml   # Rust tests
+./build.sh                                      # build WASM plugin
+typst compile --root . tests/test.typ tests/test.pdf       # visual test
+typst compile --root . docs/documentation.typ docs/documentation.pdf  # user guide
 ```
 
 ## Architecture
 
 ```text
-SMILES string -> Rust WASM plugin -> JSON layout -> CeTZ drawing in Typst
+SMILES string → Rust WASM plugin → JSON layout → CeTZ drawing in Typst
 ```
-
-The Rust plugin handles parsing and 2D coordinates. The Typst layer is a thin
-renderer plus reaction-scheme helpers.
 
 ## License
 

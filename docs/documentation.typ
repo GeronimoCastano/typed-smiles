@@ -7,7 +7,7 @@
 #import "@preview/codly-languages:0.1.1": *
 #import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction
 
-#let version = "0.2.0"
+#let version = "0.3.0"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -165,13 +165,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.2.0": *
+#import "@preview/typed-smiles:0.3.0": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.2.0": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.3.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports five symbols:
@@ -216,6 +216,7 @@ The package exports five symbols:
     color: true,
     rotation: 0deg,
     show-all-h: false,
+    atom-colors: (:),
   )
   ```
 ]
@@ -236,6 +237,7 @@ The package exports five symbols:
   [#c("color")], [`bool`], [`true`], [Apply Jmol CPK atom colors.],
   [#c("rotation")], [`angle`], [`0deg`], [Rotate the molecule; labels stay upright.],
   [#c("show-all-h")], [`bool`], [`false`], [Also label carbon implicit hydrogens.],
+  [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
 )
 
 #note[#c("scale") sizes everything together. Use #c("bond-length"),
@@ -472,8 +474,10 @@ adjustment (see @sec-limits).]
 = Colors <sec-colors>
 // ═════════════════════════════════════════════════════════════════════════════
 
-Atoms use the Jmol CPK palette. Carbon and unlisted elements are black; common
-heteroatoms get their conventional colors.
+== Jmol CPK palette
+
+Atoms use the Jmol CPK palette by default. Carbon and unlisted elements are
+black; common heteroatoms get their conventional colors.
 
 #table(
   columns: 8, inset: 6pt, align: center + horizon, stroke: 0.5pt + luma(210),
@@ -491,6 +495,125 @@ heteroatoms get their conventional colors.
   #example(```typ
   #smiles("OC1=CC(=CC=C1)C(=O)O") \
   #smiles("OC1=CC(=CC=C1)C(=O)O", color: false)
+  ```)
+]
+
+== Custom colors (`atom-colors`)
+
+`atom-colors` is a single dictionary that overrides colors for both elements
+and arbitrary abbreviated groups. Any Typst color value works — #c("rgb()"),
+#c("luma()"), named constants, or anything else.
+
+=== Element-symbol keys
+
+#demo[
+  Use an element symbol as the key to replace that element's CPK color
+  everywhere it appears, including when referenced as an inline label style
+  (#c("{OMe|O}") would pick up the overridden oxygen color).
+
+  #example(```typ
+  // default CPK
+  #smiles("CC(N)C(=O)O")
+  // oxygen → dark brown; nitrogen → teal
+  #smiles("CC(N)C(=O)O",
+    atom-colors: (O: rgb("#8B4513"), N: rgb("#008080")))
+  ```, side: false)
+]
+
+=== Label-name keys
+
+#demo[
+  Wrap the label text in braces to target a specific abbreviated group,
+  regardless of any inline style it carries. The key is written as a quoted
+  string because `{` is not a valid Typst identifier character.
+
+  #example(```typ
+  // default — colors come from inline styles or element fallback
+  #smiles("{PPh3|P}C({OEt|O})=O")
+  // override by label name — inline style is ignored for these
+  #smiles("{PPh3|P}C({OEt|O})=O",
+    atom-colors: ("{PPh3}": rgb("#7B2D8B"), "{OEt}": rgb("#008080")))
+  ```, side: false)
+]
+
+=== Mixing both key forms
+
+#demo[
+  Element keys and label keys can coexist in the same dictionary.
+
+  #example(```typ
+  // O (element) → teal; {Nu} (label) → navy; {LG} (label) → maroon
+  #smiles("{Nu}!wC({LG|red})=O",
+    atom-colors: (O: rgb("#00897B"), "{Nu}": rgb("#1565C0"), "{LG}": rgb("#B71C1C")))
+  ```)
+]
+
+=== Priority
+
+Color is resolved in this order for each atom or label:
+
++ Label-name key in `atom-colors` (e.g. #c("\"{PPh3}\"")), if the atom is an abbreviation.
++ Element-symbol key in `atom-colors` (e.g. #c("O")), for both real atoms and element-style labels.
++ The inline `{label|style}` style from the SMILES string (named color, hex, or element symbol).
++ The default CPK palette.
+
+#note[`color: false` is a hard override that sits above all of the above. When
+it is set, every atom and label renders in black regardless of any `atom-colors`
+entries or inline styles. If you want a mostly-monochrome diagram with one or
+two highlighted groups, keep `color: true` (the default) and put everything else
+in `atom-colors`.]
+
+== Label colors (`{label|style}`)
+
+#demo[
+  In the SMILES string, write #c("{label|style}") to color an abbreviated group
+  independently of its element. The style can be a named color, an element
+  symbol, or a hex code.
+
+  *Named colors:*
+
+  #table(
+    columns: (auto, auto, auto, auto), inset: 7pt,
+    align: (x, y) => if x == 0 { left } else { center + horizon },
+    stroke: 0.5pt + luma(210),
+    fill: (_, y) => if y == 0 { accent-soft },
+    [*Name*], [*Swatch*], [*Name*], [*Swatch*],
+    [red],    [#box(width: 2em, height: 0.9em, fill: rgb("#FF0D0D"), radius: 2pt)],
+    [orange], [#box(width: 2em, height: 0.9em, fill: rgb("#FF8000"), radius: 2pt)],
+    [yellow], [#box(width: 2em, height: 0.9em, fill: rgb("#E6C800"), radius: 2pt)],
+    [brown],  [#box(width: 2em, height: 0.9em, fill: rgb("#8B4513"), radius: 2pt)],
+    [green],  [#box(width: 2em, height: 0.9em, fill: rgb("#1FA51F"), radius: 2pt)],
+    [lime],   [#box(width: 2em, height: 0.9em, fill: rgb("#32CD32"), radius: 2pt)],
+    [teal],   [#box(width: 2em, height: 0.9em, fill: rgb("#008080"), radius: 2pt)],
+    [cyan],   [#box(width: 2em, height: 0.9em, fill: rgb("#00B4D8"), radius: 2pt)],
+    [blue],   [#box(width: 2em, height: 0.9em, fill: rgb("#3050F8"), radius: 2pt)],
+    [navy],   [#box(width: 2em, height: 0.9em, fill: rgb("#000080"), radius: 2pt)],
+    [purple], [#box(width: 2em, height: 0.9em, fill: rgb("#940094"), radius: 2pt)],
+    [pink],   [#box(width: 2em, height: 0.9em, fill: rgb("#FF69B4"), radius: 2pt)],
+    [black],  [#box(width: 2em, height: 0.9em, fill: black, radius: 2pt)],
+    [gray],   [#box(width: 2em, height: 0.9em, fill: rgb("#777777"), radius: 2pt)],
+    [silver], [#box(width: 2em, height: 0.9em, fill: rgb("#C0C0C0"), radius: 2pt)],
+    [maroon], [#box(width: 2em, height: 0.9em, fill: rgb("#800000"), radius: 2pt)],
+    [white],  [#box(width: 2em, height: 0.9em, fill: white, stroke: 0.5pt + luma(210), radius: 2pt)],
+    [],       [],
+  )
+]
+
+#demo[
+  *Hex colors:* write a `#RRGGBB` hex code after the pipe to use any color.
+  The `#` is just a regular character inside a Typst string literal.
+
+  #example(```typ
+  #smiles("{OMe|#8B4513}C(=O){NHAc|#5B2E8C}")
+  ```)
+]
+
+#demo[
+  *Element symbol:* using a symbol as the style applies that element's (possibly
+  overridden) CPK color to the label and its bonds.
+
+  #example(```typ
+  #smiles("{PPh3|P}C({OEt|O})=O")
   ```)
 ]
 
@@ -513,13 +636,13 @@ heteroatoms get their conventional colors.
 == Colored labels
 
 #demo[
-  Add #c("|style") inside the braces to color a label. The styles are #c("red"),
-  #c("blue"), #c("green"), #c("black"), #c("gray") (or #c("grey")), #c("orange"),
-  and #c("purple"). Any element symbol also works and uses that element's color.
+  Add #c("|style") inside the braces to color a label. Use a named color,
+  an element symbol, or a hex code — see @sec-colors for the full list.
 
   #example(```typ
   #smiles("{Nu|blue}CC{LG|red}") \
-  #smiles("{R|green}C(=O){OR|O}")
+  #smiles("{R|green}C(=O){OR|O}") \
+  #smiles("{Cat|teal}C(=O){Nuc|#E040FB}")
   ```)
 ]
 
@@ -576,8 +699,9 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 == #raw("reaction()")
 
 #demo[
-  #c("reaction(gap-h: 1.5em, gap-v: 1.5em, ..items)") lays out molecules and
-  arrows left to right. An up or down arrow wraps the scheme onto a new row.
+  `reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, ..items)`
+  lays out molecules and arrows left to right. An up or down arrow wraps the
+  scheme onto a new row.
 
   #example(```typ
   #reaction(
@@ -601,6 +725,89 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   )
   ```, side: false)
 ]
+
+=== Uniform scale
+
+#demo[
+  Pass `scale` to shrink or enlarge the entire scheme uniformly — molecules,
+  arrows, labels, and separators all change together. This is especially useful
+  for multi-step or wrap-around schemes that would otherwise be too wide.
+
+  #example(```typ
+  // same scheme at three different scales
+  #reaction(
+    scale: 0.75,
+    mol(smiles("C1=CC=CC=C1"), label: text(size: 7pt)[1]),
+    rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+    mol(smiles("BrC1=CC=CC=C1"), label: text(size: 7pt)[A]),
+    rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
+    mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 7pt)[B]),
+    rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
+    mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 7pt)[C]),
+  )
+  ```, side: false)
+]
+
+#note[
+  `reaction(scale: ...)` and `smiles(scale: ...)` are independent. The reaction
+  scale is applied on top of however each individual molecule is sized. To
+  resize everything from a single place, use `reaction(scale: ...)` and let each
+  `smiles()` call use its default.
+]
+
+=== Page-break behaviour
+
+#demo[
+  By default, #c("reaction") sets #c("breakable: false"), so the whole scheme
+  moves to the next page as a unit if it does not fit on the current one. This
+  prevents a molecule or vertical branch from stranding on a different page from
+  the rest of the scheme. Set #c("breakable: true") only for very long schemes
+  that must span pages.
+
+  ```typ
+  // Default — the scheme always stays on one page:
+  #reaction( … )                      // breakable: false
+
+  // Opt in to page splitting for very long schemes:
+  #reaction(breakable: true, … )
+  ```
+]
+
+// ═════════════════════════════════════════════════════════════════════════════
+= Project-wide defaults
+// ═════════════════════════════════════════════════════════════════════════════
+
+Typst functions support partial application with `.with()`. Calling
+#c("smiles.with(...)") returns a new function with the given arguments
+pre-filled. Rebind the name in your preamble and every subsequent
+#c("#smiles(...)") call uses those defaults — including inside #c("#reaction()"),
+because the content is evaluated before #c("reaction") sees it.
+
+Any argument can be pre-filled this way: #c("bond-length"), #c("font"),
+#c("scale"), #c("font-size"), #c("atom-colors"), or any other #c("smiles")
+parameter.
+
+```typ
+// ── preamble ───────────────────────────────────────────────────────────
+#import "@preview/typed-smiles:0.3.0": *
+
+#let smiles = smiles.with(
+  bond-length: 0.9,
+  font:        "Libertinus Serif",
+  atom-colors: (O: rgb("#8B4513"), N: rgb("#008080")),
+)
+
+// ── anywhere in the document ───────────────────────────────────────────
+#smiles("CC(N)C(=O)O")   // uses bond-length 0.9, Libertinus, custom O/N
+#reaction(
+  smiles("CCO"),
+  rxn-arrow(),
+  smiles("CC(=O)O"),     // same custom smiles — preamble applies here too
+)
+```
+
+#note[Any argument passed directly at the call site still overrides the
+`.with()` default for that call alone.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Limitations <sec-limits>
@@ -648,4 +855,48 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   [#c("color")], [`true`], [CPK colors on or off.],
   [#c("rotation")], [`0deg`], [Rotate, labels stay upright.],
   [#c("show-all-h")], [`false`], [Label carbon hydrogens too.],
+  [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
+)
+
+== #raw("reaction()") options
+
+#table(
+  columns: (auto, auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Option*], [*Default*], [*Effect*],
+  [#c("gap-h")], [`1.5em`], [Horizontal gap between items.],
+  [#c("gap-v")], [`1.5em`], [Vertical gap between rows.],
+  [#c("scale")], [`1.0`], [Uniform scale applied to the whole scheme.],
+  [#c("breakable")], [`false`], [Allow the scheme to split across pages.],
+)
+
+== Label color names
+
+Named styles for #c("{label|style}") — any of these plus any `#RRGGBB` hex:
+
+#table(
+  columns: (auto, auto) * 3, inset: (x: 8pt, y: 5pt),
+  align: (x, _) => if calc.even(x) { left } else { center + horizon },
+  stroke: 0.5pt + luma(210),
+  fill: (x, y) => if y == 0 { accent-soft },
+  [*Name*], [*Swatch*], [*Name*], [*Swatch*], [*Name*], [*Swatch*],
+  [red],    [#box(width: 2em, height: 0.75em, fill: rgb("#FF0D0D"), radius: 2pt)],
+  [orange], [#box(width: 2em, height: 0.75em, fill: rgb("#FF8000"), radius: 2pt)],
+  [yellow], [#box(width: 2em, height: 0.75em, fill: rgb("#E6C800"), radius: 2pt)],
+  [brown],  [#box(width: 2em, height: 0.75em, fill: rgb("#8B4513"), radius: 2pt)],
+  [green],  [#box(width: 2em, height: 0.75em, fill: rgb("#1FA51F"), radius: 2pt)],
+  [lime],   [#box(width: 2em, height: 0.75em, fill: rgb("#32CD32"), radius: 2pt)],
+  [teal],   [#box(width: 2em, height: 0.75em, fill: rgb("#008080"), radius: 2pt)],
+  [cyan],   [#box(width: 2em, height: 0.75em, fill: rgb("#00B4D8"), radius: 2pt)],
+  [blue],   [#box(width: 2em, height: 0.75em, fill: rgb("#3050F8"), radius: 2pt)],
+  [navy],   [#box(width: 2em, height: 0.75em, fill: rgb("#000080"), radius: 2pt)],
+  [purple], [#box(width: 2em, height: 0.75em, fill: rgb("#940094"), radius: 2pt)],
+  [pink],   [#box(width: 2em, height: 0.75em, fill: rgb("#FF69B4"), radius: 2pt)],
+  [black],  [#box(width: 2em, height: 0.75em, fill: black,          radius: 2pt)],
+  [gray],   [#box(width: 2em, height: 0.75em, fill: rgb("#777777"), radius: 2pt)],
+  [silver], [#box(width: 2em, height: 0.75em, fill: rgb("#C0C0C0"), radius: 2pt)],
+  [maroon], [#box(width: 2em, height: 0.75em, fill: rgb("#800000"), radius: 2pt)],
+  [white],  [#box(width: 2em, height: 0.75em, fill: white, stroke: 0.4pt + luma(200), radius: 2pt)],
+  [],       [],
 )

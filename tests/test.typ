@@ -490,9 +490,12 @@ Standard SMILES bonding rules apply around it.
 
 #pagebreak()
 
+= Reaction Scale and Page-Break Behaviour
+
+*L-DOPA synthesis (default scale):*
 
 #align(center)[
-  #reaction(
+  reaction(
     smiles("C(=O)C1=CC=C(O)C(OC)=C1", rotation:-60deg),
     [+],
     smiles("{NHAc}CC(=O)O"),
@@ -503,24 +506,151 @@ Standard SMILES bonding rules apply around it.
   )
 ]
 
-
-#pagebreak()
+#v(1.5em)
+*L-DOPA synthesis (scale: 0.7 — entire scheme shrinks uniformly):*
 
 #align(center)[
-  #smiles("R({H})({H})CC{Rh}({Ph3P})({Ph3P})(Cl)")
+  reaction(
+    scale: 0.7,
+    smiles("C(=O)C1=CC=C(O)C(OC)=C1", rotation:-60deg),
+    [+],
+    smiles("{NHAc}CC(=O)O"),
+    rxn-arrow(above : [1.#ce("Ac2O") \ 2.#ce("H2O")]),
+    smiles("OC(=O)C({NHAc})=CC1=CC(OC)=C({AcO})C=C1"),
+    rxn-arrow(dir : "down", above : [1. Ligand, Rh#upper("(I)")-Salz / #ce("H2") \ 2. #ce("H+")]),
+    mol(smiles("OC(=O)C(!hN)CC1=CC(OC)=C({AcO})C=C1"), label : [*L-DOPA Parkinsonsmittel*])
+  )
 ]
 
+#v(1.5em)
+*Wrap-around scheme (scale: 0.85, breakable: false — moves as a unit if it spills):*
+
+#align(center)[
+  reaction(
+    scale: 0.85,
+    mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[*1*]),
+    rxn-arrow(above: ce("Br2")),
+    mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[*A*]),
+    rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
+    mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[*B*]),
+    rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
+    mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[*C*]),
+  )
+]
 
 #pagebreak()
 
-= Branch atoms with 3+ substituents (no overlap)
+= Color Customisation
+
+*Extended named colors in `{label|color}` syntax:*
+
+#table(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 0em,
+  row-gutter: 0em,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
+
+  [*yellow*], [*pink*], [*cyan*], [*brown*],
+  [#smiles("{OEt|yellow}C=O")],
+  [#smiles("{Nu|pink}C=O")],
+  [#smiles("{LG|cyan}C=O")],
+  [#smiles("{OMe|brown}C=O")],
+
+  [*lime*], [*teal*], [*navy*], [*silver*],
+  [#smiles("{R|lime}C=O")],
+  [#smiles("{X|teal}C=O")],
+  [#smiles("{Y|navy}C=O")],
+  [#smiles("{Z|silver}C=O")],
+)
+
+#v(1em)
+*Hex RGB colors in `{label|#RRGGBB}` syntax:*
+
+#table(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 0em,
+  row-gutter: 0em,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
+
+  [*`#8B4513`*], [*`#E040FB`*], [*`#00BCD4`*], [*`#FF6F00`*],
+  [#smiles("{OMe|#8B4513}C=O")],
+  [#smiles("{Nu|#E040FB}C=O")],
+  [#smiles("{LG|#00BCD4}C=O")],
+  [#smiles("{R|#FF6F00}C=O")],
+)
+
+#v(1em)
+*`atom-colors` parameter — per-element overrides (O: brown, N: teal):*
 
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 1.5em,
   align: center,
 
-  [*Aminodichloromethane* \ #text(size: 8pt, `C(Cl)(Cl)N`) \ #smiles("C(Cl)(Cl)N")],
-  [*Chloroform* \ #text(size: 8pt, `C(Cl)(Cl)Cl`) \ #smiles("C(Cl)(Cl)Cl")],
-  [*Neopentane* \ #text(size: 8pt, `CC(C)(C)C`) \ #smiles("CC(C)(C)C")],
+  [*Default CPK* \ #smiles("CC(N)C(=O)O")],
+  [*O → brown* \ #smiles("CC(N)C(=O)O", atom-colors: (O: rgb("#8B4513")))],
+  [*O → brown, N → teal* \ #smiles("CC(N)C(=O)O", atom-colors: (O: rgb("#8B4513"), N: rgb("#008080")))],
 )
+
+#v(1em)
+*Preamble-wide defaults via `.with()` — rebind once, use everywhere:*
+
+// Simulate a project-wide preamble binding with custom colors.
+#let my-smiles = smiles.with(
+  bond-length: 0.9,
+  font: "New Computer Modern",
+  atom-colors: (O: rgb("#8B4513"), N: rgb("#008080")),
+)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Alanine* \ #my-smiles("CC(N)C(=O)O")],
+  [*Ethanol* \ #my-smiles("CCO")],
+  [*Serine* \ #my-smiles("NC(CO)C(=O)O")],
+)
+
+#v(1em)
+*Label name overrides via `"{label}"` keys — override a specific abbreviation's color:*
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Default label colors* \
+   #smiles("{PPh3}C({OEt})=O")],
+
+  [*`{PPh3}` → purple, `{OEt}` → teal* \
+   #smiles("{PPh3}C({OEt})=O",
+     atom-colors: ("{PPh3}": rgb("#7B2D8B"), "{OEt}": rgb("#008080")))],
+
+  [*Mixed: atom + label overrides* \
+   #smiles("{Nu}!wC({LG|red})=O",
+     atom-colors: (O: rgb("#00897B"), "{Nu}": rgb("#1565C0"), "{LG}": rgb("#B71C1C")))],
+)
+
+// #pagebreak()
+
+// #align(center)[
+//   #smiles("R({H})({H})CC{Rh}({Ph3P})({Ph3P})(Cl)")
+// ]
+
+
+// #pagebreak()
+
+// = Branch atoms with 3+ substituents (no overlap)
+
+// #grid(
+//   columns: (1fr, 1fr, 1fr),
+//   gutter: 1.5em,
+//   align: center,
+
+//   [*Aminodichloromethane* \ #text(size: 8pt, `C(Cl)(Cl)N`) \ #smiles("C(Cl)(Cl)N")],
+//   [*Chloroform* \ #text(size: 8pt, `C(Cl)(Cl)Cl`) \ #smiles("C(Cl)(Cl)Cl")],
+//   [*Neopentane* \ #text(size: 8pt, `CC(C)(C)C`) \ #smiles("CC(C)(C)C")],
+// )

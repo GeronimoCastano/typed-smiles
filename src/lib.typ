@@ -71,14 +71,25 @@
 }
 
 #let _label-color(style) = {
-  if style == "" { black }
-  else if style == "red"    { rgb("#FF0D0D") }
-  else if style == "blue"   { rgb("#3050F8") }
-  else if style == "green"  { rgb("#1FA51F") }
-  else if style == "black"  { black }
-  else if style == "gray" or style == "grey" { rgb("#777777") }
-  else if style == "orange" { rgb("#FF8000") }
-  else if style == "purple" { rgb("#940094") }
+  if style == ""                             { black }
+  else if style.starts-with("#")            { rgb(style) }
+  else if style == "red"                    { rgb("#FF0D0D") }
+  else if style == "blue"                   { rgb("#3050F8") }
+  else if style == "green"                  { rgb("#1FA51F") }
+  else if style == "black"                  { black }
+  else if style == "gray" or style == "grey"{ rgb("#777777") }
+  else if style == "silver"                 { rgb("#C0C0C0") }
+  else if style == "white"                  { white }
+  else if style == "orange"                 { rgb("#FF8000") }
+  else if style == "yellow"                 { rgb("#E6C800") }
+  else if style == "brown"                  { rgb("#8B4513") }
+  else if style == "pink"                   { rgb("#FF69B4") }
+  else if style == "purple"                 { rgb("#940094") }
+  else if style == "cyan"                   { rgb("#00B4D8") }
+  else if style == "lime"                   { rgb("#32CD32") }
+  else if style == "teal"                   { rgb("#008080") }
+  else if style == "maroon"                 { rgb("#800000") }
+  else if style == "navy"                   { rgb("#000080") }
   else { _atom-color(style) }
 }
 
@@ -100,6 +111,15 @@
 ///   Example: rotation: 90deg. Default: 0deg.
 /// - show-all-h (bool): Show computed implicit hydrogens on all atoms,
 ///   including carbon. Default: false.
+/// - atom-colors (dictionary): Color overrides that take priority over both the
+///   default CPK palette and any `{label|style}` inline style. Two key forms:
+///   - Element symbol key (e.g. `O: rgb("#8B4513")`) — overrides that element
+///     everywhere, including when used as an inline style (`{label|O}`).
+///   - Brace-quoted label key (e.g. `"{PPh3}": purple`) — overrides the color
+///     of any abbreviated group whose label text matches, regardless of what
+///     style (if any) was written inline.
+///   Both forms can appear in the same dictionary.
+///   To set defaults project-wide use `#let smiles = smiles.with(atom-colors: (…))`.
 /// -> content
 #let smiles(
   smiles-str,
@@ -111,6 +131,7 @@
   color: true,
   rotation: 0deg,
   show-all-h: false,
+  atom-colors: (:),
 ) = {
   let raw-bytes = smiles-plugin.layout(bytes(smiles-str))
   let layout = json(raw-bytes)
@@ -131,13 +152,19 @@
   let subscript-size  = actual-font-size * 0.62
   let superscript-size = actual-font-size * 0.62
 
-  let atom-clr = if color { _atom-color } else { (sym) => black }
-  let label-clr = if color { _label-color } else { (style) => black }
+  let atom-clr = if color {
+    (sym) => { if sym in atom-colors { atom-colors.at(sym) } else { _atom-color(sym) } }
+  } else { (sym) => black }
+  let label-clr = if color {
+    (style) => { if style in atom-colors { atom-colors.at(style) } else { _label-color(style) } }
+  } else { (style) => black }
   let display-clr(atom) = {
     let abbrev = atom.at("abbrev", default: "")
     let abbrev-style = atom.at("abbrev_style", default: "")
     if abbrev != "" {
-      label-clr(abbrev-style)
+      let label-key = "{" + abbrev + "}"
+      if color and label-key in atom-colors { atom-colors.at(label-key) }
+      else { label-clr(abbrev-style) }
     } else {
       atom-clr(atom.symbol)
     }
@@ -569,6 +596,9 @@
   })
 }
 
+// Capture before `reaction` shadows the name with its own `scale` parameter.
+#let _typst-scale = scale
+
 // ── Reaction scheme helpers ───────────────────────────────────────────────────
 
 /// Creates a reaction arrow for use inside #reaction().
@@ -636,8 +666,12 @@
 ///
 /// - gap-h (length): Gap between items in horizontal direction. Default: 1.5em.
 /// - gap-v (length): Gap between items in vertical direction. Default: 1.5em.
+/// - scale (float): Uniform scale applied to the entire scheme — molecules,
+///   arrows, labels, and plus signs all scale together. 1.0 = no scaling.
+/// - breakable (bool): Whether the scheme may be split across pages.
+///   Default: false (the whole block moves to the next page as a unit).
 /// -> content
-#let reaction(gap-h: 1.5em, gap-v: 1.5em, ..items) = {
+#let reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, ..items) = {
   let steps = items.pos()
 
   // ── Phase 1: assign each item a (grid-row, grid-col) position ────────────
@@ -714,7 +748,7 @@
     }
   }
 
-  grid(
+  let result = grid(
     columns: (auto,) * n-cols,
     rows:    (auto,) * n-rows,
     column-gutter: gap-h / 2,
@@ -722,4 +756,12 @@
     align: center + horizon,
     ..flat-cells,
   )
+
+  let scaled = if scale == 1.0 {
+    result
+  } else {
+    _typst-scale(x: scale * 100%, y: scale * 100%, reflow: true, result)
+  }
+
+  block(breakable: breakable, scaled)
 }
