@@ -224,6 +224,85 @@ wedge and hash bonds are bicolored by atom like plain bonds.
   [*Literal label* \ #text(size: 8pt, `{O}`) \ #smiles("CC{O}", bond-length: 1.2)],
 )
 
+= Lone Pair Display
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*Alcohol dots* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, lone-pairs: "dots")],
+  [*Amine dots* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.2, lone-pairs: "dots")],
+  [*Carbonyl dots* \ #text(size: 8pt, `CC=O`) \ #smiles("CC=O", bond-length: 1.2, lone-pairs: "dots")],
+  [*Halide lines* \ #text(size: 8pt, `CCl`) \ #smiles("CCl", bond-length: 1.2, lone-pairs: "lines")],
+
+  [*Carboxylate dots* \ #text(size: 8pt, `[O-]C=O`) \ #smiles("[O-]C=O", bond-length: 1.2, lone-pairs: "dots")],
+  [*Ether lines* \ #text(size: 8pt, `COC`) \ #smiles("COC", bond-length: 1.2, lone-pairs: "lines")],
+  [*Ammonium, no N pair* \ #text(size: 8pt, `[NH4+]`) \ #smiles("[NH4+]", bond-length: 1.2, lone-pairs: "dots")],
+  [*No lone pairs* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2)],
+)
+
+#v(1em)
+*Terminal heteroatom lone-pair orientations:*
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*OH, right* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, lone-pairs: "dots")],
+  [*OH, up* \ #text(size: 8pt, `CCO rotation: 90deg`) \ #smiles("CCO", bond-length: 1.2, rotation: 90deg, lone-pairs: "dots")],
+  [*OH, left* \ #text(size: 8pt, `CCO rotation: 180deg`) \ #smiles("CCO", bond-length: 1.2, rotation: 180deg, lone-pairs: "dots")],
+  [*OH, down* \ #text(size: 8pt, `CCO rotation: -90deg`) \ #smiles("CCO", bond-length: 1.2, rotation: -90deg, lone-pairs: "dots")],
+
+  [*NH#sub[2], right* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.2, lone-pairs: "dots")],
+  [*NH#sub[2], up* \ #text(size: 8pt, `CCN rotation: 90deg`) \ #smiles("CCN", bond-length: 1.2, rotation: 90deg, lone-pairs: "dots")],
+  [*NH#sub[2], left* \ #text(size: 8pt, `CCN rotation: 180deg`) \ #smiles("CCN", bond-length: 1.2, rotation: 180deg, lone-pairs: "dots")],
+  [*NH#sub[2], down* \ #text(size: 8pt, `CCN rotation: -90deg`) \ #smiles("CCN", bond-length: 1.2, rotation: -90deg, lone-pairs: "dots")],
+)
+
+#v(1em)
+*Internal and multi-connected heteroatom lone pairs:*
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*Secondary amine* \ #text(size: 8pt, `CNC`) \ #smiles("CNC", bond-length: 1.2, lone-pairs: "dots")],
+  [*Secondary amine rotated* \ #text(size: 8pt, `CNC rotation: 90deg`) \ #smiles("CNC", bond-length: 1.2, rotation: 90deg, lone-pairs: "dots")],
+  [*Tertiary amine* \ #text(size: 8pt, `CN(C)C`) \ #smiles("CN(C)C", bond-length: 1.2, lone-pairs: "dots")],
+  [*Tertiary amine lines* \ #text(size: 8pt, `CN(C)C`) \ #smiles("CN(C)C", bond-length: 1.2, lone-pairs: "lines")],
+
+  [*Ether* \ #text(size: 8pt, `COC`) \ #smiles("COC", bond-length: 1.2, lone-pairs: "dots")],
+  [*Ether rotated* \ #text(size: 8pt, `COC rotation: 90deg`) \ #smiles("COC", bond-length: 1.2, rotation: 90deg, lone-pairs: "dots")],
+  [*Ester oxygen* \ #text(size: 8pt, `CC(=O)OC`) \ #smiles("CC(=O)OC", bond-length: 1.2, lone-pairs: "dots")],
+  [*Carbonyl plus amide* \ #text(size: 8pt, `CC(=O)N`) \ #smiles("CC(=O)N", bond-length: 1.2, lone-pairs: "dots")],
+)
+
+#v(1em)
+*Lone pairs with size and font options:*
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center,
+
+  [*Scale 0.8* \ #text(size: 8pt, `scale: 0.8`) \ #smiles("CNC", scale: 0.8, lone-pairs: "dots")],
+  [*Scale 1.6* \ #text(size: 8pt, `scale: 1.6`) \ #smiles("CNC", scale: 1.6, lone-pairs: "dots")],
+  [*Short bonds* \ #text(size: 8pt, `bond-length: 0.75`) \ #smiles("CNC", bond-length: 0.75, lone-pairs: "dots")],
+  [*Long bonds* \ #text(size: 8pt, `bond-length: 1.55`) \ #smiles("CNC", bond-length: 1.55, lone-pairs: "dots")],
+
+  [*Small labels* \ #text(size: 8pt, `font-size: 8pt`) \ #smiles("CCO", font-size: 8pt, bond-length: 1.2, lone-pairs: "dots")],
+  [*Large labels* \ #text(size: 8pt, `font-size: 20pt`) \ #smiles("CCO", font-size: 20pt, bond-length: 1.2, lone-pairs: "dots")],
+  [*Serif font* \ #text(size: 8pt, `Libertinus Serif`) \ #smiles("CNC", font: "Libertinus Serif", font-size: 18pt, bond-length: 1.25, lone-pairs: "dots")],
+  [*Thick lines* \ #text(size: 8pt, `bond-stroke: 1.8pt`) \ #smiles("CCl", bond-stroke: 1.8pt, bond-length: 1.2, lone-pairs: "lines")],
+)
+
 #v(1em)
 *Heteroatom H vs literal labels:*
 
@@ -495,7 +574,7 @@ Standard SMILES bonding rules apply around it.
 *L-DOPA synthesis (default scale):*
 
 #align(center)[
-  reaction(
+  #reaction(
     smiles("C(=O)C1=CC=C(O)C(OC)=C1", rotation:-60deg),
     [+],
     smiles("{NHAc}CC(=O)O"),
@@ -510,7 +589,7 @@ Standard SMILES bonding rules apply around it.
 *L-DOPA synthesis (scale: 0.7 — entire scheme shrinks uniformly):*
 
 #align(center)[
-  reaction(
+  #reaction(
     scale: 0.7,
     smiles("C(=O)C1=CC=C(O)C(OC)=C1", rotation:-60deg),
     [+],
@@ -526,7 +605,7 @@ Standard SMILES bonding rules apply around it.
 *Wrap-around scheme (scale: 0.85, breakable: false — moves as a unit if it spills):*
 
 #align(center)[
-  reaction(
+  #reaction(
     scale: 0.85,
     mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[*1*]),
     rxn-arrow(above: ce("Br2")),

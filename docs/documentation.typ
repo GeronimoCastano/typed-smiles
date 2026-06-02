@@ -216,6 +216,7 @@ The package exports five symbols:
     color: true,
     rotation: 0deg,
     show-all-h: false,
+    lone-pairs: none,
     atom-colors: (:),
   )
   ```
@@ -237,6 +238,7 @@ The package exports five symbols:
   [#c("color")], [`bool`], [`true`], [Apply Jmol CPK atom colors.],
   [#c("rotation")], [`angle`], [`0deg`], [Rotate the molecule; labels stay upright.],
   [#c("show-all-h")], [`bool`], [`false`], [Also label carbon implicit hydrogens.],
+  [#c("lone-pairs")], [`none` / `"dots"` / `"lines"`], [`none`], [Draw optional non-bonding electron pairs on skeletal atom labels.],
   [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
 )
 
@@ -343,6 +345,25 @@ each defaults to #c("none"), meaning it follows #c("scale").]
   #smiles("CCO", show-all-h: true)
   ```)
 ]
+
+== #raw("lone-pairs")
+
+#demo[
+  Set #c("lone-pairs") to #c("\"dots\"") or #c("\"lines\"") to annotate the
+  skeletal drawing with non-bonding electron pairs on common organic heteroatoms
+  and charged atoms. The default #c("none") keeps lone pairs hidden.
+
+  #example(```typ
+  #smiles("CCO", lone-pairs: "dots") \
+  #smiles("CCN", lone-pairs: "lines") \
+  #smiles("[O-]C=O", lone-pairs: "dots")
+  ```)
+]
+
+#note[Lone pairs are inferred for a conservative organic subset such as N, O, S,
+P, halogens, and simple charged forms. They are an annotation on the skeletal
+structure; the carbon skeleton and implicit-hydrogen conventions do not change.
+For example, ammonium (#c("[NH4+]")) has no nitrogen lone pair.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Atoms and charges
@@ -855,6 +876,7 @@ parameter.
   [#c("color")], [`true`], [CPK colors on or off.],
   [#c("rotation")], [`0deg`], [Rotate, labels stay upright.],
   [#c("show-all-h")], [`false`], [Label carbon hydrogens too.],
+  [#c("lone-pairs")], [`none`], [Draw lone pairs as #c("\"dots\"") or #c("\"lines\"").],
   [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
 )
 

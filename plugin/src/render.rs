@@ -12,6 +12,12 @@ pub struct AtomOutput {
     pub implicit_h: u8,
     /// Formal charge (shown as superscript when != 0)
     pub charge: i8,
+    /// Non-bonding electron-pair count for optional skeletal lone-pair rendering.
+    #[serde(default)]
+    pub lone_pairs: u8,
+    /// Unit directions from this atom toward each rendered lone-pair group.
+    #[serde(default)]
+    pub lone_pair_dirs: Vec<Vec2>,
     /// Non-empty when this atom was created by a `{label}` abbreviation.
     /// The renderer displays this text instead of `symbol`.
     #[serde(default)]

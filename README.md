@@ -94,6 +94,17 @@ explicit hydrogens, and `{label}` / `{label|style}` for custom group labels.
 
 ![Hydrogen and custom label examples](assets/readme/hydrogens-labels.png)
 
+## Lone pairs
+
+Set `lone-pairs` to `"dots"` or `"lines"` to annotate skeletal structures with
+non-bonding electron pairs on common organic heteroatoms and charged atoms.
+
+```typst
+#smiles("CCO", lone-pairs: "dots")
+#smiles("CCN", lone-pairs: "lines")
+#smiles("[O-]C=O", lone-pairs: "dots")
+```
+
 ## Colors
 
 Atoms are colored with the Jmol CPK palette. Use `atom-colors` to override
@@ -244,6 +255,7 @@ geometry. `!w` forces a solid wedge and `!h` a hashed wedge.
 | `color` | `true` | Apply Jmol CPK atom colors |
 | `rotation` | `0deg` | Rotate molecule; labels stay upright |
 | `show-all-h` | `false` | Label carbon implicit hydrogens |
+| `lone-pairs` | `none` | Draw lone pairs as `"dots"` or `"lines"` |
 | `atom-colors` | `(:)` | Color overrides: element key `O: red` or label key `"{PPh3}": blue` |
 
 SMILES string extensions:

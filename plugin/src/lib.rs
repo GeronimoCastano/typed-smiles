@@ -481,6 +481,29 @@ mod tests {
         assert_eq!(out.atoms[0].implicit_h, 2);
     }
 
+    #[test]
+    fn lone_pair_counts_common_organic_atoms() {
+        let alcohol = layout_native("CCO").expect("alcohol layout failed");
+        assert_eq!(alcohol.atoms[2].lone_pairs, 2);
+        assert_eq!(alcohol.atoms[2].lone_pair_dirs.len(), 2);
+
+        let amine = layout_native("CCN").expect("amine layout failed");
+        assert_eq!(amine.atoms[2].lone_pairs, 1);
+
+        let chloride = layout_native("CCl").expect("chloride layout failed");
+        assert_eq!(chloride.atoms[1].lone_pairs, 3);
+    }
+
+    #[test]
+    fn lone_pair_counts_respect_charge_and_explicit_hydrogens() {
+        let ammonium = layout_native("[NH4+]").expect("ammonium layout failed");
+        assert_eq!(ammonium.atoms[0].lone_pairs, 0);
+
+        let formate = layout_native("[O-]C=O").expect("formate layout failed");
+        assert_eq!(formate.atoms[0].lone_pairs, 3);
+        assert_eq!(formate.atoms[2].lone_pairs, 2);
+    }
+
     fn max_bond_length(out: &LayoutOutput) -> f64 {
         out.bonds
             .iter()

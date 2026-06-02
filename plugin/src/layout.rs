@@ -83,19 +83,24 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
         .atoms
         .iter()
         .enumerate()
-        .map(|(i, a)| AtomOutput {
-            symbol: a.symbol.clone(),
-            pos: coords[i],
-            hcount: a.hcount,
-            implicit_h: implicit_h_count(mol, i),
-            charge: a.charge,
-            abbrev: a.abbrev.clone(),
-            abbrev_style: a.abbrev_style.clone(),
-            chirality: a.chirality.as_str().to_string(),
-            stereo_h: stereo_h[i]
-                .map(|(stereo, _)| stereo.as_str().to_string())
-                .unwrap_or_else(|| "none".to_string()),
-            stereo_h_dir: stereo_h[i].map(|(_, dir)| dir).unwrap_or_default(),
+        .map(|(i, a)| {
+            let lone_pairs = lone_pair_count(mol, i);
+            AtomOutput {
+                symbol: a.symbol.clone(),
+                pos: coords[i],
+                hcount: a.hcount,
+                implicit_h: implicit_h_count(mol, i),
+                charge: a.charge,
+                lone_pairs,
+                lone_pair_dirs: lone_pair_directions(mol, i, &coords, lone_pairs as usize),
+                abbrev: a.abbrev.clone(),
+                abbrev_style: a.abbrev_style.clone(),
+                chirality: a.chirality.as_str().to_string(),
+                stereo_h: stereo_h[i]
+                    .map(|(stereo, _)| stereo.as_str().to_string())
+                    .unwrap_or_else(|| "none".to_string()),
+                stereo_h_dir: stereo_h[i].map(|(_, dir)| dir).unwrap_or_default(),
+            }
         })
         .collect();
 
@@ -153,6 +158,99 @@ fn standard_valence(symbol: &str) -> Option<i16> {
         "F" | "Cl" | "Br" | "I" => Some(1),
         _ => None,
     }
+}
+
+fn valence_electrons(symbol: &str) -> Option<i16> {
+    match symbol {
+        "B" => Some(3),
+        "C" | "Si" | "Sn" => Some(4),
+        "N" | "P" | "As" => Some(5),
+        "O" | "S" | "Se" | "Te" => Some(6),
+        "F" | "Cl" | "Br" | "I" => Some(7),
+        _ => None,
+    }
+}
+
+fn lone_pair_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {
+    let atom = &mol.atoms[atom_idx];
+    if atom.abbrev != "" {
+        return 0;
+    }
+
+    let Some(valence_electrons) = valence_electrons(&atom.symbol) else {
+        return 0;
+    };
+
+    let bond_order_sum: i16 = mol.adj[atom_idx]
+        .iter()
+        .map(|&(_, bond_idx)| mol.bonds[bond_idx].order.as_u8() as i16)
+        .sum();
+    let hydrogen_bonds = atom.hcount as i16 + implicit_h_count(mol, atom_idx) as i16;
+    let nonbonding_electrons =
+        valence_electrons - atom.charge as i16 - bond_order_sum - hydrogen_bonds;
+
+    (nonbonding_electrons.max(0) / 2) as u8
+}
+
+fn lone_pair_directions(
+    mol: &MoleculeGraph,
+    atom_idx: usize,
+    coords: &[Vec2],
+    count: usize,
+) -> Vec<Vec2> {
+    if count == 0 {
+        return Vec::new();
+    }
+
+    let mut occupied: Vec<f64> = mol.adj[atom_idx]
+        .iter()
+        .filter_map(|&(neighbor, _)| {
+            let dx = coords[neighbor].x - coords[atom_idx].x;
+            let dy = coords[neighbor].y - coords[atom_idx].y;
+            (dx.abs() > 1e-8 || dy.abs() > 1e-8).then_some(dy.atan2(dx))
+        })
+        .collect();
+
+    let angles = if occupied.is_empty() {
+        spread_around_direction(PI / 2.0, count, PI)
+    } else if occupied.len() == 1 {
+        spread_around_direction(normalize_angle(occupied[0] + PI), count, PI * 2.0 / 3.0)
+    } else {
+        occupied.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mut best_start = occupied[0];
+        let mut best_gap = 0.0;
+        for i in 0..occupied.len() {
+            let start = occupied[i];
+            let end = if i + 1 < occupied.len() {
+                occupied[i + 1]
+            } else {
+                occupied[0] + 2.0 * PI
+            };
+            let gap = end - start;
+            if gap > best_gap {
+                best_gap = gap;
+                best_start = start;
+            }
+        }
+
+        if count == 1 {
+            vec![normalize_angle(best_start + best_gap / 2.0)]
+        } else {
+            let margin = (PI / 8.0).min(best_gap / 4.0);
+            let usable_gap = (best_gap - 2.0 * margin).max(best_gap * 0.5);
+            (0..count)
+                .map(|i| {
+                    let t = (i + 1) as f64 / (count + 1) as f64;
+                    normalize_angle(best_start + margin + usable_gap * t)
+                })
+                .collect()
+        }
+    };
+
+    angles
+        .into_iter()
+        .map(|angle| Vec2::new(angle.cos(), angle.sin()))
+        .collect()
 }
 
 fn direction_as_str(direction: BondDirection) -> &'static str {

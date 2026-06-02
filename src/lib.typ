@@ -111,6 +111,8 @@
 ///   Example: rotation: 90deg. Default: 0deg.
 /// - show-all-h (bool): Show computed implicit hydrogens on all atoms,
 ///   including carbon. Default: false.
+/// - lone-pairs (none / "dots" / "lines"): Draw non-bonding electron pairs on
+///   skeletal atom labels. Default: none.
 /// - atom-colors (dictionary): Color overrides that take priority over both the
 ///   default CPK palette and any `{label|style}` inline style. Two key forms:
 ///   - Element symbol key (e.g. `O: rgb("#8B4513")`) — overrides that element
@@ -131,8 +133,13 @@
   color: true,
   rotation: 0deg,
   show-all-h: false,
+  lone-pairs: none,
   atom-colors: (:),
 ) = {
+  if lone-pairs != none and lone-pairs != "dots" and lone-pairs != "lines" {
+    panic("lone-pairs must be none, \"dots\", or \"lines\"")
+  }
+
   let raw-bytes = smiles-plugin.layout(bytes(smiles-str))
   let layout = json(raw-bytes)
 
@@ -151,6 +158,13 @@
   let stroke-w        = actual-bond-stroke
   let subscript-size  = actual-font-size * 0.62
   let superscript-size = actual-font-size * 0.62
+  let lone-pair-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.6)
+  let lone-pair-terminal-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.5)
+  let lone-pair-heavy-center-shift = calc.max(0.12, actual-font-size / canvas-scale * 0.54)
+  let lone-pair-heavy-vertical-center-shift = calc.max(0.10, actual-font-size / canvas-scale * 0.46)
+  let lone-pair-dot-r = calc.max(0.018, stroke-units * 0.75)
+  let lone-pair-dot-gap = calc.max(0.050, lone-pair-dot-r * 2)
+  let lone-pair-line-half = calc.max(0.055, stroke-units * 2.4)
 
   let atom-clr = if color {
     (sym) => { if sym in atom-colors { atom-colors.at(sym) } else { _atom-color(sym) } }
@@ -423,6 +437,160 @@
       }
     }
 
+    // ── Lone-pair annotation ──────────────────────────────────────────────
+    // Non-bonding electron pairs render as either two dots (the two electrons)
+    // or a single short line. Hydrogen-bearing heteroatom labels are laid out
+    // in screen space so the pairs avoid the bond and the inline hydrogen; all
+    // other labeled atoms use the layout directions supplied by the plugin.
+
+    // Unit vector in screen space pointing from atom `i` toward atom `j`,
+    // or none when the two atoms coincide.
+    let neighbor-screen-dir(i, j) = {
+      let a = layout.atoms.at(i).pos
+      let b = layout.atoms.at(j).pos
+      let vx = rx(b.x, b.y) - rx(a.x, a.y)
+      let vy = ry(b.x, b.y) - ry(a.x, a.y)
+      let len = calc.sqrt(vx * vx + vy * vy)
+      if len > 0.001 { (x: vx / len, y: vy / len) } else { none }
+    }
+
+    // Cardinal screen directions for a hydrogen-bearing heteroatom, chosen
+    // greedily to stay clear of the bonds, the inline hydrogen, and one another.
+    let inline-h-pair-dirs(i, count) = {
+      let occupied = ()
+      for ni in atom-neighbor-indices(i) {
+        let d = neighbor-screen-dir(i, ni)
+        if d != none { occupied.push(d) }
+      }
+      if atom-degree(i) >= 2 {
+        // A stacked hydrogen is drawn directly above the symbol.
+        occupied.push((x: 0.0, y: 1.0))
+      } else {
+        // An inline "XH" runs horizontally: the hydrogen sits opposite a
+        // horizontal bond, or to the right of a vertical one.
+        let ni = first-neighbor(i)
+        let d = if ni != none { neighbor-screen-dir(i, ni) } else { none }
+        let h-dir = if d == none {
+          (x: -1.0, y: 0.0)
+        } else if calc.abs(d.x) >= calc.abs(d.y) {
+          (x: -d.x, y: 0.0)
+        } else {
+          (x: 1.0, y: 0.0)
+        }
+        occupied.push(h-dir)
+      }
+
+      let candidates = if count == 1 {
+        ((x: 0.0, y: -1.0), (x: 0.0, y: 1.0), (x: -1.0, y: 0.0), (x: 1.0, y: 0.0))
+      } else {
+        ((x: 0.0, y: 1.0), (x: 0.0, y: -1.0), (x: -1.0, y: 0.0), (x: 1.0, y: 0.0))
+      }
+
+      let chosen = ()
+      for _ in range(count) {
+        let best = none
+        let best-score = none
+        for cand in candidates {
+          let score = 0.0
+          for occ in occupied {
+            let dot = cand.x * occ.x + cand.y * occ.y
+            if dot > 0.85 {
+              score += 100.0
+            } else if dot > 0.45 {
+              score += 8.0
+            } else if dot > 0.10 {
+              score += 1.0
+            }
+          }
+          for sel in chosen {
+            if cand.x * sel.x + cand.y * sel.y > 0.85 { score += 100.0 }
+          }
+          if best-score == none or score < best-score {
+            best = cand
+            best-score = score
+          }
+        }
+        if best != none {
+          chosen.push(best)
+          occupied.push(best)
+        }
+      }
+      chosen
+    }
+
+    // Draw each direction in `dirs` (screen-space unit vectors) as one electron
+    // pair around `origin`: two dots in "dots" mode, a short line in "lines".
+    let render-pairs(origin, dirs, fill, offset) = {
+      for dir in dirs {
+        let cx = origin.x + dir.x * offset
+        let cy = origin.y + dir.y * offset
+        let ox = -dir.y
+        let oy = dir.x
+        if lone-pairs == "dots" {
+          circle(
+            (cx + ox * lone-pair-dot-gap / 2, cy + oy * lone-pair-dot-gap / 2),
+            radius: lone-pair-dot-r,
+            fill: fill,
+            stroke: none,
+          )
+          circle(
+            (cx - ox * lone-pair-dot-gap / 2, cy - oy * lone-pair-dot-gap / 2),
+            radius: lone-pair-dot-r,
+            fill: fill,
+            stroke: none,
+          )
+        } else {
+          line(
+            (cx - ox * lone-pair-line-half, cy - oy * lone-pair-line-half),
+            (cx + ox * lone-pair-line-half, cy + oy * lone-pair-line-half),
+            stroke: stroke-w + fill,
+          )
+        }
+      }
+    }
+
+    let draw-lone-pairs() = {
+      if lone-pairs == none { return }
+      for i in range(layout.atoms.len()) {
+        let atom = layout.atoms.at(i)
+        let count = atom.at("lone_pairs", default: 0)
+        if count <= 0 { continue }
+
+        let px = rx(atom.pos.x, atom.pos.y)
+        let py = ry(atom.pos.x, atom.pos.y)
+        let fill = display-clr(atom)
+        let has-inline-h = (
+          atom.at("abbrev", default: "") == "" and
+          not _is-carbon(atom) and
+          visible-h-count(atom) > 0
+        )
+
+        if not has-inline-h {
+          // Use the plugin's layout-space directions, rotated into screen space.
+          let dirs = atom
+            .at("lone_pair_dirs", default: ())
+            .map(d => (x: rx(d.x, d.y), y: ry(d.x, d.y)))
+          render-pairs((x: px, y: py), dirs, fill, lone-pair-offset)
+        } else if atom-degree(i) == 1 {
+          // Terminal "XH" label: the symbol is anchored on its bond-facing edge,
+          // so shift the pairs back onto the heavy-atom glyph before drawing.
+          let origin = (x: px, y: py)
+          let ni = first-neighbor(i)
+          let d = if ni != none { neighbor-screen-dir(i, ni) } else { none }
+          if d != none {
+            if calc.abs(d.x) >= calc.abs(d.y) {
+              origin.x = px - d.x * lone-pair-heavy-center-shift
+            } else {
+              origin.y = py - d.y * lone-pair-heavy-vertical-center-shift
+            }
+          }
+          render-pairs(origin, inline-h-pair-dirs(i, count), fill, lone-pair-terminal-offset)
+        } else {
+          render-pairs((x: px, y: py), inline-h-pair-dirs(i, count), fill, lone-pair-offset)
+        }
+      }
+    }
+
     // Stereochemical hydrogens are drawn as explicit H labels only when they
     // carry wedge/hash information from a bracket stereocenter.
     for i in range(layout.atoms.len()) {
@@ -593,6 +761,8 @@
         }
       }
     }
+
+    draw-lone-pairs()
   })
 }
 
