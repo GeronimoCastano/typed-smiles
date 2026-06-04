@@ -79,7 +79,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
         &mut stereo_h,
     )?;
 
-    let atoms: Vec<AtomOutput> = mol
+    let mut atoms: Vec<AtomOutput> = mol
         .atoms
         .iter()
         .enumerate()
@@ -100,13 +100,14 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
                     .map(|(stereo, _)| stereo.as_str().to_string())
                     .unwrap_or_else(|| "none".to_string()),
                 stereo_h_dir: stereo_h[i].map(|(_, dir)| dir).unwrap_or_default(),
+                virtual_h: false,
             }
         })
         .collect();
 
     let inner_dirs = ring_inner_directions(mol, &rings, &coords);
 
-    let bonds: Vec<BondOutput> = mol
+    let mut bonds: Vec<BondOutput> = mol
         .bonds
         .iter()
         .enumerate()
@@ -118,10 +119,87 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             direction: direction_as_str(b.direction).to_string(),
             inner_x: inner_dirs[i].0,
             inner_y: inner_dirs[i].1,
+            virtual_bond: false,
         })
         .collect();
 
-    let (bbox_w, bbox_h) = bounding_box(&coords);
+    // Append virtual H atoms so that bracket-notation H groups and implicit
+    // heteroatom H labels are addressable by index.  Each parent atom gets at
+    // most one virtual H regardless of hcount, because all hydrogens collapse
+    // into a single rendered glyph ("H₄", "H₂", etc.).
+    let push_virtual_h = |atoms: &mut Vec<AtomOutput>,
+                          bonds: &mut Vec<BondOutput>,
+                          parent_idx: usize,
+                          dir: Vec2| {
+        let parent_pos = atoms[parent_idx].pos;
+        let h_idx = atoms.len();
+        atoms.push(AtomOutput {
+            symbol: "H".to_string(),
+            // ~0.35 bond-lengths: roughly where the H glyph sits within an
+            // inline label at default font size.
+            pos: Vec2::new(parent_pos.x + dir.x * 0.35, parent_pos.y + dir.y * 0.35),
+            hcount: 0,
+            implicit_h: 0,
+            charge: 0,
+            lone_pairs: 0,
+            lone_pair_dirs: Vec::new(),
+            abbrev: String::new(),
+            abbrev_style: String::new(),
+            chirality: "none".to_string(),
+            stereo_h: "none".to_string(),
+            stereo_h_dir: Vec2::default(),
+            virtual_h: true,
+        });
+        bonds.push(BondOutput {
+            from: parent_idx,
+            to: h_idx,
+            order: 1,
+            stereo: "none".to_string(),
+            direction: "none".to_string(),
+            inner_x: 0.0,
+            inner_y: 0.0,
+            virtual_bond: true,
+        });
+    };
+
+    for i in 0..mol.n_atoms() {
+        let mol_atom = &mol.atoms[i];
+        let parent_pos = coords[i];
+        let existing_adj: Vec<f64> = mol.adj[i]
+            .iter()
+            .map(|&(j, _)| (coords[j].y - parent_pos.y).atan2(coords[j].x - parent_pos.x))
+            .collect();
+
+        if mol_atom.has_explicit_h && mol_atom.hcount > 0 {
+            // Bracket atom with explicit H (e.g. [OH-], [NH4+]).
+            // Skip atoms whose H is drawn as a stereo label (stereo_h set) or
+            // absorbed into a tetrahedral stereo bond assignment (chirality set,
+            // which causes preferred_tetrahedral_bond to carry the stereo on a
+            // neighbor bond instead of drawing an H label).
+            if stereo_h[i].is_some() || mol_atom.chirality != AtomChirality::None {
+                continue;
+            }
+            let angle = h_label_angle(&existing_adj);
+            let dir = Vec2::new(angle.cos(), angle.sin());
+            push_virtual_h(&mut atoms, &mut bonds, i, dir);
+        } else if !mol_atom.has_explicit_h {
+            // Non-bracket heteroatom with implicit H (e.g. plain N, O, S).
+            // Only emit when show-hetero-h would render a label (non-carbon,
+            // non-wildcard, has implicit H).
+            let sym = &atoms[i].symbol;
+            let is_hetero = sym != "C" && sym != "c" && sym != "H" && sym != "*";
+            let ih = atoms[i].implicit_h;
+            if !is_hetero || ih == 0 {
+                continue;
+            }
+            let angle = h_label_angle(&existing_adj);
+            let dir = Vec2::new(angle.cos(), angle.sin());
+            push_virtual_h(&mut atoms, &mut bonds, i, dir);
+        }
+    }
+
+    let all_positions: Vec<Vec2> = atoms.iter().map(|a| a.pos).collect();
+    let (bbox_w, bbox_h) = bounding_box(&all_positions);
 
     Ok(LayoutOutput {
         atoms,
@@ -1469,6 +1547,39 @@ fn is_linear_atom(mol: &MoleculeGraph, atom_idx: usize) -> bool {
     }
 
     has_triple || double_count == 2
+}
+
+// ── Virtual-H placement ───────────────────────────────────────────────────────
+
+/// Returns the angle (radians) toward which the H-label group of a bracket atom
+/// should be placed.  The label collapses all hydrogens into one glyph (e.g. "H₄"),
+/// so a single direction is enough.  For atoms with no bonds the label sits to the
+/// east (0°); for bonded atoms it points into the largest free angular gap.
+fn h_label_angle(existing_adj: &[f64]) -> f64 {
+    if existing_adj.is_empty() {
+        return 0.0;
+    }
+
+    let mut occ = existing_adj.to_vec();
+    occ.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut best_start = occ[0];
+    let mut best_gap = 0.0_f64;
+    for i in 0..occ.len() {
+        let start = occ[i];
+        let end = if i + 1 < occ.len() {
+            occ[i + 1]
+        } else {
+            occ[0] + 2.0 * PI
+        };
+        let gap = end - start;
+        if gap > best_gap {
+            best_gap = gap;
+            best_start = start;
+        }
+    }
+
+    normalize_angle(best_start + best_gap / 2.0)
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

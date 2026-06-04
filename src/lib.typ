@@ -95,36 +95,21 @@
 
 // ── SMILES renderer ───────────────────────────────────────────────────────────
 
-/// Renders a SMILES string as a 2D skeletal molecular diagram.
-///
-/// - smiles-str (str): A valid SMILES string, e.g. "C1=CC=CC=C1" for benzene.
-///   Use Kekulé notation for aromatic rings (C not c) until aromatic support lands.
-/// - scale (float): Balanced scale for bond length, atom labels, and bond stroke.
-///   Explicit bond-length, font-size, or bond-stroke values override it.
-///   Default: 1.0.
-/// - bond-length (float): Bond length scale factor; 1.0 = 30 pt per bond.
-/// - font-size (length): Font size for atom labels.
-/// - font (str): Font for atom labels. Default: "New Computer Modern".
-/// - bond-stroke (length): Bond stroke width.
-/// - color (bool): Apply Jmol CPK atom colors. Default: true.
-/// - rotation (angle): Rotate the molecule by this angle. Atom labels stay upright.
-///   Example: rotation: 90deg. Default: 0deg.
-/// - show-all-h (bool): Show computed implicit hydrogens on all atoms,
-///   including carbon. Default: false.
-/// - lone-pairs (none / "dots" / "lines"): Draw non-bonding electron pairs on
-///   skeletal atom labels. Default: none.
-/// - atom-colors (dictionary): Color overrides that take priority over both the
-///   default CPK palette and any `{label|style}` inline style. Two key forms:
-///   - Element symbol key (e.g. `O: rgb("#8B4513")`) — overrides that element
-///     everywhere, including when used as an inline style (`{label|O}`).
-///   - Brace-quoted label key (e.g. `"{PPh3}": purple`) — overrides the color
-///     of any abbreviated group whose label text matches, regardless of what
-///     style (if any) was written inline.
-///   Both forms can appear in the same dictionary.
-///   To set defaults project-wide use `#let smiles = smiles.with(atom-colors: (…))`.
-/// -> content
-#let smiles(
-  smiles-str,
+// Parse a SMILES string into layout JSON via the WASM plugin.
+#let _layout(smiles-str) = json(smiles-plugin.layout(bytes(smiles-str)))
+
+// CeTZ canvas unit: one bond length is 30 pt at scale 1.
+#let _canvas-scale(scale, bond-length) = (
+  if bond-length == none { scale } else { bond-length }
+) * 30pt
+
+// Draws a molecule's bonds, atom labels, and lone pairs into the current CeTZ
+// canvas, centered at the local origin. The caller sets the canvas unit to
+// `_canvas-scale(scale, bond-length)` and may translate before calling. Atom and
+// bond references are resolved separately (see `_atom-pos`) with the same
+// rotation, so annotations line up exactly with what is drawn here.
+#let _draw-molecule(
+  layout,
   scale: 1.0,
   bond-length: none,
   font-size: none,
@@ -135,13 +120,12 @@
   show-all-h: false,
   lone-pairs: none,
   atom-colors: (:),
+  show-indices: false,
+  index-prefix: "",
 ) = {
   if lone-pairs != none and lone-pairs != "dots" and lone-pairs != "lines" {
     panic("lone-pairs must be none, \"dots\", or \"lines\"")
   }
-
-  let raw-bytes = smiles-plugin.layout(bytes(smiles-str))
-  let layout = json(raw-bytes)
 
   let actual-bond-length = if bond-length == none { scale } else { bond-length }
   let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
@@ -160,8 +144,6 @@
   let superscript-size = actual-font-size * 0.62
   let lone-pair-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.6)
   let lone-pair-terminal-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.5)
-  let lone-pair-heavy-center-shift = calc.max(0.12, actual-font-size / canvas-scale * 0.54)
-  let lone-pair-heavy-vertical-center-shift = calc.max(0.10, actual-font-size / canvas-scale * 0.46)
   let lone-pair-dot-r = calc.max(0.018, stroke-units * 0.75)
   let lone-pair-dot-gap = calc.max(0.050, lone-pair-dot-r * 2)
   let lone-pair-line-half = calc.max(0.055, stroke-units * 2.4)
@@ -191,19 +173,46 @@
     fill: fill,
     body,
   )
+  let transparent = rgb(0, 0, 0, 0)
+  let content-width(body) = measure(body).width / canvas-scale
+  let index-marker-name(i, suffix) = index-prefix + "atom-index-marker-" + str(i) + suffix
 
   let cos-a = calc.cos(rotation)
   let sin-a = calc.sin(rotation)
   let rx(x, y) = x * cos-a - y * sin-a
   let ry(x, y) = x * sin-a + y * cos-a
 
-  cetz.canvas(length: canvas-scale, {
-    import cetz.draw: *
+  // cetz.draw exports a `scale` transform that would shadow the `scale` argument,
+  // so import only after all scalar/style values above are computed.
+  import cetz.draw: *
 
-    let atom-degree(i) = layout.bonds.filter(b => b.from == i or b.to == i).len()
+  // Virtual bonds connect a heavy atom to its bracket-H atoms. They carry positions
+  // for atom() references but must not affect structural computations or rendering.
+  let real-bonds = layout.bonds.filter(b => not b.at("virtual_bond", default: false))
+  let vh-parent = (:)
+  let vh-child = (:)
+  let vh-dir = (:)
+  for b in layout.bonds {
+    if b.at("virtual_bond", default: false) {
+      let pi = b.from
+      let hi = b.to
+      vh-parent.insert(str(hi), pi)
+      vh-child.insert(str(pi), hi)
+      let p = layout.atoms.at(pi)
+      let h = layout.atoms.at(hi)
+      let dx = rx(h.pos.x, h.pos.y) - rx(p.pos.x, p.pos.y)
+      let dy = ry(h.pos.x, h.pos.y) - ry(p.pos.x, p.pos.y)
+      let d = calc.sqrt(dx * dx + dy * dy)
+      let ux = if d > 0.001 { dx / d } else { 1.0 }
+      let uy = if d > 0.001 { dy / d } else { 0.0 }
+      vh-dir.insert(str(pi), (ux, uy))
+    }
+  }
+
+  let atom-degree(i) = real-bonds.filter(b => b.from == i or b.to == i).len()
     let atom-neighbor-indices(i) = {
       let indices = ()
-      for b in layout.bonds {
+      for b in real-bonds {
         if b.from == i {
           indices.push(b.to)
         } else if b.to == i {
@@ -217,7 +226,7 @@
       if not _is-carbon(atom) or atom.at("abbrev", default: "") != "" or atom-degree(i) != 2 {
         false
       } else {
-        let bonds = layout.bonds.filter(b => b.from == i or b.to == i)
+        let bonds = real-bonds.filter(b => b.from == i or b.to == i)
         let double-count = bonds.filter(b => b.order == 2).len()
         let has-carbon-neighbor = atom-neighbor-indices(i).any(ni => _is-carbon(layout.atoms.at(ni)))
         double-count == 2 and not has-carbon-neighbor
@@ -229,7 +238,7 @@
     }
     let first-neighbor(i) = {
       let result = none
-      for b in layout.bonds {
+      for b in real-bonds {
         if result == none and (b.from == i or b.to == i) {
           result = if b.from == i { b.to } else { b.from }
         }
@@ -254,7 +263,7 @@
       }
     }
 
-    for bond in layout.bonds {
+    for bond in real-bonds {
       let af = layout.atoms.at(bond.from)
       let at = layout.atoms.at(bond.to)
       let p1x = rx(af.pos.x, af.pos.y)
@@ -292,7 +301,7 @@
       }
       let offset-side(atom-idx, other-idx, px, py) = {
         let side = 1.0
-        for b in layout.bonds {
+        for b in real-bonds {
           if (b.from == atom-idx or b.to == atom-idx) and not (b.from == other-idx or b.to == other-idx) {
             let ni = if b.from == atom-idx { b.to } else { b.from }
             let na = layout.atoms.at(ni)
@@ -471,7 +480,7 @@
         let ni = first-neighbor(i)
         let d = if ni != none { neighbor-screen-dir(i, ni) } else { none }
         let h-dir = if d == none {
-          (x: -1.0, y: 0.0)
+          (x: 1.0, y: 0.0)
         } else if calc.abs(d.x) >= calc.abs(d.y) {
           (x: -d.x, y: 0.0)
         } else {
@@ -520,29 +529,45 @@
 
     // Draw each direction in `dirs` (screen-space unit vectors) as one electron
     // pair around `origin`: two dots in "dots" mode, a short line in "lines".
+    // `origin` can be a numeric point or a named glyph marker.
     let render-pairs(origin, dirs, fill, offset) = {
+      let point-at(dx, dy) = if type(origin) == str or type(origin) == dictionary {
+        (to: origin, rel: (dx, dy))
+      } else {
+        (origin.x + dx, origin.y + dy)
+      }
       for dir in dirs {
-        let cx = origin.x + dir.x * offset
-        let cy = origin.y + dir.y * offset
         let ox = -dir.y
         let oy = dir.x
         if lone-pairs == "dots" {
           circle(
-            (cx + ox * lone-pair-dot-gap / 2, cy + oy * lone-pair-dot-gap / 2),
+            point-at(
+              dir.x * offset + ox * lone-pair-dot-gap / 2,
+              dir.y * offset + oy * lone-pair-dot-gap / 2,
+            ),
             radius: lone-pair-dot-r,
             fill: fill,
             stroke: none,
           )
           circle(
-            (cx - ox * lone-pair-dot-gap / 2, cy - oy * lone-pair-dot-gap / 2),
+            point-at(
+              dir.x * offset - ox * lone-pair-dot-gap / 2,
+              dir.y * offset - oy * lone-pair-dot-gap / 2,
+            ),
             radius: lone-pair-dot-r,
             fill: fill,
             stroke: none,
           )
         } else {
           line(
-            (cx - ox * lone-pair-line-half, cy - oy * lone-pair-line-half),
-            (cx + ox * lone-pair-line-half, cy + oy * lone-pair-line-half),
+            point-at(
+              dir.x * offset - ox * lone-pair-line-half,
+              dir.y * offset - oy * lone-pair-line-half,
+            ),
+            point-at(
+              dir.x * offset + ox * lone-pair-line-half,
+              dir.y * offset + oy * lone-pair-line-half,
+            ),
             stroke: stroke-w + fill,
           )
         }
@@ -553,6 +578,7 @@
       if lone-pairs == none { return }
       for i in range(layout.atoms.len()) {
         let atom = layout.atoms.at(i)
+        if atom.at("virtual_h", default: false) { continue }
         let count = atom.at("lone_pairs", default: 0)
         if count <= 0 { continue }
 
@@ -571,22 +597,14 @@
             .at("lone_pair_dirs", default: ())
             .map(d => (x: rx(d.x, d.y), y: ry(d.x, d.y)))
           render-pairs((x: px, y: py), dirs, fill, lone-pair-offset)
-        } else if atom-degree(i) == 1 {
-          // Terminal "XH" label: the symbol is anchored on its bond-facing edge,
-          // so shift the pairs back onto the heavy-atom glyph before drawing.
-          let origin = (x: px, y: py)
-          let ni = first-neighbor(i)
-          let d = if ni != none { neighbor-screen-dir(i, ni) } else { none }
-          if d != none {
-            if calc.abs(d.x) >= calc.abs(d.y) {
-              origin.x = px - d.x * lone-pair-heavy-center-shift
-            } else {
-              origin.y = py - d.y * lone-pair-heavy-vertical-center-shift
-            }
-          }
-          render-pairs(origin, inline-h-pair-dirs(i, count), fill, lone-pair-terminal-offset)
         } else {
-          render-pairs((x: px, y: py), inline-h-pair-dirs(i, count), fill, lone-pair-offset)
+          let origin = if str(i) in vh-child {
+            index-marker-name(i, "-sym") + ".center"
+          } else {
+            (x: px, y: py)
+          }
+          let offset = if atom-degree(i) <= 1 { lone-pair-terminal-offset } else { lone-pair-offset }
+          render-pairs(origin, inline-h-pair-dirs(i, count), fill, offset)
         }
       }
     }
@@ -595,6 +613,7 @@
     // carry wedge/hash information from a bracket stereocenter.
     for i in range(layout.atoms.len()) {
       let atom = layout.atoms.at(i)
+      if atom.at("virtual_h", default: false) { continue }
       let stereo = atom.at("stereo_h", default: "none")
       if stereo != "none" {
         let px = rx(atom.pos.x, atom.pos.y)
@@ -643,6 +662,7 @@
     // Positions are rotated; text content stays upright.
     for i in range(layout.atoms.len()) {
       let atom = layout.atoms.at(i)
+      if atom.at("virtual_h", default: false) { continue }
       if has-label(i) {
         let abbrev = atom.at("abbrev", default: "")
         let fill = display-clr(atom)
@@ -710,6 +730,38 @@
           let h-content = if h-at == "west" { h-text } else { h-text + charge-content }
           let sname = "atom-" + str(i)
           content((px, py), sym-content, anchor: sym-anchor, padding: sym-pad, name: sname)
+          if (show-indices or lone-pairs != none) and str(i) in vh-child {
+            let h-child = vh-child.at(str(i))
+            let pad-u = pad-bond / canvas-scale
+            let sym-marker-x = if sym-anchor == "east" {
+              px - pad-u - content-width(if h-at == "west" { charge-content } else { [] })
+            } else if sym-anchor == "west" {
+              px + pad-u
+            } else {
+              px
+            }
+            content(
+              (sym-marker-x, py),
+              atom-label(atom.symbol, fill: transparent),
+              anchor: sym-anchor,
+              padding: 0pt,
+              name: index-marker-name(i, "-sym"),
+            )
+            content(
+              if h-self == "east" {
+                (
+                  to: sname + ".north-" + h-at,
+                  rel: (content-width(atom-label("H", fill: transparent)) - content-width(h-text), 0),
+                )
+              } else {
+                sname + ".north-" + h-at
+              },
+              atom-label("H", fill: transparent),
+              anchor: "north-" + h-self,
+              padding: 0pt,
+              name: index-marker-name(h-child, "-h"),
+            )
+          }
           // Attach the H at the symbol's top corner so their baselines align.
           content(
             sname + ".north-" + h-at,
@@ -720,6 +772,7 @@
         } else {
           let draw-h-above = false
           let h-above-content = []
+          let h-above-marker = none
           let label-content = if abbrev != "" {
             atom-label(abbrev, fill: fill)
           } else {
@@ -739,6 +792,14 @@
             let base-text = if stacked-h {
               draw-h-above = true
               h-above-content = h-text
+              if (show-indices or lone-pairs != none) and str(i) in vh-child {
+                h-above-marker = (
+                  child: vh-child.at(str(i)),
+                  group: h-text,
+                  prefix: [],
+                  fragment: atom-label("H", fill: transparent),
+                )
+              }
               sym-text
             } else if reverse-inline {
               h-text + sym-text
@@ -748,21 +809,670 @@
             base-text + charge-content
           }
 
-          if draw-h-above {
+          let symbol-centered-charge = abbrev == "" and h-text == [] and charge-content != []
+
+          if symbol-centered-charge {
             content(
-              (px, py + label-margin * 0.95),
+              (px + (content-width(label-content) - content-width(sym-text)) / 2, py),
+              label-content,
+              anchor: "center",
+              padding: 1pt,
+            )
+          } else if draw-h-above {
+            let h-center = (x: px, y: py + label-margin * 0.95)
+            content(
+              (h-center.x, h-center.y),
               h-above-content,
               anchor: "center",
               padding: 1pt,
             )
+            if h-above-marker != none {
+              let sym-marker = atom-label(atom.symbol, fill: transparent)
+              let sym-x = (
+                px
+                - content-width(label-content) / 2
+                + content-width(sym-marker) / 2
+              )
+              content(
+                (sym-x, py),
+                sym-marker,
+                anchor: "center",
+                padding: 0pt,
+                name: index-marker-name(i, "-sym"),
+              )
+            }
+            if h-above-marker != none {
+              let marker-x = (
+                h-center.x
+                - content-width(h-above-marker.group) / 2
+                + content-width(h-above-marker.prefix)
+                + content-width(h-above-marker.fragment) / 2
+              )
+              content(
+                (marker-x, h-center.y),
+                h-above-marker.fragment,
+                anchor: "center",
+                padding: 0pt,
+                name: index-marker-name(h-above-marker.child, "-h"),
+              )
+            }
           }
 
-          content((px, py), label-content, anchor: "center", padding: 1pt)
+          if (show-indices or lone-pairs != none) and str(i) in vh-child and not draw-h-above {
+            let h-child = vh-child.at(str(i))
+            let sym-marker = atom-label(atom.symbol, fill: transparent)
+            let h-marker = atom-label("H", fill: transparent)
+            let h-prefix = if label-content == h-text + sym-text + charge-content {
+              []
+            } else {
+              sym-text
+            }
+            let sym-prefix = if h-prefix == [] { h-text } else { [] }
+            let sym-x = (
+              px
+              - content-width(label-content) / 2
+              + content-width(sym-prefix)
+              + content-width(sym-marker) / 2
+            )
+            let h-x = (
+              px
+              - content-width(label-content) / 2
+              + content-width(h-prefix)
+              + content-width(h-marker) / 2
+            )
+            content(
+              (sym-x, py),
+              sym-marker,
+              anchor: "center",
+              padding: 0pt,
+              name: index-marker-name(i, "-sym"),
+            )
+            content(
+              (h-x, py),
+              h-marker,
+              anchor: "center",
+              padding: 0pt,
+              name: index-marker-name(h-child, "-h"),
+            )
+          }
+
+          if not symbol-centered-charge {
+            content((px, py), label-content, anchor: "center", padding: 1pt)
+          }
         }
       }
     }
 
     draw-lone-pairs()
+
+    // Development overlay: stamp each atom's writing-order index so users can
+    // read off the numbers used by atom()/bond()/lp() references.
+    //
+    // Bracket-H labels (e.g. "H₄" in NH₄⁺) are drawn as combined text, while
+    // the heavy atom and H remain separate addressable indices. Hidden same-font
+    // fragment markers expose the measured glyph centers for the overlay.
+    if show-indices {
+      let badge-size  = actual-font-size * 0.52
+
+      for i in range(layout.atoms.len()) {
+        let a  = layout.atoms.at(i)
+        let ax = rx(a.pos.x, a.pos.y)
+        let ay = ry(a.pos.x, a.pos.y)
+
+        let (bx, by, btarget) = if (
+          not a.at("virtual_h", default: false) and
+          str(i) in vh-child and
+          _has-label(a, show-all-h: show-all-h)
+        ) {
+          (0.0, 0.0, index-marker-name(i, "-sym") + ".center")
+        } else if (
+          a.at("virtual_h", default: false) and
+          str(i) in vh-parent and
+          _has-label(layout.atoms.at(vh-parent.at(str(i))), show-all-h: show-all-h)
+        ) {
+          (0.0, 0.0, index-marker-name(i, "-h") + ".center")
+        } else {
+          (ax, ay, none)
+        }
+
+        content(
+          if btarget == none { (bx, by) } else { btarget },
+          box(
+            fill: rgb(255, 255, 255, 220),
+            inset: 0.4pt,
+            text(size: badge-size, fill: rgb("#C81E6E"), weight: "bold", str(i)),
+          ),
+          anchor: "center",
+          padding: 0pt,
+        )
+      }
+    }
+}
+
+// ── Reference resolution and annotation drawing ─────────────────────────────────
+
+// Screen-space position of layout coordinate (x, y) under `rotation`.
+#let _rot(x, y, rotation) = (
+  x * calc.cos(rotation) - y * calc.sin(rotation),
+  x * calc.sin(rotation) + y * calc.cos(rotation),
+)
+
+// Absolute canvas position of atom `i` in a placed species. Label references use
+// the rendered atom glyph center rather than the full label box.
+#let _atom-pos(sp, i) = {
+  let a = sp.layout.atoms.at(i)
+  let (rxv, ryv) = _rot(a.pos.x, a.pos.y, sp.rotation)
+  let base = (sp.origin.at(0) + rxv, sp.origin.at(1) + ryv)
+
+  let cs = sp.at("canvas-scale", default: 30pt)
+  let fs = sp.at("actual-font-size", default: 11pt)
+  let font = sp.at("font", default: "New Computer Modern")
+  let show-all-h = sp.at("show-all-h", default: false)
+  let label-margin = calc.max(0.27, fs / cs * 0.70)
+  let subscript-size = fs * 0.62
+  let superscript-size = fs * 0.62
+  let atom-label(body, size: fs) = text(
+    size: size,
+    font: font,
+    style: "normal",
+    weight: "regular",
+    body,
+  )
+  let content-width(body) = measure(body).width / cs
+  let content-height(body) = measure(body).height / cs
+  let real-bonds = sp.layout.bonds.filter(b => not b.at("virtual_bond", default: false))
+  let atom-degree(j) = real-bonds.filter(b => b.from == j or b.to == j).len()
+  let first-neighbor(j) = {
+    let result = none
+    for b in real-bonds {
+      if result == none and (b.from == j or b.to == j) {
+        result = if b.from == j { b.to } else { b.from }
+      }
+    }
+    result
+  }
+  let charge-content(atom) = {
+    let charge-str = if atom.charge == 1        { "+" }
+                     else if atom.charge == -1  { "\u{2212}" }
+                     else if atom.charge > 1    { str(atom.charge) + "+" }
+                     else if atom.charge < -1   { str(-atom.charge) + "\u{2212}" }
+                     else                       { "" }
+    if charge-str == "" {
+      []
+    } else {
+      h(0.12em) + super(atom-label(charge-str, size: superscript-size))
+    }
+  }
+  let h-text(atom) = {
+    let count = atom.hcount + _visible-implicit-h(atom, show-all-h: show-all-h)
+    if atom.at("abbrev", default: "") != "" or count == 0 or (_is-carbon(atom) and not show-all-h) {
+      []
+    } else if count == 1 {
+      atom-label("H")
+    } else {
+      atom-label("H") + sub(atom-label(str(count), size: subscript-size))
+    }
+  }
+  let virtual-child(parent) = {
+    let child = none
+    for b in sp.layout.bonds {
+      if child == none and b.at("virtual_bond", default: false) and b.from == parent {
+        child = b.to
+      }
+    }
+    child
+  }
+  let virtual-parent(child) = {
+    let parent = none
+    for b in sp.layout.bonds {
+      if parent == none and b.at("virtual_bond", default: false) and b.to == child {
+        parent = b.from
+      }
+    }
+    parent
+  }
+
+  let label-fragment-pos(parent, fragment) = {
+    let atom = sp.layout.atoms.at(parent)
+    let (pxr, pyr) = _rot(atom.pos.x, atom.pos.y, sp.rotation)
+    let px = sp.origin.at(0) + pxr
+    let py = sp.origin.at(1) + pyr
+    let deg = atom-degree(parent)
+    let sym-text = atom-label(atom.symbol)
+    let ht = h-text(atom)
+    let charge = charge-content(atom)
+
+    if atom.at("abbrev", default: "") != "" or ht == [] {
+      return (px, py)
+    }
+
+    let hetero-inline = deg == 1 and not _is-carbon(atom)
+    if hetero-inline {
+      let ni = first-neighbor(parent)
+      if ni == none { return (px, py) }
+      let nb = sp.layout.atoms.at(ni)
+      let (nbx, nby) = _rot(nb.pos.x, nb.pos.y, sp.rotation)
+      let dx = nbx - pxr
+      let dy = nby - pyr
+      let pad-u = 1pt / cs
+      let sym-w = content-width(sym-text)
+      let h-w = content-width(atom-label("H"))
+      let (sym-anchor, h-at) = if calc.abs(dx) >= calc.abs(dy) {
+        if dx > 0 { ("east", "west") } else { ("west", "east") }
+      } else if dy > 0 {
+        ("north", "east")
+      } else {
+        ("south", "east")
+      }
+
+      let sym-center = if sym-anchor == "east" {
+        (px - pad-u - content-width(if h-at == "west" { charge } else { [] }) - sym-w / 2, py)
+      } else if sym-anchor == "west" {
+        (px + pad-u + sym-w / 2, py)
+      } else if sym-anchor == "north" {
+        (px, py - content-height(sym-text) / 2)
+      } else {
+        (px, py + content-height(sym-text) / 2)
+      }
+
+      if fragment == "sym" {
+        return sym-center
+      }
+
+      let hx = if h-at == "west" {
+        sym-center.at(0) - sym-w / 2 - h-w / 2
+      } else {
+        sym-center.at(0) + sym-w / 2 + h-w / 2
+      }
+      return (hx, sym-center.at(1))
+    }
+
+    let stacked-h = deg >= 2 and not _is-carbon(atom)
+    if stacked-h {
+      if fragment == "h" {
+        return (px, py + label-margin * 0.95)
+      }
+      let label-content = sym-text + charge
+      return (
+        px - content-width(label-content) / 2 + content-width(sym-text) / 2,
+        py,
+      )
+    }
+
+    let reverse-inline = if deg != 1 {
+      false
+    } else {
+      let ni = first-neighbor(parent)
+      if ni == none {
+        false
+      } else {
+        let neighbor = sp.layout.atoms.at(ni)
+        let (nx, _) = _rot(neighbor.pos.x, neighbor.pos.y, sp.rotation)
+        nx - pxr > 0.05
+      }
+    }
+    let label-content = if reverse-inline {
+      ht + sym-text + charge
+    } else {
+      sym-text + ht + charge
+    }
+    let left = px - content-width(label-content) / 2
+    if fragment == "sym" {
+      let prefix = if reverse-inline { ht } else { [] }
+      (left + content-width(prefix) + content-width(sym-text) / 2, py)
+    } else {
+      let prefix = if reverse-inline { [] } else { sym-text }
+      (left + content-width(prefix) + content-width(atom-label("H")) / 2, py)
+    }
+  }
+
+  if a.at("virtual_h", default: false) {
+    let parent = virtual-parent(i)
+    if parent == none { return base }
+    return label-fragment-pos(parent, "h")
+  }
+
+  if not _has-label(a, show-all-h: show-all-h) { return base }
+  let child = virtual-child(i)
+  if child == none { return base }
+  label-fragment-pos(i, "sym")
+}
+
+// Find the bond record joining atoms i and j in a species' layout.
+#let _find-bond(sp, i, j) = {
+  for b in sp.layout.bonds {
+    if (b.from == i and b.to == j) or (b.from == j and b.to == i) { return b }
+  }
+  panic("no bond between atoms " + str(i) + " and " + str(j))
+}
+
+// Resolve a reference dictionary to an absolute canvas coordinate.
+// `species` is the list of placed species records; `lp-offset` is the radial
+// distance of a lone pair from its atom (in bond-length units).
+#let _resolve(ref, species, lp-offset) = {
+  let nudge(p) = {
+    let o = ref.at("offset", default: (0, 0))
+    (p.at(0) + o.at(0), p.at(1) + o.at(1))
+  }
+  let kind = ref.__ref__
+  if kind == "atom" {
+    nudge(_atom-pos(species.at(ref.species), ref.index))
+  } else if kind == "bond" {
+    let sp = species.at(ref.species)
+    let pa = _atom-pos(sp, ref.i)
+    let pb = _atom-pos(sp, ref.j)
+    nudge(((pa.at(0) + pb.at(0)) / 2, (pa.at(1) + pb.at(1)) / 2))
+  } else if kind == "lp" {
+    let sp = species.at(ref.species)
+    let a = sp.layout.atoms.at(ref.atom)
+    let dirs = a.at("lone_pair_dirs", default: ())
+    let base = _atom-pos(sp, ref.atom)
+    if dirs.len() == 0 {
+      nudge(base)
+    } else {
+      let d = dirs.at(calc.min(ref.pair, dirs.len() - 1))
+      let (dx, dy) = _rot(d.x, d.y, sp.rotation)
+      nudge((base.at(0) + dx * lp-offset, base.at(1) + dy * lp-offset))
+    }
+  } else if kind == "species" {
+    // Bounding-box center of an opaque item; edge selection happens at draw time.
+    let sp = species.at(ref.index)
+    nudge(sp.origin)
+  } else {
+    panic("unknown reference kind: " + kind)
+  }
+}
+
+// ── Annotation constructors (consumed by smiles() and reaction()) ───────────────
+
+/// References an atom by index. `atom(i)` inside `smiles()`, or `atom(s, i)`
+/// inside `reaction()` where `s` is the species (molecule) index. `offset` nudges
+/// the point in bond-length units.
+#let atom(..a) = {
+  let p = a.pos()
+  let (s, i) = if p.len() == 1 { (0, p.at(0)) } else { (p.at(0), p.at(1)) }
+  (__ref__: "atom", species: s, index: i, offset: a.named().at("offset", default: (0, 0)))
+}
+
+/// References the midpoint of the bond between two atoms: `bond(i, j)` or
+/// `bond(s, i, j)`.
+#let bond(..a) = {
+  let p = a.pos()
+  let (s, i, j) = if p.len() == 2 { (0, p.at(0), p.at(1)) } else { (p.at(0), p.at(1), p.at(2)) }
+  (__ref__: "bond", species: s, i: i, j: j, offset: a.named().at("offset", default: (0, 0)))
+}
+
+/// References a lone pair on an atom: `lp(i)` or `lp(s, i)`, with `pair:` selecting
+/// which pair (default 0) when an atom carries several.
+#let lp(..a) = {
+  let p = a.pos()
+  let (s, at) = if p.len() == 1 { (0, p.at(0)) } else { (p.at(0), p.at(1)) }
+  (
+    __ref__: "lp",
+    species: s,
+    atom: at,
+    pair: a.named().at("pair", default: 0),
+    offset: a.named().at("offset", default: (0, 0)),
+  )
+}
+
+/// References a whole placed species (e.g. a `ce()` formula) by its index, snapping
+/// to its bounding-box edge. Used when no interior atom is addressable.
+#let species(k, offset: (0, 0)) = (__ref__: "species", index: k, offset: offset)
+
+/// A curly electron-pushing arrow between two references.
+///
+/// - from (dictionary): source reference — `lp()`, `bond()`, `atom()`, `species()`.
+/// - to (dictionary): destination reference.
+/// - label (content): optional label drawn at the curve apex.
+/// - color (color): arrow color. Default: red.
+/// - bend (str): "left", "right", or none (straight). Which way the curve bows.
+/// - angle (angle): how strongly the curve bows. Default: 15deg.
+/// - half (bool): draw a half (fishhook) arrowhead for single-electron flow.
+/// -> dictionary  (consumed by smiles()/reaction())
+#let arrow(from: none, to: none, label: none, color: red, bend: "left", angle: 15deg, half: false) = (
+  __arrow__: true,
+  from: from,
+  to: to,
+  label: label,
+  color: color,
+  bend: bend,
+  angle: angle,
+  half: half,
+)
+
+/// Highlights an atom (disk) or bond (capsule) behind the structure.
+///
+/// - ref (dictionary/array): `atom(...)` or `bond(...)` reference, or an array of
+///   references to highlight together.
+/// - fill (color): highlight color. Default: a soft yellow.
+/// - stroke (none/stroke): outline of an atom highlight. Default: none.
+/// - radius (auto/float): atom-highlight radius in bond-length units.
+/// - include-atoms (bool): for bond highlights, also shade both endpoint atoms.
+///   Default: false.
+/// -> dictionary  (consumed by smiles()/reaction())
+#let highlight(ref, fill: rgb("#FFE45C"), stroke: none, radius: auto, include-atoms: false) = (
+  __highlight__: true,
+  ref: ref,
+  fill: fill,
+  stroke: stroke,
+  radius: radius,
+  include-atoms: include-atoms,
+)
+
+// ── Annotation drawing ──────────────────────────────────────────────────────────
+
+// Endpoint coordinate for an arrow; species references snap to the box edge facing
+// `toward`.
+#let _endpoint(ref, specs, cfg, toward) = {
+  let p = _resolve(ref, specs, cfg.lp-offset)
+  if ref.__ref__ != "species" { return p }
+  let sp = specs.at(ref.index)
+  let (w, h) = sp.size
+  let dx = toward.at(0) - p.at(0)
+  let dy = toward.at(1) - p.at(1)
+  if dx == 0 and dy == 0 { return p }
+  let tx = if dx != 0 { (w / 2) / calc.abs(dx) } else { 1e9 }
+  let ty = if dy != 0 { (h / 2) / calc.abs(dy) } else { 1e9 }
+  let t = calc.min(tx, ty)
+  (p.at(0) + dx * t, p.at(1) + dy * t)
+}
+
+#let _draw-highlight(h, specs, cfg) = {
+  import cetz.draw: *
+  let refs = if type(h.ref) == array { h.ref } else { (h.ref,) }
+  for ref in refs {
+    if ref.__ref__ == "bond" {
+      let sp = specs.at(ref.species)
+      let pa = _atom-pos(sp, ref.i)
+      let pb = _atom-pos(sp, ref.j)
+      let dx = pb.at(0) - pa.at(0)
+      let dy = pb.at(1) - pa.at(1)
+      let len = calc.max(1e-6, calc.sqrt(dx * dx + dy * dy))
+      let trim = if h.include-atoms { 0.0 } else { calc.min(cfg.bond-trim, len * 0.45) }
+      let ux = dx / len
+      let uy = dy / len
+      line(
+        (pa.at(0) + ux * trim, pa.at(1) + uy * trim),
+        (pb.at(0) - ux * trim, pb.at(1) - uy * trim),
+        stroke: (paint: h.fill, thickness: cfg.bond-thickness, cap: "round"),
+      )
+      if h.include-atoms {
+        let r = if h.radius == auto { cfg.atom-radius } else { h.radius }
+        circle(pa, radius: r, fill: h.fill, stroke: h.stroke)
+        circle(pb, radius: r, fill: h.fill, stroke: h.stroke)
+      }
+    } else {
+      let p = _resolve(ref, specs, cfg.lp-offset)
+      let sp = specs.at(ref.species)
+      let atom = sp.layout.atoms.at(ref.index)
+      let abbrev = atom.at("abbrev", default: "")
+      if ref.__ref__ == "atom" and abbrev != "" {
+        let cs = sp.at("canvas-scale", default: 30pt)
+        let fs = sp.at("actual-font-size", default: 11pt)
+        let font = sp.at("font", default: "New Computer Modern")
+        let label = text(size: fs, font: font, style: "normal", weight: "regular", abbrev)
+        let w = measure(label).width / cs
+        let h-units = measure(label).height / cs
+        let pad-x = calc.max(0.08, fs / cs * 0.16)
+        let thick = cs * calc.max(h-units + fs / cs * 0.55, cfg.atom-radius * 1.7)
+        line(
+          (p.at(0) - w / 2 - pad-x, p.at(1)),
+          (p.at(0) + w / 2 + pad-x, p.at(1)),
+          stroke: (paint: h.fill, thickness: thick, cap: "round"),
+        )
+      } else {
+        let r = if h.radius == auto { cfg.atom-radius } else { h.radius }
+        circle(p, radius: r, fill: h.fill, stroke: h.stroke)
+      }
+    }
+  }
+}
+
+#let _draw-arrow(a, specs, cfg) = {
+  import cetz.draw: *
+  let raw0 = _resolve(a.from, specs, cfg.lp-offset)
+  let raw1 = _resolve(a.to, specs, cfg.lp-offset)
+  let p0 = _endpoint(a.from, specs, cfg, raw1)
+  let p1 = _endpoint(a.to, specs, cfg, raw0)
+
+  let dx = p1.at(0) - p0.at(0)
+  let dy = p1.at(1) - p0.at(1)
+  let len = calc.max(1e-6, calc.sqrt(dx * dx + dy * dy))
+  let ux = dx / len
+  let uy = dy / len
+
+  // Pull both ends in slightly so the tail clears its source glyph and the head
+  // stops just short of the target.
+  let ins = calc.min(cfg.inset, len * 0.3)
+  let q0 = (p0.at(0) + ux * ins, p0.at(1) + uy * ins)
+  let q1 = (p1.at(0) - ux * ins, p1.at(1) - uy * ins)
+
+  let sign = if a.bend == "right" { -1.0 } else if a.bend == "left" { 1.0 } else { 0.0 }
+  let nx = -uy
+  let ny = ux
+  let mx = (q0.at(0) + q1.at(0)) / 2
+  let my = (q0.at(1) + q1.at(1)) / 2
+  let mag = (len / 2) * calc.tan(a.angle) * sign
+  let apex = (mx + nx * mag, my + ny * mag)
+
+  let mk = (end: ">", fill: a.color, scale: cfg.arrow-scale, harpoon: a.half)
+  let strk = (paint: a.color, thickness: cfg.arrow-thickness)
+  if sign == 0 {
+    line(q0, q1, stroke: strk, mark: mk)
+  } else {
+    bezier-through(q0, apex, q1, stroke: strk, mark: mk)
+  }
+
+  if a.label != none {
+    let g = if sign == 0 { cfg.label-gap } else { mag + sign * cfg.label-gap }
+    content(
+      (mx + nx * g, my + ny * g),
+      text(size: cfg.label-size, fill: a.color, a.label),
+      anchor: "center",
+    )
+  }
+}
+
+// Annotation styling derived from the shared canvas scale and font size.
+#let _annotation-cfg(canvas-scale, font-size, scale) = (
+  lp-offset: calc.max(0.1, font-size / canvas-scale * 0.6),
+  atom-radius: calc.max(0.12, font-size / canvas-scale * 0.5),
+  bond-thickness: canvas-scale * 0.42,
+  bond-trim: calc.max(0.42, font-size / canvas-scale * 0.75),
+  arrow-thickness: calc.max(0.7pt, 1.0pt * scale),
+  arrow-scale: scale,
+  label-size: font-size * 0.92,
+  inset: 0.16,
+  label-gap: 0.34,
+)
+
+// ── SMILES renderer ─────────────────────────────────────────────────────────────
+
+/// Renders a SMILES string as a 2D skeletal molecular diagram.
+///
+/// - smiles-str (str): A valid SMILES string, e.g. "C1=CC=CC=C1" for benzene.
+///   Use Kekulé notation for aromatic rings (C not c) until aromatic support lands.
+/// - scale (float): Balanced scale for bond length, atom labels, and bond stroke.
+///   Explicit bond-length, font-size, or bond-stroke values override it.
+///   Default: 1.0.
+/// - bond-length (float): Bond length scale factor; 1.0 = 30 pt per bond.
+/// - font-size (length): Font size for atom labels.
+/// - font (str): Font for atom labels. Default: "New Computer Modern".
+/// - bond-stroke (length): Bond stroke width.
+/// - color (bool): Apply Jmol CPK atom colors. Default: true.
+/// - rotation (angle): Rotate the molecule by this angle. Atom labels stay upright.
+///   Example: rotation: 90deg. Default: 0deg.
+/// - show-all-h (bool): Show computed implicit hydrogens on all atoms,
+///   including carbon. Default: false.
+/// - lone-pairs (none / "dots" / "lines"): Draw non-bonding electron pairs on
+///   skeletal atom labels. Default: none.
+/// - atom-colors (dictionary): Color overrides taking priority over the CPK palette
+///   and inline `{label|style}` styles. See documentation for the two key forms.
+/// - show-indices (bool): Stamp each atom's writing-order index on the diagram, as a
+///   development aid for writing atom()/bond()/lp() references. Default: false.
+/// - ..annotations: Any number of arrow() / highlight() items referencing atoms of
+///   this molecule (single-index form, e.g. atom(2)).
+/// -> content
+#let smiles(
+  smiles-str,
+  scale: 1.0,
+  bond-length: none,
+  font-size: none,
+  font: "New Computer Modern",
+  bond-stroke: none,
+  color: true,
+  rotation: 0deg,
+  show-all-h: false,
+  lone-pairs: none,
+  atom-colors: (:),
+  show-indices: false,
+  ..annotations
+) = context {
+  let layout = _layout(smiles-str)
+  let canvas-scale = _canvas-scale(scale, bond-length)
+  let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
+  let ann = annotations.pos()
+  let specs = ((
+    kind: "mol",
+    layout: layout,
+    rotation: rotation,
+    origin: (0, 0),
+    size: (layout.bbox_width, layout.bbox_height),
+    canvas-scale: canvas-scale,
+    actual-font-size: actual-font-size,
+    font: font,
+    show-all-h: show-all-h,
+  ),)
+  let cfg = _annotation-cfg(canvas-scale, actual-font-size, scale)
+  let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
+
+  cetz.canvas(length: canvas-scale, {
+    import cetz.draw: *
+    for h in ann {
+      if type(h) == dictionary and h.at("__highlight__", default: false) {
+        _draw-highlight(h, specs, cfg)
+      }
+    }
+    _draw-molecule(
+      layout,
+      scale: the-scale,
+      bond-length: bond-length,
+      font-size: font-size,
+      font: font,
+      bond-stroke: bond-stroke,
+      color: color,
+      rotation: rotation,
+      show-all-h: show-all-h,
+      lone-pairs: lone-pairs,
+      atom-colors: atom-colors,
+      show-indices: show-indices,
+    )
+    for ar in ann {
+      if type(ar) == dictionary and ar.at("__arrow__", default: false) {
+        _draw-arrow(ar, specs, cfg)
+      }
+    }
   })
 }
 
@@ -818,120 +1528,307 @@
   }
 }
 
-/// Wraps any content with an optional centred label below it.
+/// A reaction-scheme item: a molecule or any content, with an optional label and
+/// position offset. Consumed by #reaction().
 ///
-/// - content (content): The molecule or formula to display.
+/// - spec (str / content): A SMILES string (rendered by #reaction with addressable
+///   atoms) or any content (e.g. ce(...), smiles(...), text — an opaque block).
 /// - label (content): Optional label shown below. Default: none.
-/// -> content
-#let mol(content, label: none) = {
-  if label == none { content }
-  else { stack(spacing: 4pt, content, align(center, label)) }
+/// - offset (array): (dx, dy) nudge in bond-length units. A non-zero offset, or any
+///   curly arrow()/highlight() in the same #reaction, switches it to mechanism mode.
+/// - ..opts: Molecule drawing options used when `spec` is a string. In mechanism
+///   mode, use `reaction(scale: ...)` for bond length; per-molecule options control
+///   labels, strokes, colors, rotation, hydrogens, lone pairs, and index overlays.
+/// -> dictionary  (consumed by #reaction)
+#let mol(spec, label: none, offset: (0, 0), ..opts) = (
+  __mol__: true,
+  spec: spec,
+  label: label,
+  offset: offset,
+  opts: opts.named(),
+)
+
+// Render a mol() item to standalone content (scheme/grid path).
+#let _render-mol(m, show-indices-default: false) = {
+  let opts = m.opts
+  if type(m.spec) == str and not ("show-indices" in opts) {
+    opts.insert("show-indices", show-indices-default)
+  }
+  let body = if type(m.spec) == str { smiles(m.spec, ..opts) } else { m.spec }
+  if m.label == none { body } else { stack(spacing: 4pt, body, align(center, m.label)) }
 }
 
-/// Lays out a reaction scheme supporting multi-directional arrows.
+/// Lays out a reaction scheme or an electron-pushing mechanism.
 ///
-/// Items are any mix of content (smiles(), ce(), text…) and rxn-arrow()
-/// dictionaries.  rxn-arrow() accepts dir: "right"|"left"|"down"|"up" so
-/// schemes can wrap across the page.
+/// Items are any mix of mol(), content (smiles(), ce(), text…), rxn-arrow()
+/// (straight reaction arrows) and — for mechanisms — arrow() (curly electron
+/// arrows) and highlight() items.
 ///
-/// - gap-h (length): Gap between items in horizontal direction. Default: 1.5em.
-/// - gap-v (length): Gap between items in vertical direction. Default: 1.5em.
-/// - scale (float): Uniform scale applied to the entire scheme — molecules,
-///   arrows, labels, and plus signs all scale together. 1.0 = no scaling.
-/// - breakable (bool): Whether the scheme may be split across pages.
-///   Default: false (the whole block moves to the next page as a unit).
+/// Two modes are detected automatically:
+///  - Scheme (default): no curly arrow()/highlight() and no mol(offset: …). Items are
+///    packed in a grid; rxn-arrow(dir: "right"|"left"|"down"|"up") can wrap the scheme
+///    across the page. This path is unchanged from earlier versions.
+///  - Mechanism: any curly arrow()/highlight(), or any mol(offset: …). Species are
+///    placed in one shared canvas (left to right, each nudged by its offset) so curly
+///    arrows can reference atoms across species. References are atom(s, i),
+///    bond(s, i, j), lp(s, i) and species(k), where s/k count mol()/content items in
+///    written order (rxn-arrows and annotations are not counted).
+///
+/// - gap-h (length): Horizontal gap between grid items (scheme mode). Default: 1.5em.
+/// - gap-v (length): Vertical gap between grid items (scheme mode). Default: 1.5em.
+/// - scale (float): Uniform scale. In mechanism mode it sets the canvas bond length.
+/// - breakable (bool): Whether the block may split across pages. Default: false.
+/// - show-indices (bool): Default index overlay for string SMILES molecules in
+///   this reaction. Individual mol(..., show-indices: ...) calls can override it.
 /// -> content
-#let reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, ..items) = {
+#let reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, show-indices: false, ..items) = {
   let steps = items.pos()
+  let is-rxn-arrow(it) = type(it) == dictionary and it.at("__rxn_arrow__", default: false)
+  let is-curly(it)     = type(it) == dictionary and it.at("__arrow__", default: false)
+  let is-highlight(it) = type(it) == dictionary and it.at("__highlight__", default: false)
+  let is-mol(it)       = type(it) == dictionary and it.at("__mol__", default: false)
 
-  // ── Phase 1: assign each item a (grid-row, grid-col) position ────────────
-  // Logical positions: molecules at (lr, lc), arrows in between.
-  // Grid mapping: mol at (lr,lc) → grid (2*lr, 2*lc)
-  //   horizontal arrow after (lr,lc) going right → grid (2*lr, 2*lc+1)
-  //   horizontal arrow after (lr,lc) going left  → grid (2*lr, 2*lc-1)
-  //   vertical   arrow after (lr,lc) going down  → grid (2*lr+1, 2*lc)
-  //   vertical   arrow after (lr,lc) going up    → grid (2*lr-1, 2*lc)
-
-  let lr = 0
-  let lc = 0
-  let placed = ()
-
-  for item in steps {
-    if type(item) == dictionary and item.at("__rxn_arrow__", default: false) {
-      let dir = item.at("dir", default: "right")
-      // Each non-arrow item increments lc, so arrows slot into the gap
-      // just before the current lc position:
-      //   right → gap at 2*lc-1 (between prev mol and next mol)
-      //   left  → gap at 2*lc-3 (going backward two slots)
-      //   down/up → gap at row ±1, same col as last mol (2*lc-2)
-      let (gr, gc) = if dir == "right"     { (2 * lr,     2 * lc - 1) }
-                     else if dir == "left"  { (2 * lr,     2 * lc - 3) }
-                     else if dir == "down"  { (2 * lr + 1, 2 * lc - 2) }
-                     else                   { (2 * lr - 1, 2 * lc - 2) }
-      placed.push((gr: gr, gc: gc, kind: "arrow", data: item))
-      if dir == "left"      { lc -= 2 }
-      else if dir == "down" { lr += 1; lc -= 1 }
-      else if dir == "up"   { lr -= 1; lc -= 1 }
-      // right: lc unchanged — next mol lands exactly at 2*lc
-    } else {
-      placed.push((gr: 2 * lr, gc: 2 * lc, kind: "mol", data: item))
-      lc += 1
-    }
-  }
-
-  // ── Phase 2: normalise to 0-based ────────────────────────────────────────
-  if placed.len() == 0 { return [] }
-
-  let min-gr = placed.fold(placed.first().gr, (m, c) => calc.min(m, c.gr))
-  let min-gc = placed.fold(placed.first().gc, (m, c) => calc.min(m, c.gc))
-  let max-gr = placed.fold(placed.first().gr, (m, c) => calc.max(m, c.gr))
-  let max-gc = placed.fold(placed.first().gc, (m, c) => calc.max(m, c.gc))
-
-  let n-rows = max-gr - min-gr + 1
-  let n-cols = max-gc - min-gc + 1
-
-  // ── Phase 3: build sparse lookup ─────────────────────────────────────────
-  let lookup = (:)
-  for p in placed {
-    let key = str(p.gr - min-gr) + "," + str(p.gc - min-gc)
-    lookup.insert(key, p)
-  }
-
-  // ── Phase 4: render as Typst grid ────────────────────────────────────────
-  let flat-cells = ()
-  for gr in range(n-rows) {
-    for gc in range(n-cols) {
-      let key = str(gr) + "," + str(gc)
-      let p = lookup.at(key, default: none)
-      if p == none {
-        flat-cells.push([])
-      } else if p.kind == "mol" {
-        flat-cells.push(align(center + horizon, p.data))
-      } else {
-        let item = p.data
-        let d = item.at("dir", default: "right")
-        flat-cells.push(
-          if d == "right" or d == "left" { _horiz-arrow(item.above, item.below, d) }
-          else                           { _vert-arrow(item.above, item.below, d) }
-        )
-      }
-    }
-  }
-
-  let result = grid(
-    columns: (auto,) * n-cols,
-    rows:    (auto,) * n-rows,
-    column-gutter: gap-h / 2,
-    row-gutter:    gap-v / 2,
-    align: center + horizon,
-    ..flat-cells,
+  let mechanism = steps.any(it =>
+    is-curly(it) or is-highlight(it) or (is-mol(it) and it.offset != (0, 0))
   )
 
-  let scaled = if scale == 1.0 {
-    result
-  } else {
-    _typst-scale(x: scale * 100%, y: scale * 100%, reflow: true, result)
-  }
+  if not mechanism {
+    // ── Scheme (grid) path ──────────────────────────────────────────────────
+    // Phase 1: assign each item a (grid-row, grid-col) position.
+    // Grid mapping: mol at (lr,lc) → grid (2*lr, 2*lc); arrows slot into gaps.
+    let lr = 0
+    let lc = 0
+    let placed = ()
 
-  block(breakable: breakable, scaled)
+    for item in steps {
+      if is-rxn-arrow(item) {
+        let dir = item.at("dir", default: "right")
+        let (gr, gc) = if dir == "right"     { (2 * lr,     2 * lc - 1) }
+                       else if dir == "left"  { (2 * lr,     2 * lc - 3) }
+                       else if dir == "down"  { (2 * lr + 1, 2 * lc - 2) }
+                       else                   { (2 * lr - 1, 2 * lc - 2) }
+        placed.push((gr: gr, gc: gc, kind: "arrow", data: item))
+        if dir == "left"      { lc -= 2 }
+        else if dir == "down" { lr += 1; lc -= 1 }
+        else if dir == "up"   { lr -= 1; lc -= 1 }
+      } else {
+        placed.push((gr: 2 * lr, gc: 2 * lc, kind: "mol", data: item))
+        lc += 1
+      }
+    }
+
+    if placed.len() == 0 { return [] }
+
+    let min-gr = placed.fold(placed.first().gr, (m, c) => calc.min(m, c.gr))
+    let min-gc = placed.fold(placed.first().gc, (m, c) => calc.min(m, c.gc))
+    let max-gr = placed.fold(placed.first().gr, (m, c) => calc.max(m, c.gr))
+    let max-gc = placed.fold(placed.first().gc, (m, c) => calc.max(m, c.gc))
+
+    let n-rows = max-gr - min-gr + 1
+    let n-cols = max-gc - min-gc + 1
+
+    let lookup = (:)
+    for p in placed {
+      lookup.insert(str(p.gr - min-gr) + "," + str(p.gc - min-gc), p)
+    }
+
+    let flat-cells = ()
+    for gr in range(n-rows) {
+      for gc in range(n-cols) {
+        let p = lookup.at(str(gr) + "," + str(gc), default: none)
+        if p == none {
+          flat-cells.push([])
+        } else if p.kind == "mol" {
+          let c = if is-mol(p.data) { _render-mol(p.data, show-indices-default: show-indices) } else { p.data }
+          flat-cells.push(align(center + horizon, c))
+        } else {
+          let item = p.data
+          let d = item.at("dir", default: "right")
+          flat-cells.push(
+            if d == "right" or d == "left" { _horiz-arrow(item.above, item.below, d) }
+            else                           { _vert-arrow(item.above, item.below, d) }
+          )
+        }
+      }
+    }
+
+    let result = grid(
+      columns: (auto,) * n-cols,
+      rows:    (auto,) * n-rows,
+      column-gutter: gap-h / 2,
+      row-gutter:    gap-v / 2,
+      align: center + horizon,
+      ..flat-cells,
+    )
+
+    let scaled = if scale == 1.0 {
+      result
+    } else {
+      _typst-scale(x: scale * 100%, y: scale * 100%, reflow: true, result)
+    }
+
+    block(breakable: breakable, scaled)
+  } else {
+    // ── Mechanism (shared canvas) path ──────────────────────────────────────
+    let canvas-scale = scale * 30pt
+    let font-size = 11pt * scale
+    let cfg = _annotation-cfg(canvas-scale, font-size, scale)
+    let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
+    let gap = 1.0 // bond-length units between species
+
+    context {
+      let specs = ()       // referenceable items (mol/content), in species-index order
+      let flow = ()        // positioned but non-referenceable content (rxn-arrows)
+      let annotations = () // curly arrows and highlights
+      let cursor = 0.0
+
+      for it in steps {
+        if is-curly(it) or is-highlight(it) {
+          annotations.push(it)
+        } else if is-rxn-arrow(it) {
+          let body = if it.dir == "right" or it.dir == "left" {
+            _horiz-arrow(it.above, it.below, it.dir)
+          } else {
+            _vert-arrow(it.above, it.below, it.dir)
+          }
+          let w = measure(body).width / canvas-scale
+          flow.push((body: body, origin: (cursor + w / 2, 0)))
+          cursor += w + gap
+        } else {
+          let m = if is-mol(it) {
+            it
+          } else {
+            (__mol__: true, spec: it, label: none, offset: (0, 0), opts: (:))
+          }
+          if type(m.spec) == str {
+            let lay = _layout(m.spec)
+            let w = lay.bbox_width
+            let h = lay.bbox_height
+            let mol-fs = m.opts.at("font-size", default: none)
+            let mol-actual-fs = if mol-fs == none { 11pt * scale } else { mol-fs }
+            specs.push((
+              kind: "mol-smiles",
+              layout: lay,
+              rotation: m.opts.at("rotation", default: 0deg),
+              origin: (cursor + w / 2 + m.offset.at(0), m.offset.at(1)),
+              size: (w, h),
+              label: m.label,
+              opts: m.opts,
+              canvas-scale: canvas-scale,
+              actual-font-size: mol-actual-fs,
+              font: m.opts.at("font", default: "New Computer Modern"),
+              show-all-h: m.opts.at("show-all-h", default: false),
+            ))
+            cursor += w + gap
+          } else {
+            let meas = measure(m.spec)
+            let w = meas.width / canvas-scale
+            let h = meas.height / canvas-scale
+            specs.push((
+              kind: "content",
+              body: m.spec,
+              rotation: 0deg,
+              origin: (cursor + w / 2 + m.offset.at(0), m.offset.at(1)),
+              size: (w, h),
+              label: m.label,
+            ))
+            cursor += w + gap
+          }
+        }
+      }
+
+      let canvas = cetz.canvas(length: canvas-scale, {
+        import cetz.draw: *
+
+        for a in annotations {
+          if a.at("__highlight__", default: false) { _draw-highlight(a, specs, cfg) }
+        }
+
+        for sp-idx in range(specs.len()) {
+          let sp = specs.at(sp-idx)
+          if sp.kind == "mol-smiles" {
+            group({
+              translate((sp.origin.at(0), sp.origin.at(1)))
+              _draw-molecule(
+                sp.layout,
+                scale: the-scale,
+                font-size: sp.opts.at("font-size", default: none),
+                font: sp.opts.at("font", default: "New Computer Modern"),
+                bond-stroke: sp.opts.at("bond-stroke", default: none),
+                color: sp.opts.at("color", default: true),
+                rotation: sp.rotation,
+                show-all-h: sp.opts.at("show-all-h", default: false),
+                lone-pairs: sp.opts.at("lone-pairs", default: none),
+                atom-colors: sp.opts.at("atom-colors", default: (:)),
+                show-indices: sp.opts.at("show-indices", default: show-indices),
+                index-prefix: "species-" + str(sp-idx) + "-",
+              )
+            })
+          } else {
+            content((sp.origin.at(0), sp.origin.at(1)), sp.body, anchor: "center")
+          }
+        }
+
+        for f in flow {
+          content((f.origin.at(0), f.origin.at(1)), f.body, anchor: "center")
+        }
+
+        for sp in specs {
+          if sp.label != none {
+            content(
+              (sp.origin.at(0), sp.origin.at(1) - sp.size.at(1) / 2 - 0.34),
+              sp.label,
+              anchor: "north",
+            )
+          }
+        }
+
+        for a in annotations {
+          if a.at("__arrow__", default: false) { _draw-arrow(a, specs, cfg) }
+        }
+      })
+
+      block(breakable: breakable, canvas)
+    }
+  }
+}
+
+/// Wraps content in drawn square brackets, e.g. for a transition state or reactive
+/// intermediate. `sup` / `sub` are typeset at the top-right / bottom-right (a charge,
+/// a ‡ for a transition state, …).
+///
+/// - body (content): The content to enclose.
+/// - sup (content): Optional superscript outside the right bracket. Default: none.
+/// - sub (content): Optional subscript outside the right bracket. Default: none.
+/// - stroke (stroke): Bracket stroke. Default: 0.6pt black.
+/// - gap (length): Padding between the brackets and the body. Default: 0.3em.
+/// -> content
+#let brackets(body, sup: none, sub: none, stroke: 0.6pt + black, gap: 0.3em) = context {
+  let body-height = measure(body).height
+  let gp = gap.to-absolute()
+  let tk = (0.18em).to-absolute()
+  let total = body-height + 2 * gp
+  let bstroke = stroke // cetz.draw exports `stroke`, which would shadow the argument
+  let bracket(left) = {
+    let dir = if left { 1 } else { -1 }
+    box(height: total, cetz.canvas(length: 1pt, {
+      import cetz.draw: *
+      let hp = total / 1pt
+      let tp = tk / 1pt
+      line((dir * tp, 0), (0, 0), (0, hp), (dir * tp, hp), stroke: bstroke)
+    }))
+  }
+  // Stack the marks against the closing bracket: sup pinned to the top corner,
+  // sub to the bottom, by filling the bracket height.
+  let supsub = if sup == none and sub == none {
+    none
+  } else {
+    box(height: total, stack(
+      dir: ttb,
+      spacing: 1fr,
+      if sup != none { box(text(size: 0.85em, sup)) } else { box() },
+      if sub != none { box(text(size: 0.85em, sub)) } else { box() },
+    ))
+  }
+  box(baseline: 50% + 0.3em)[#bracket(true)#h(gp)#box(baseline: 50% - body-height / 2, body)#h(gp)#bracket(false)#if supsub != none { h(0.12em); supsub }]
 }

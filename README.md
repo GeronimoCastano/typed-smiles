@@ -8,25 +8,26 @@ The package is meant for chemistry notes, reaction schemes, reports, and
 teaching material where you want molecules to live directly in your Typst
 source instead of copying diagrams from a separate editor.
 
-**Full documentation:** [`docs/documentation.pdf`](docs/documentation.pdf) — covers every argument, syntax extension, color options, and reaction-scheme feature with live examples.
+**Full documentation:** see `docs/documentation.pdf` in the typed-smiles repository for every argument, syntax extension, color option, and reaction-scheme feature with live examples.
 
 ---
 
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.3.0": *
+#import "@preview/typed-smiles:0.4.0": *
 ```
 
-A wildcard import gives you all five public symbols: `smiles`, `ce`, `mol`,
-`rxn-arrow`, and `reaction`.
+A wildcard import gives you the molecule renderer, reaction helpers, and
+mechanism helpers: `smiles`, `ce`, `mol`, `rxn-arrow`, `reaction`, `atom`,
+`bond`, `lp`, `species`, `arrow`, `highlight`, and `brackets`.
 
 ## Basic molecule drawing
 
 Pass a SMILES string to `#smiles()` and it draws the skeletal structure.
 
 ```typst
-#import "@preview/typed-smiles:0.3.0": smiles
+#import "@preview/typed-smiles:0.4.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -102,8 +103,10 @@ non-bonding electron pairs on common organic heteroatoms and charged atoms.
 ```typst
 #smiles("CCO", lone-pairs: "dots")
 #smiles("CCN", lone-pairs: "lines")
-#smiles("[O-]C=O", lone-pairs: "dots")
+#smiles("CC(=O)N", lone-pairs: "dots")
 ```
+
+![Lone pair examples](assets/readme/lone-pairs.png)
 
 ## Colors
 
@@ -127,6 +130,8 @@ or any `#RRGGBB` hex code. See the documentation for the full color reference.
 #smiles("{Cat|teal}C(=O){Nuc|#E040FB}")
 ```
 
+![Color override examples](assets/readme/colors.png)
+
 > **Note:** `color: false` is a hard override — it makes everything black
 > regardless of any `atom-colors` entries or inline label styles.
 > To selectively highlight a group in an otherwise black-and-white diagram,
@@ -138,7 +143,7 @@ or any `#RRGGBB` hex code. See the documentation for the full color reference.
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.3.0": ce
+#import "@preview/typed-smiles:0.4.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -163,7 +168,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.3.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.4.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -217,6 +222,45 @@ schemes.
 
 ![Wrap-around reaction scheme](assets/readme/schemes.png)
 
+## Electron-pushing mechanisms
+
+`reaction()` also draws curly-arrow mechanisms. Atoms are referenced by their
+writing-order index (0-based), so the SMILES string is never modified — pass
+`show-indices: true` to read the numbers off the diagram while you write arrows.
+On large mechanisms, `reaction(show-indices: true)` applies that overlay to all
+string `mol("...")` molecules in the reaction, with per-molecule opt-out via
+`mol("...", show-indices: false)`.
+Pass a SMILES *string* to `mol(...)` (not `smiles(...)`) so the reaction renders it
+itself and its atoms become addressable; `offset:` nudges a species so arrows read
+cleanly. A curly `arrow()` or `highlight()` (or any `offset:`) switches `reaction()`
+from a grid into one shared canvas — plain schemes are unaffected.
+
+```typst
+#reaction(
+  mol("[OH-]", lone-pairs: "dots"),
+  mol("C(Br)(C)C", offset: (1.5, 0.4)),
+  arrow(from: lp(0, 0), to: atom(1, 0), bend: "left", color: red, label: [attack]),
+  arrow(from: bond(1, 0, 1), to: atom(1, 1, offset: (0.9, 0)), bend: "left", color: red),
+)
+
+// intramolecular arrows + highlight, wrapped in a transition-state bracket
+#brackets(
+  smiles(
+    "CC(=O)C",
+    lone-pairs: "dots",
+    highlight(bond(1, 2), fill: rgb("#FFE45C")),
+    arrow(from: bond(1, 2), to: atom(2), bend: "right", color: red),
+  ),
+  sup: [‡],
+)
+```
+
+References: `atom(s, i)`, `bond(s, i, j)`, `lp(s, i)` (the species index `s` is
+optional inside a single `smiles()`), and `species(k)` for a whole `ce()`/content
+item. Every reference takes an optional `offset: (dx, dy)`.
+
+![Electron-pushing mechanism examples](assets/readme/mechanisms.png)
+
 ## Stereochemistry and drawing extensions
 
 `[C@H]` / `[C@@H]` mark tetrahedral centers; `/` and `\` describe cis/trans
@@ -257,6 +301,8 @@ geometry. `!w` forces a solid wedge and `!h` a hashed wedge.
 | `show-all-h` | `false` | Label carbon implicit hydrogens |
 | `lone-pairs` | `none` | Draw lone pairs as `"dots"` or `"lines"` |
 | `atom-colors` | `(:)` | Color overrides: element key `O: red` or label key `"{PPh3}": blue` |
+| `show-indices` | `false` | Stamp atom indices for writing arrow references |
+| `…annotations` | — | `arrow()` / `highlight()` items on this molecule |
 
 SMILES string extensions:
 
@@ -269,7 +315,10 @@ SMILES string extensions:
 | `!w` | Force a solid wedge on the next single bond |
 | `!h` | Force a hashed wedge on the next single bond |
 
-### `#reaction(gap-h, gap-v, scale, breakable, …items)`
+### `#reaction(gap-h, gap-v, scale, breakable, show-indices, …items)`
+
+Lays out a scheme (grid) or, when any curly `arrow()`/`highlight()` or `mol(offset:)`
+is present, an electron-pushing mechanism (shared canvas).
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -277,6 +326,7 @@ SMILES string extensions:
 | `gap-v` | `1.5em` | Vertical gap between rows |
 | `scale` | `1.0` | Uniform scale applied to the entire scheme |
 | `breakable` | `false` | Allow splitting across pages |
+| `show-indices` | `false` | Default atom-index overlay for string SMILES molecules in this reaction |
 
 ### `#rxn-arrow(above, below, dir)`
 
@@ -286,9 +336,28 @@ SMILES string extensions:
 | `below` | `none` | Label below a horizontal arrow (or left of vertical) |
 | `dir` | `"right"` | `"right"`, `"left"`, `"down"`, or `"up"` |
 
-### `#mol(content, label: none)`
+### `#mol(spec, label: none, offset: (0,0), …opts)`
 
-Wraps a molecule with an optional centered caption below it.
+A reaction item. `spec` is any content (`smiles(...)`, `ce(...)`, text) or a SMILES
+*string* — a string lets `reaction()` render it with addressable atoms. `offset`
+nudges it in bond-length units. String molecules accept common drawing options
+such as `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-all-h`,
+`lone-pairs`, `atom-colors`, and `show-indices`; use `reaction(scale: ...)` to
+resize a shared mechanism canvas.
+
+### Mechanism helpers
+
+| Helper | Purpose |
+|---|---|
+| `atom(i)` / `atom(s, i)` | Atom center reference |
+| `bond(i, j)` / `bond(s, i, j)` | Bond-midpoint reference |
+| `lp(i)` / `lp(s, i)` | Lone-pair reference (`pair: n` to select) |
+| `species(k)` | Bounding-box edge of a whole item |
+| `arrow(from:, to:, label:, color:, bend:, angle:, half:)` | Curly electron arrow |
+| `highlight(ref, fill:, stroke:, radius:)` | Shade an atom (disk) or bond (capsule) |
+| `brackets(body, sup:, sub:)` | Square brackets with optional corner marks |
+
+All references accept an `offset: (dx, dy)` nudge.
 
 ### `#ce(chem, font: none, font-size: none, …)`
 

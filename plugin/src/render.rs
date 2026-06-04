@@ -34,6 +34,11 @@ pub struct AtomOutput {
     /// Unit direction from this atom toward the rendered stereochemical hydrogen.
     #[serde(default)]
     pub stereo_h_dir: Vec2,
+    /// True for H atoms synthesized from bracket hcount to make them addressable
+    /// via atom() references. The Typst renderer skips drawing these atoms and their
+    /// bonds; they only appear in show-indices overlays and arrow endpoints.
+    #[serde(default)]
+    pub virtual_h: bool,
 }
 
 /// A bond between two atoms by their index in `LayoutOutput::atoms`.
@@ -53,6 +58,11 @@ pub struct BondOutput {
     /// Both components are 0.0 for non-ring bonds → use symmetric offset.
     pub inner_x: f64,
     pub inner_y: f64,
+    /// True for bonds connecting a heavy atom to a virtual_h atom.
+    /// The Typst renderer skips drawing these bonds; they exist only so
+    /// atom() references resolve to meaningful positions.
+    #[serde(default)]
+    pub virtual_bond: bool,
 }
 
 /// 2D coordinate pair in layout-space units (1 unit = 1 bond length).

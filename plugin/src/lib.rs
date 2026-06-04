@@ -146,15 +146,18 @@ mod tests {
 
     #[test]
     fn ethanol() {
+        // CCO: 3 real atoms + 1 virtual H for terminal O (implicit OH)
         let out = layout_native("CCO").expect("ethanol layout failed");
-        assert_eq!(out.atoms.len(), 3);
+        assert_eq!(out.atoms.len(), 4);
+        assert!(out.atoms[3].virtual_h);
     }
 
     #[test]
     fn implicit_h_counts_ethanol() {
+        // implicit_h counts for real atoms only (virtual H has implicit_h = 0)
         let out = layout_native("CCO").expect("ethanol layout failed");
         let counts: Vec<u8> = out.atoms.iter().map(|a| a.implicit_h).collect();
-        assert_eq!(counts, vec![3, 2, 1]);
+        assert_eq!(counts, vec![3, 2, 1, 0]);
     }
 
     #[test]
@@ -470,6 +473,39 @@ mod tests {
         assert_eq!(bracket.atoms[0].abbrev, "");
         assert_eq!(label.atoms[0].symbol, "*");
         assert_eq!(label.atoms[0].abbrev, "N");
+    }
+
+    // ── Virtual H atoms for bracket-notation hydrogens ───────────────────────
+
+    #[test]
+    fn bracket_h_group_is_one_addressable_index() {
+        // [OH-]: one O heavy atom + one virtual H group → 2 atoms total.
+        let out = layout_native("[OH-]").expect("[OH-] layout failed");
+        assert_eq!(out.atoms.len(), 2);
+        assert_eq!(out.atoms[0].symbol, "O");
+        assert!(out.atoms[1].virtual_h);
+        assert_eq!(out.atoms[1].symbol, "H");
+        assert_eq!(out.bonds.len(), 1);
+        assert!(out.bonds[0].virtual_bond);
+    }
+
+    #[test]
+    fn ammonium_h_group_is_one_index() {
+        // [NH4+]: despite hcount=4 the H-label is one glyph → exactly 1 virtual H.
+        let out = layout_native("[NH4+]").expect("[NH4+] layout failed");
+        assert_eq!(out.atoms.len(), 2); // 1 N + 1 virtual H group
+        assert!(out.atoms[1].virtual_h);
+        assert_eq!(out.bonds.len(), 1);
+        assert!(out.bonds[0].virtual_bond);
+    }
+
+    #[test]
+    fn virtual_h_has_valid_position() {
+        let out = layout_native("[OH-]").expect("[OH-] layout failed");
+        let o = out.atoms[0].pos;
+        let h = out.atoms[1].pos;
+        let dist = ((h.x - o.x).powi(2) + (h.y - o.y).powi(2)).sqrt();
+        assert!((dist - 0.35).abs() < 1e-6, "H should be 0.35 bond lengths from O, got {dist}");
     }
 
     // ── Implicit H for expanded valence table ────────────────────────────────
