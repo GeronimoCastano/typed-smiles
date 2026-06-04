@@ -236,21 +236,20 @@ cleanly. A curly `arrow()` or `highlight()` (or any `offset:`) switches `reactio
 from a grid into one shared canvas — plain schemes are unaffected.
 
 ```typst
-#reaction(
-  mol("[OH-]", lone-pairs: "dots"),
-  mol("C(Br)(C)C", offset: (1.5, 0.4)),
-  arrow(from: lp(0, 0), to: atom(1, 0), bend: "left", color: red, label: [attack]),
-  arrow(from: bond(1, 0, 1), to: atom(1, 1, offset: (0.9, 0)), bend: "left", color: red),
+#smiles(
+  "CC(=O)C",
+  lone-pairs: "dots",
+  highlight(bond(1, 2), fill: rgb("#FFE45C"), include-atoms: true),
 )
 
-// intramolecular arrows + highlight, wrapped in a transition-state bracket
+#reaction(
+  mol("[OH-]", lone-pairs: "dots", offset: (1.5, 1)),
+  mol("C(I)(C)C"),
+  arrow(from: lp(0, 0), to: atom(1, 0), bend: "left"),
+)
+
 #brackets(
-  smiles(
-    "CC(=O)C",
-    lone-pairs: "dots",
-    highlight(bond(1, 2), fill: rgb("#FFE45C")),
-    arrow(from: bond(1, 2), to: atom(2), bend: "right", color: red),
-  ),
+  [#reaction(smiles("CC(=O)C"), rxn-arrow(), smiles("O=C=O"), scale: 0.55)],
   sup: [‡],
 )
 ```
