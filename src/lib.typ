@@ -1486,33 +1486,95 @@
 /// - above (content): Label above a horizontal arrow / to the right of a vertical one.
 /// - below (content): Label below a horizontal arrow / to the left of a vertical one.
 /// - dir (str): Arrow direction — "right" (default), "left", "down", or "up".
+/// - kind (str): Arrow style — "single" (default), "equilibrium", or "equilibrium-filled".
 /// -> dictionary  (consumed by #reaction)
-#let rxn-arrow(above: none, below: none, dir: "right") = (
+#let rxn-arrow(above: none, below: none, dir: "right", kind: "single") = (
   __rxn_arrow__: true,
   above: above,
   below: below,
   dir: dir,
+  kind: kind,
 )
 
-// Render a horizontal arrow (→ or ←)
-#let _horiz-arrow(above, below, dir) = {
+// Render a horizontal reaction arrow.
+#let _horiz-arrow(above, below, dir, kind) = {
   let arrow-parts = ()
   if above != none { arrow-parts.push(align(center, text(size: 8pt, above))) }
   let (sx, ex) = if dir == "left" { (52, 0) } else { (0, 52) }
   arrow-parts.push(cetz.canvas(length: 1pt, {
     import cetz.draw: *
-    line((sx, 0), (ex, 0), mark: (end: ">", fill: black, size: 5), stroke: 0.8pt + black)
+    if kind == "single" {
+      line((sx, 0), (ex, 0), mark: (end: ">", fill: black, size: 5), stroke: 0.8pt + black)
+    } else if kind == "equilibrium" or kind == "equilibrium-filled" {
+      let sign = if ex > sx { 1 } else { -1 }
+      let head-len = 7
+      let head-rise = 3.5
+      if kind == "equilibrium-filled" {
+        let top-base = ex - sign * head-len
+        line((sx, 2.2), (ex, 2.2), stroke: 0.8pt + black)
+        line(
+          (ex, 2.2), (top-base, 2.2), (top-base, 2.2 + head-rise),
+          close: true, fill: black, stroke: none,
+        )
+      } else {
+        line((sx, 2.2), (ex, 2.2), stroke: 0.8pt + black)
+        line((ex, 2.2), (ex - sign * head-len, 2.2 + head-rise), stroke: 0.8pt + black)
+      }
+      if kind == "equilibrium-filled" {
+        let bottom-base = sx + sign * head-len
+        line((ex, -2.2), (sx, -2.2), stroke: 0.8pt + black)
+        line(
+          (sx, -2.2), (bottom-base, -2.2), (bottom-base, -2.2 - head-rise),
+          close: true, fill: black, stroke: none,
+        )
+      } else {
+        line((ex, -2.2), (sx, -2.2), stroke: 0.8pt + black)
+        line((sx, -2.2), (sx + sign * head-len, -2.2 - head-rise), stroke: 0.8pt + black)
+      }
+    } else {
+      panic("rxn-arrow kind must be \"single\", \"equilibrium\", or \"equilibrium-filled\"")
+    }
   }))
   if below != none { arrow-parts.push(align(center, text(size: 8pt, below))) }
   align(center + horizon, stack(spacing: 3pt, ..arrow-parts))
 }
 
-// Render a vertical arrow (↓ or ↑). `above` is shown to the right, `below` to the left.
-#let _vert-arrow(above, below, dir) = {
+// Render a vertical reaction arrow. `above` is shown to the right, `below` to the left.
+#let _vert-arrow(above, below, dir, kind) = {
   let (from-y, to-y) = if dir == "up" { (0, 52) } else { (52, 0) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
-    line((0, from-y), (0, to-y), mark: (end: ">", fill: black, size: 5), stroke: 0.8pt + black)
+    if kind == "single" {
+      line((0, from-y), (0, to-y), mark: (end: ">", fill: black, size: 5), stroke: 0.8pt + black)
+    } else if kind == "equilibrium" or kind == "equilibrium-filled" {
+      let sign = if to-y > from-y { 1 } else { -1 }
+      let head-len = 7
+      let head-rise = 3.5
+      if kind == "equilibrium-filled" {
+        let left-base = to-y - sign * head-len
+        line((-2.2, from-y), (-2.2, to-y), stroke: 0.8pt + black)
+        line(
+          (-2.2, to-y), (-2.2, left-base), (-2.2 - head-rise, left-base),
+          close: true, fill: black, stroke: none,
+        )
+      } else {
+        line((-2.2, from-y), (-2.2, to-y), stroke: 0.8pt + black)
+        line((-2.2, to-y), (-2.2 - head-rise, to-y - sign * head-len), stroke: 0.8pt + black)
+      }
+      if kind == "equilibrium-filled" {
+        let right-base = from-y + sign * head-len
+        line((2.2, to-y), (2.2, from-y), stroke: 0.8pt + black)
+        line(
+          (2.2, from-y), (2.2, right-base), (2.2 + head-rise, right-base),
+          close: true, fill: black, stroke: none,
+        )
+      } else {
+        line((2.2, to-y), (2.2, from-y), stroke: 0.8pt + black)
+        line((2.2, from-y), (2.2 + head-rise, from-y + sign * head-len), stroke: 0.8pt + black)
+      }
+    } else {
+      panic("rxn-arrow kind must be \"single\", \"equilibrium\", or \"equilibrium-filled\"")
+    }
   })
   if above == none and below == none {
     align(center + horizon, arrow-canvas)
@@ -1644,9 +1706,10 @@
         } else {
           let item = p.data
           let d = item.at("dir", default: "right")
+          let k = item.at("kind", default: "single")
           flat-cells.push(
-            if d == "right" or d == "left" { _horiz-arrow(item.above, item.below, d) }
-            else                           { _vert-arrow(item.above, item.below, d) }
+            if d == "right" or d == "left" { _horiz-arrow(item.above, item.below, d, k) }
+            else                           { _vert-arrow(item.above, item.below, d, k) }
           )
         }
       }
@@ -1687,9 +1750,9 @@
           annotations.push(it)
         } else if is-rxn-arrow(it) {
           let body = if it.dir == "right" or it.dir == "left" {
-            _horiz-arrow(it.above, it.below, it.dir)
+            _horiz-arrow(it.above, it.below, it.dir, it.kind)
           } else {
-            _vert-arrow(it.above, it.below, it.dir)
+            _vert-arrow(it.above, it.below, it.dir, it.kind)
           }
           let w = measure(body).width / canvas-scale
           flow.push((body: body, origin: (cursor + w / 2, 0)))

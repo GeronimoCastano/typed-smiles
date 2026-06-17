@@ -15,7 +15,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.4.0": *
+#import "@preview/typed-smiles:0.4.1": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -27,7 +27,7 @@ mechanism helpers: `smiles`, `ce`, `mol`, `rxn-arrow`, `reaction`, `atom`,
 Pass a SMILES string to `#smiles()` and it draws the skeletal structure.
 
 ```typst
-#import "@preview/typed-smiles:0.4.0": smiles
+#import "@preview/typed-smiles:0.4.1": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -143,7 +143,7 @@ or any `#RRGGBB` hex code. See the documentation for the full color reference.
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.4.0": ce
+#import "@preview/typed-smiles:0.4.1": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -168,7 +168,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.4.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.4.1": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -198,6 +198,19 @@ if it does not fit.
 ```
 
 ![Reaction scheme examples](assets/readme/reactions.png)
+
+`rxn-arrow(kind: "equilibrium")` draws an open equilibrium arrow. Use
+`kind: "equilibrium-filled"` for filled half-heads.
+
+```typst
+#reaction(
+  ce("A"),
+  rxn-arrow(kind: "equilibrium", above: ce("H+"), below: [heat]),
+  ce("B"),
+  rxn-arrow(kind: "equilibrium-filled", above: [cat.]),
+  ce("C"),
+)
+```
 
 ## Multi-step mechanisms
 
@@ -327,13 +340,14 @@ is present, an electron-pushing mechanism (shared canvas).
 | `breakable` | `false` | Allow splitting across pages |
 | `show-indices` | `false` | Default atom-index overlay for string SMILES molecules in this reaction |
 
-### `#rxn-arrow(above, below, dir)`
+### `#rxn-arrow(above, below, dir, kind)`
 
 | Parameter | Default | Description |
 |---|---|---|
 | `above` | `none` | Label above a horizontal arrow (or right of vertical) |
 | `below` | `none` | Label below a horizontal arrow (or left of vertical) |
 | `dir` | `"right"` | `"right"`, `"left"`, `"down"`, or `"up"` |
+| `kind` | `"single"` | `"single"`, `"equilibrium"`, or `"equilibrium-filled"` |
 
 ### `#mol(spec, label: none, offset: (0,0), …opts)`
 

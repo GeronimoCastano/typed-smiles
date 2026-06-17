@@ -135,6 +135,64 @@
   mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[*C*]),
 )
 
+#v(1.5em)
+*Equilibrium arrows*:
+
+#reaction(
+  mol(smiles("CC(=O)O"), label: text(size: 8pt)[acid]),
+  [+],
+  mol(smiles("CCO"), label: text(size: 8pt)[alcohol]),
+  rxn-arrow(kind: "equilibrium", above: [H#super[+]], below: [heat]),
+  mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ester]),
+  [+],
+  ce("H2O"),
+)
+
+#v(1em)
+#reaction(
+  mol(smiles("N#N"), label: text(size: 8pt)[N#sub[2]]),
+  rxn-arrow(kind: "equilibrium", dir: "left", above: [pressure]),
+  mol(smiles("[H][H]"), label: text(size: 8pt)[H#sub[2]]),
+)
+
+#v(1em)
+#reaction(
+  mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[A]),
+  rxn-arrow(kind: "equilibrium", above: [cat.]),
+  mol(smiles("C1=CC=CC=C1O"), label: text(size: 8pt)[B]),
+  rxn-arrow(kind: "equilibrium", dir: "down", above: [workup]),
+  mol(smiles("C1=CC=CC=C1Cl"), label: text(size: 8pt)[C]),
+)
+
+#v(1em)
+*Filled equilibrium arrows*:
+
+#reaction(
+  mol(smiles("CC(=O)O"), label: text(size: 8pt)[acid]),
+  [+],
+  mol(smiles("CCO"), label: text(size: 8pt)[alcohol]),
+  rxn-arrow(kind: "equilibrium-filled", above: [H#super[+]], below: [heat]),
+  mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ester]),
+  [+],
+  ce("H2O"),
+)
+
+#v(1em)
+#reaction(
+  mol(smiles("N#N"), label: text(size: 8pt)[N#sub[2]]),
+  rxn-arrow(kind: "equilibrium-filled", dir: "left", above: [pressure]),
+  mol(smiles("[H][H]"), label: text(size: 8pt)[H#sub[2]]),
+)
+
+#v(1em)
+#reaction(
+  mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[A]),
+  rxn-arrow(kind: "equilibrium-filled", above: [cat.]),
+  mol(smiles("C1=CC=CC=C1O"), label: text(size: 8pt)[B]),
+  rxn-arrow(kind: "equilibrium-filled", dir: "down", above: [workup]),
+  mol(smiles("C1=CC=CC=C1Cl"), label: text(size: 8pt)[C]),
+)
+
 = Options: color and rotation
 
 *No color* (color: false):
@@ -1825,4 +1883,3 @@ rotations, large labels, and reaction-level index overlays.
      highlight: highlight((atom(0), atom(2), bond(1, 1, 3)), fill: rgb("#E7C6FF"), include-atoms: true),
    )],
 )
-

@@ -7,7 +7,7 @@
 #import "@preview/codly-languages:0.1.1": *
 #import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets
 
-#let version = "0.3.0"
+#let version = "0.4.1"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -169,13 +169,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.3.0": *
+#import "@preview/typed-smiles:0.4.1": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.3.0": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.4.1": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports five symbols:
@@ -728,9 +728,36 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 
 == #raw("rxn-arrow()")
 
-#c("rxn-arrow(above: none, below: none, dir: \"right\")") draws an arrow.
+#c("rxn-arrow(above: none, below: none, dir: \"right\", kind: \"single\")") draws an arrow.
 #c("dir") may be #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").
+#c("kind") may be #c("\"single\""), #c("\"equilibrium\""), or #c("\"equilibrium-filled\"").
 #c("above") and #c("below") carry reagents and conditions.
+
+#table(
+  columns: (auto, auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Argument*], [*Default*], [*Effect*],
+  [#c("above")], [`none`], [Label above a horizontal arrow, or right of a vertical arrow.],
+  [#c("below")], [`none`], [Label below a horizontal arrow, or left of a vertical arrow.],
+  [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
+  [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), or #c("\"equilibrium-filled\"").],
+)
+
+#demo[
+  Equilibrium arrows use paired half-heads. The filled variant uses filled
+  half-heads.
+
+  #example(```typ
+  #reaction(
+    ce("A"),
+    rxn-arrow(kind: "equilibrium", above: ce("H+"), below: [heat]),
+    ce("B"),
+    rxn-arrow(kind: "equilibrium-filled", above: [cat.]),
+    ce("C"),
+  )
+  ```, side: false)
+]
 
 == #raw("reaction()")
 
@@ -946,7 +973,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.3.0": *
+#import "@preview/typed-smiles:0.4.1": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
@@ -1030,6 +1057,19 @@ parameter.
   [#c("scale")], [`1.0`], [Uniform scale applied to the whole scheme.],
   [#c("breakable")], [`false`], [Allow the scheme to split across pages.],
   [#c("show-indices")], [`false`], [Default atom-index overlay for string SMILES molecules in this reaction.],
+)
+
+== #raw("rxn-arrow()") options
+
+#table(
+  columns: (auto, auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Option*], [*Default*], [*Effect*],
+  [#c("above")], [`none`], [Condition label above a horizontal arrow, or right of a vertical arrow.],
+  [#c("below")], [`none`], [Condition label below a horizontal arrow, or left of a vertical arrow.],
+  [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
+  [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), or #c("\"equilibrium-filled\"").],
 )
 
 == Mechanism helpers
