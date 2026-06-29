@@ -7,7 +7,7 @@
 #import "@preview/codly-languages:0.1.1": *
 #import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets
 
-#let version = "0.4.1"
+#let version = "0.4.2"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -169,13 +169,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.4.1": *
+#import "@preview/typed-smiles:0.4.2": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.4.1": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.4.2": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports five symbols:
@@ -973,7 +973,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.4.1": *
+#import "@preview/typed-smiles:0.4.2": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,

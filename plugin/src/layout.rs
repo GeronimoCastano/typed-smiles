@@ -43,15 +43,36 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
 
     // ── 4. Place remaining acyclic atoms (pure chain molecules) ──────────
 
-    let root = placed.iter().position(|&p| p).unwrap_or(0);
+    // For a ring-free molecule, grow the chain from the graph's center atom when
+    // that center is a symmetric branch hub, so structures like a quaternary
+    // carbon bearing four equal arms are laid out symmetrically instead of
+    // lopsidedly from atom 0.
+    let (root, symmetric_hub_root) = match placed.iter().position(|&p| p) {
+        Some(p) => (p, false),
+        None => acyclic_root(mol),
+    };
     if !placed[root] {
         coords[root] = Vec2::new(0.0, 0.0);
         placed[root] = true;
     }
 
-    // Start at -30° so the first bond is horizontal in zigzag depiction
-    let initial_dir = -PI / 6.0;
-    place_chain(mol, root, initial_dir, &rings, &mut coords, &mut placed);
+    // A symmetric hub places its arms straddling the vertical axis so the figure
+    // reads upright and mirror-symmetric; a plain chain starts at -30° so the
+    // first bond is horizontal in the conventional zigzag.
+    let initial_dir = if symmetric_hub_root {
+        PI / 2.0 + PI / mol.adj[root].len() as f64
+    } else {
+        -PI / 6.0
+    };
+    place_chain(
+        mol,
+        root,
+        initial_dir,
+        symmetric_hub_root,
+        &rings,
+        &mut coords,
+        &mut placed,
+    );
 
     apply_cis_trans_layout(mol, &mut coords)?;
 
@@ -1280,7 +1301,7 @@ fn place_ring_substituents(
             place_ring_system_from_anchor(mol, rings, ring_idx, v, dir, coords, placed);
             place_substituents_for_placed_rings(mol, rings, coords, placed);
         } else {
-            place_chain(mol, v, dir, rings, coords, placed);
+            place_chain(mol, v, dir, false, rings, coords, placed);
         }
     }
 }
@@ -1366,11 +1387,120 @@ fn normalize_angle(angle: f64) -> f64 {
 
 // ── Chain layout via DFS ──────────────────────────────────────────────────────
 
+/// Picks the starting atom for a ring-free molecule and reports whether it is a
+/// symmetric branch hub.
+///
+/// When the tree's center is a branch atom whose every arm carries an identical
+/// subtree (e.g. a quaternary carbon bearing four equal chains), the layout
+/// starts there and draws the arms with mirror symmetry. Other molecules keep
+/// the conventional walk from atom 0, so their depiction is unchanged.
+fn acyclic_root(mol: &MoleculeGraph) -> (usize, bool) {
+    let n = mol.n_atoms();
+    if n <= 1 || !is_connected(mol) {
+        return (0, false);
+    }
+
+    let mut degree: Vec<usize> = (0..n).map(|i| mol.adj[i].len()).collect();
+    let mut removed = vec![false; n];
+    let mut remaining = n;
+    let mut leaves: Vec<usize> = (0..n).filter(|&i| degree[i] <= 1).collect();
+
+    while remaining > 2 {
+        let mut next = Vec::new();
+        for &leaf in &leaves {
+            if removed[leaf] {
+                continue;
+            }
+            removed[leaf] = true;
+            remaining -= 1;
+            for &(neighbor, _) in &mol.adj[leaf] {
+                if !removed[neighbor] {
+                    degree[neighbor] -= 1;
+                    if degree[neighbor] == 1 {
+                        next.push(neighbor);
+                    }
+                }
+            }
+        }
+        if next.is_empty() {
+            break;
+        }
+        leaves = next;
+    }
+
+    // One or two atoms survive: the tree center. Prefer the more-connected one,
+    // breaking further ties toward the lower index for determinism.
+    let center = (0..n)
+        .filter(|&i| !removed[i])
+        .max_by(|&a, &b| mol.adj[a].len().cmp(&mol.adj[b].len()).then(b.cmp(&a)))
+        .unwrap_or(0);
+
+    if is_symmetric_hub(mol, center) {
+        (center, true)
+    } else {
+        (0, false)
+    }
+}
+
+/// True when `hub` has at least three arms and every arm leads to a subtree of
+/// the same size. Such hubs are the ones whose evenly-spread arms would
+/// otherwise be drawn as a rotational pinwheel.
+fn is_symmetric_hub(mol: &MoleculeGraph, hub: usize) -> bool {
+    if mol.adj[hub].len() < 3 {
+        return false;
+    }
+    let sizes: Vec<usize> = mol.adj[hub]
+        .iter()
+        .map(|&(neighbor, _)| arm_subtree_size(mol, neighbor, hub))
+        .collect();
+    sizes.iter().all(|&s| s == sizes[0])
+}
+
+fn arm_subtree_size(mol: &MoleculeGraph, start: usize, hub: usize) -> usize {
+    let mut seen = vec![false; mol.n_atoms()];
+    seen[hub] = true;
+    seen[start] = true;
+    let mut stack = vec![start];
+    let mut count = 0;
+    while let Some(atom) = stack.pop() {
+        count += 1;
+        for &(neighbor, _) in &mol.adj[atom] {
+            if !seen[neighbor] {
+                seen[neighbor] = true;
+                stack.push(neighbor);
+            }
+        }
+    }
+    count
+}
+
+fn is_connected(mol: &MoleculeGraph) -> bool {
+    let n = mol.n_atoms();
+    if n == 0 {
+        return true;
+    }
+    let mut seen = vec![false; n];
+    let mut stack = vec![0];
+    seen[0] = true;
+    let mut count = 1;
+    while let Some(atom) = stack.pop() {
+        for &(neighbor, _) in &mol.adj[atom] {
+            if !seen[neighbor] {
+                seen[neighbor] = true;
+                count += 1;
+                stack.push(neighbor);
+            }
+        }
+    }
+    count == n
+}
+
 /// DFS traversal that extends unplaced atoms at ±120° from the incoming direction.
 fn place_chain(
     mol: &MoleculeGraph,
     start: usize,
     incoming_angle: f64,
+    symmetric_hub_root: bool,
     rings: &[Vec<usize>],
     coords: &mut Vec<Vec2>,
     placed: &mut Vec<bool>,
@@ -1416,8 +1546,20 @@ fn place_chain(
                 place_ring_system_from_anchor(mol, rings, ring_idx, v, new_dir, coords, placed);
                 place_substituents_for_placed_rings(mol, rings, coords, placed);
             } else {
-                // Alternate turn sign for zigzag
-                stack.push((v, Some(bond_idx), new_dir, -sign));
+                // Arms leaving a symmetric hub bend away from the vertical axis
+                // (sign keyed to the horizontal lean), making the equal arms
+                // mirror images instead of a rotational pinwheel. Every other
+                // step alternates the turn sign for the usual zigzag.
+                let next_sign = if symmetric_hub_root && incoming_bond_idx.is_none() {
+                    if new_dir.cos() >= 0.0 {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                } else {
+                    -sign
+                };
+                stack.push((v, Some(bond_idx), new_dir, next_sign));
             }
         }
     }
@@ -1458,9 +1600,35 @@ fn chain_neighbor_directions(
                     (coords[neighbor].y - coords[u].y).atan2(coords[neighbor].x - coords[u].x)
                 })
                 .collect();
-            distribute_in_free_space(&occupied, count, dir)
+            let slots = distribute_in_free_space(&occupied, count, dir);
+            assign_slots_center_out(slots)
         }
     }
+}
+
+/// Reorders gap slots (in spatial order) so that the callers' size-sorted
+/// neighbors are assigned outward from the middle of the free gap. The first
+/// neighbor (largest subtree) takes the central slot, which continues the main
+/// chain away from the already-placed atoms; smaller substituents fan out to the
+/// sides. This keeps long branches from folding back over the rest of the
+/// molecule at a crowded branch point.
+fn assign_slots_center_out(slots: Vec<f64>) -> Vec<f64> {
+    let n = slots.len();
+    let center = (n as f64 - 1.0) / 2.0;
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| {
+        let da = (a as f64 - center).abs();
+        let db = (b as f64 - center).abs();
+        da.partial_cmp(&db)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.cmp(&b))
+    });
+
+    let mut assigned = vec![0.0; n];
+    for (neighbor_rank, &slot_idx) in order.iter().enumerate() {
+        assigned[neighbor_rank] = slots[slot_idx];
+    }
+    assigned
 }
 
 /// Spreads `count` directions across the largest angular gap left by `occupied`

@@ -1,6 +1,44 @@
 # Packaging And Release Checklist
 
-Use `main` as the source of truth. The `package-submission` branch and the `typst/packages` fork are release artifacts, not development branches.
+Use `main` as the source of truth. The `package-submission` branch and the
+`typst/packages` fork are release artifacts, not development branches.
+
+Agents must read this file before preparing a Typst package release, copying
+files into the Typst packages checkout, or opening a Typst packages PR.
+
+## Repositories
+
+Source package repository:
+
+```text
+/Users/gerocastano8/Documents/Coding/Projects/typed-smiles
+https://github.com/GeronimoCastano/typed-smiles
+```
+
+Local Typst packages checkout:
+
+```text
+/Users/gerocastano8/Documents/Coding/Projects/typst-packages
+```
+
+Typst packages fork and upstream:
+
+```text
+origin   https://github.com/GeronimoCastano/packages.git
+upstream https://github.com/typst/packages.git
+```
+
+The package PR target is always:
+
+```text
+typst/packages:main
+```
+
+The package PR head is normally:
+
+```text
+GeronimoCastano/packages:<release-branch>
+```
 
 ## Version Choice
 
@@ -8,6 +46,14 @@ Use `main` as the source of truth. The `package-submission` branch and the `typs
 - Minor release, such as `0.2.0`: new public API, behavior changes, or larger rendering features.
 
 Typst packages are immutable in practice. After a version is accepted, publish fixes as a new version instead of editing the old version directory.
+
+Set the version once while following the checklist:
+
+```sh
+VERSION=0.4.1
+PKG_REPO=/Users/gerocastano8/Documents/Coding/Projects/typst-packages
+BRANCH=typed-smiles-package-$VERSION
+```
 
 ## Local Release Steps
 
@@ -48,46 +94,108 @@ typst compile --root . --ppi 300 assets/readme/stereo-h.typ assets/readme/stereo
 
 ## Typst Packages PR Steps
 
-1. Sync the existing fork of `typst/packages` with upstream `main`.
-2. Create a new branch in that fork, for example:
+1. Go to the local Typst packages checkout:
 
 ```sh
-git switch -c add-typed-smiles-0.2.0
+cd "$PKG_REPO"
 ```
 
-3. Copy the package files:
+2. Make sure the checkout is clean:
 
 ```sh
-scripts/package-preview.sh 0.2.0 /path/to/typst/packages
+git status -sb
+```
+
+3. Sync the existing fork with upstream `main`:
+
+```sh
+git remote get-url upstream || git remote add upstream https://github.com/typst/packages.git
+git fetch upstream
+```
+
+4. Create a new package update branch from upstream `main`:
+
+```sh
+git switch -C "$BRANCH" upstream/main
+```
+
+5. Copy the package files from the source repository:
+
+```sh
+cd /Users/gerocastano8/Documents/Coding/Projects/typed-smiles
+scripts/package-preview.sh "$VERSION" "$PKG_REPO"
 ```
 
 This creates:
 
 ```text
-/path/to/typst/packages/packages/preview/typed-smiles/0.2.0/
+/Users/gerocastano8/Documents/Coding/Projects/typst-packages/packages/preview/typed-smiles/<VERSION>/
 ```
 
-4. From the `typst/packages/packages` directory, run:
+6. From the `typst-packages/packages` directory, run:
 
 ```sh
-typst-package-check check @preview/typed-smiles:0.2.0
+cd "$PKG_REPO/packages"
+typst-package-check check @preview/typed-smiles:$VERSION
 ```
 
-5. Commit the new version directory in the fork:
+7. Commit the new version directory in the fork:
 
 ```sh
-git add packages/preview/typed-smiles/0.2.0
-git commit -m "Add typed-smiles 0.2.0"
-git push -u fork add-typed-smiles-0.2.0
+cd "$PKG_REPO"
+git add "packages/preview/typed-smiles/$VERSION"
+git commit -m "typed-smiles:$VERSION"
+git push -u origin "$BRANCH"
 ```
 
-6. Open a PR to `typst/packages:main` with the title format:
+8. Open a PR to `typst/packages:main`.
+
+PR title format:
 
 ```text
-typed-smiles:0.2.0
+typed-smiles:<VERSION>
 ```
 
-Use the official package submission checklist in the PR body.
+Example:
+
+```text
+typed-smiles:0.4.1
+```
+
+For package updates, use only the compact update PR body. Do not include a
+validation section, a checks section, generated artifact notes, or the full
+new-package checklist.
+
+PR body format:
+
+```markdown
+I am submitting
+
+- [ ] a new package
+- [x] an update for a package
+
+Changes:
+
+- <meaningful user-visible change>
+- <meaningful user-visible change>
+```
+
+Example update PR body:
+
+```markdown
+I am submitting
+
+- [ ] a new package
+- [x] an update for a package
+
+Changes:
+
+- Add equilibrium reaction arrow styles via `rxn-arrow(kind: "equilibrium")` and `rxn-arrow(kind: "equilibrium-filled")`.
+- Document the new `rxn-arrow(kind:)` option.
+```
+
+Reserve the full Typst package submission checklist for the initial package
+submission only.
 
 ## Package Bundle Contents
 

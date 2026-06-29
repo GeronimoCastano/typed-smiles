@@ -15,7 +15,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.4.1": *
+#import "@preview/typed-smiles:0.4.2": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -27,7 +27,7 @@ mechanism helpers: `smiles`, `ce`, `mol`, `rxn-arrow`, `reaction`, `atom`,
 Pass a SMILES string to `#smiles()` and it draws the skeletal structure.
 
 ```typst
-#import "@preview/typed-smiles:0.4.1": smiles
+#import "@preview/typed-smiles:0.4.2": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -143,7 +143,7 @@ or any `#RRGGBB` hex code. See the documentation for the full color reference.
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.4.1": ce
+#import "@preview/typed-smiles:0.4.2": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -168,7 +168,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.4.1": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.4.2": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,

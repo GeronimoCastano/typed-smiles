@@ -206,6 +206,42 @@ mod tests {
     }
 
     #[test]
+    fn symmetric_hub_is_mirror_symmetric() {
+        // Tetraethylmethane's four equal arms must be drawn as a mirror-symmetric
+        // figure (the "tweezers" depiction), not a rotational pinwheel. The layout
+        // is built about the vertical axis, so reflecting every atom across that
+        // axis must reproduce the same set of positions.
+        let out = layout_native("CCC(CC)(CC)CC").expect("tetraethylmethane layout failed");
+        let cx = out.atoms.iter().map(|a| a.pos.x).sum::<f64>() / out.atoms.len() as f64;
+        for atom in &out.atoms {
+            let mirrored_x = 2.0 * cx - atom.pos.x;
+            let found = out
+                .atoms
+                .iter()
+                .any(|b| (b.pos.x - mirrored_x).abs() < 1e-6 && (b.pos.y - atom.pos.y).abs() < 1e-6);
+            assert!(
+                found,
+                "no mirror partner for atom at ({:.3}, {:.3})",
+                atom.pos.x, atom.pos.y
+            );
+        }
+    }
+
+    #[test]
+    fn branch_point_routes_largest_subtree_straight_ahead() {
+        // The central acetal carbon has four substituents; the long ester chain
+        // must continue away from the rest of the molecule instead of folding
+        // back over the other ester group.
+        let out =
+            layout_native("BrCC(=O)OC(C)(O)OC(=O)C").expect("acetal diester layout failed");
+        assert!(
+            min_nonbonded_distance(&out) > 0.5,
+            "branches overlap: min non-bonded distance {}",
+            min_nonbonded_distance(&out)
+        );
+    }
+
+    #[test]
     fn steroid_ring_system_has_regular_bond_lengths() {
         let out = layout_native("C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O")
             .expect("steroid-like molecule layout failed");
@@ -551,6 +587,27 @@ mod tests {
             .fold(0.0, f64::max)
     }
 
+    /// Smallest distance between any two atoms that are not bonded to each other.
+    /// A value well below the ~1.0 bond length signals two parts of the molecule
+    /// being laid out on top of one another.
+    fn min_nonbonded_distance(out: &LayoutOutput) -> f64 {
+        let bonded: std::collections::HashSet<(usize, usize)> = out
+            .bonds
+            .iter()
+            .map(|b| (b.from.min(b.to), b.from.max(b.to)))
+            .collect();
+        let mut min = f64::INFINITY;
+        for i in 0..out.atoms.len() {
+            for j in (i + 1)..out.atoms.len() {
+                if bonded.contains(&(i, j)) {
+                    continue;
+                }
+                min = min.min(out.atoms[i].pos.dist(out.atoms[j].pos));
+            }
+        }
+        min
+    }
+
     fn atoms_are_collinear(out: &LayoutOutput, a: usize, b: usize, c: usize) -> bool {
         let a = out.atoms[a].pos;
         let b = out.atoms[b].pos;
@@ -710,3 +767,5 @@ mod tests {
         }
     }
 }
+
+

@@ -1883,3 +1883,53 @@ rotations, large labels, and reaction-level index overlays.
      highlight: highlight((atom(0), atom(2), bond(1, 1, 3)), fill: rgb("#E7C6FF"), include-atoms: true),
    )],
 )
+
+#pagebreak()
+
+== Crowded Branch Points
+
+At a four-substituent branch point (e.g. the acetal carbon in `OC(C)(O)O`
+fragments), the longest chain must continue away from the rest of the molecule
+instead of folding back over an earlier group.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.1em,
+  row-gutter: 1.5em,
+  align: center + horizon,
+
+  [*Acetal diester* \ #text(size: 8pt, `BrCC(=O)OC(C)(O)OC(=O)C`) \
+   #smiles("BrCC(=O)OC(C)(O)OC(=O)C", show-indices: true)],
+
+  [*Rotated* \ #text(size: 8pt, `BrCC(=O)OC(C)(O)OC(=O)C`) \
+   #smiles("BrCC(=O)OC(C)(O)OC(=O)C", rotation: 30deg)],
+
+  [*Branched diester* \ #text(size: 8pt, `CC(=O)OC(C)(C)OC(=O)CC`) \
+   #smiles("CC(=O)OC(C)(C)OC(=O)CC")],
+)
+
+#v(1.5em)
+
+A hub whose arms are all identical is started from the hub and drawn
+mirror-symmetric about the vertical axis, so equal substituents fan out evenly
+instead of curling into a rotational pinwheel. The depiction no longer depends on
+which atom the SMILES string starts from.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.1em,
+  row-gutter: 1.5em,
+  align: center + horizon,
+
+  [*Tetraethylmethane* \ #text(size: 8pt, `CCC(CC)(CC)CC`) \
+   #smiles("CCC(CC)(CC)CC")],
+
+  [*Same, hub-first* \ #text(size: 8pt, `C(CC)(CC)(CC)CC`) \
+   #smiles("C(CC)(CC)(CC)CC")],
+
+  [*Neopentane* \ #text(size: 8pt, `CC(C)(C)C`) \
+   #smiles("CC(C)(C)C")],
+
+  [*Isobutane* \ #text(size: 8pt, `CC(C)C`) \
+   #smiles("CC(C)C")],
+)
