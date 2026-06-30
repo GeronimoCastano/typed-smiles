@@ -397,6 +397,8 @@ section covers the points specific to typed-smiles.
 
 #demo[
   Formal charges inside brackets render as a raised sign after the atom.
+  Hydrogen counts and charge marks use the atom-label size so they remain
+  legible when labels are scaled.
 
   #example(```typ
   #smiles("[O-]C1=CC=CC=C1") \
@@ -422,6 +424,35 @@ arbitrary text label instead, use the abbreviation syntax #c("{N}")
   #example(```typ
   #smiles("OCCN") \
   #smiles("OCCN", show-all-h: true)
+  ```)
+]
+
+== Explicit bracket hydrogens
+
+#demo[
+  A hydrogen written as its own bracket atom (for example the #c("[H]") atoms in
+  #c("C([H])([H])[H]")) is folded into its neighbor's hydrogen count, exactly
+  like an implicit hydrogen. Carbon-bound hydrogens stay hidden and heteroatom
+  hydrogens are still labeled, so a fully hydrogen-suppressed SMILES depicts the
+  same as its skeletal form. Hydrogen counts written inside a single bracket,
+  such as #c("[OH-]") or #c("[NH4+]"), are unaffected and still shown.
+
+  #example(```typ
+  #smiles("C([H])([H])([H])[H]") \
+  #smiles("N([H])([H])C(=O)O")
+  ```)
+]
+
+== Isotopes
+
+#demo[
+  A bracket isotope is drawn as a leading superscript mass number. Isotopically
+  labeled hydrogens such as deuterium #c("[2H]") are kept as drawn atoms rather
+  than folded away.
+
+  #example(```typ
+  #smiles("[2H]OC([2H])([2H])[2H]") \
+  #smiles("[13CH3]C(=O)O")
   ```)
 ]
 

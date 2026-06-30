@@ -168,6 +168,45 @@ mod tests {
     }
 
     #[test]
+    fn bracket_hydrogen_atoms_fold_into_neighbor() {
+        // Methane written with four explicit [H] atoms collapses into one
+        // carbon carrying the folded hydrogen count; the only remaining H is the
+        // virtual label placeholder, never a drawn atom.
+        let out = layout_native("C([H])([H])([H])[H]").expect("methane layout failed");
+        assert_eq!(out.atoms[0].symbol, "C");
+        assert_eq!(out.atoms[0].hcount, 4);
+        assert_eq!(out.atoms[0].implicit_h, 0);
+        let drawn_h = out
+            .atoms
+            .iter()
+            .filter(|a| a.symbol == "H" && !a.virtual_h)
+            .count();
+        assert_eq!(drawn_h, 0);
+    }
+
+    #[test]
+    fn folded_hydrogens_drop_from_neighbor_ordering() {
+        // The dichloromethyl carbon keeps only its three heavy neighbors after
+        // the explicit hydrogen is folded away.
+        let out = layout_native("ClC([H])Cl").expect("dichloromethane layout failed");
+        let heavy = out.atoms.iter().filter(|a| a.symbol != "H").count();
+        assert_eq!(heavy, 3);
+        assert_eq!(out.bonds.iter().filter(|b| !b.virtual_bond).count(), 2);
+    }
+
+    #[test]
+    fn isotopic_and_charged_hydrogens_are_kept() {
+        // Deuterium is a real, drawn atom; only the plain [H] atoms fold away.
+        let out = layout_native("[2H]C([H])([H])[H]").expect("deuteromethane layout failed");
+        let drawn_h = out
+            .atoms
+            .iter()
+            .filter(|a| a.symbol == "H" && !a.virtual_h)
+            .count();
+        assert_eq!(drawn_h, 1);
+    }
+
+    #[test]
     fn double_bond() {
         let out = layout_native("C=C").expect("ethylene layout failed");
         assert_eq!(out.bonds[0].order, 2);

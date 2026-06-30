@@ -1147,6 +1147,18 @@ beside a heavy atom in a larger molecule.
   [*Terminal #raw("C[NH2]")* \ #smiles("C[NH2]", font-size: 22pt, show-indices: true)],
 )
 
+Full-size subscript and superscript labels should stay legible while index
+badges remain centered on the referenced atom or H group.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 2em,
+  align: center + horizon,
+  [*#raw("[NH4+]")* \ #smiles("[NH4+]", font-size: 22pt, show-indices: true)],
+  [*#raw("C[NH3+]")* \ #smiles("C[NH3+]", font-size: 22pt, show-indices: true)],
+  [*#raw("C[N+](=O)[O-]")* \ #smiles("C[N+](=O)[O-]", font-size: 22pt, show-indices: true)],
+)
+
 Curly arrows can now target the H group by index.
 
 #reaction(
@@ -1932,4 +1944,27 @@ which atom the SMILES string starts from.
 
   [*Isobutane* \ #text(size: 8pt, `CC(C)C`) \
    #smiles("CC(C)C")],
+)
+
+
+
+= Explicit [H] atoms fold into their neighbor
+
+Plain bracket hydrogens written as separate `[H]` atoms are folded into the
+hydrogen count of the atom they bond to, just like implicit hydrogens. Carbon
+hydrogens stay hidden; heteroatom hydrogens (the two amide N–H here) still show.
+Charged or isotopic hydrogens such as `[2H]` are kept as drawn atoms.
+
+#align(center)[
+  #smiles("C1=C([H])C(OC([H])([H])C(=O)N([H])N([H])C(=O)C([H])([H])OC2=C([H])C(C([H])([H])[H])=C(Cl)C(C([H])([H])[H])=C2[H])=C([H])C([H])=C1OC([H])([H])[H]", scale: 0.5)
+]
+
+#grid(
+  columns: 2,
+  gutter: 1em,
+  [*Deuterium kept* \ #text(size: 8pt, `[2H]C([H])([H])[H]`) \
+   #smiles("[2H]C([H])([H])[H]")],
+
+  [*All-H still works* \ #text(size: 8pt, `C([H])([H])([H])[H]`, ) \
+   #smiles("C([H])([H])([H])[H]", show-all-h: true)],
 )

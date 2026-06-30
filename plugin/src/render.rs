@@ -12,6 +12,9 @@ pub struct AtomOutput {
     pub implicit_h: u8,
     /// Formal charge (shown as superscript when != 0)
     pub charge: i8,
+    /// Mass number from a bracket isotope (shown as a leading superscript when > 0).
+    #[serde(default)]
+    pub isotope: u16,
     /// Non-bonding electron-pair count for optional skeletal lone-pair rendering.
     #[serde(default)]
     pub lone_pairs: u8,

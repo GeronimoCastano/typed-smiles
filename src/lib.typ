@@ -50,12 +50,13 @@
 #let _has-label(atom, show-all-h: false) = {
   let has-abbrev = atom.at("abbrev", default: "") != ""
   let has-hetero = (not _is-carbon(atom) and atom.symbol != "*") or (atom.charge != 0)
+  let has-isotope = atom.at("isotope", default: 0) > 0
   let has-explicit-h = atom.hcount > 0 and (show-all-h or not _is-carbon(atom))
   let has-implicit-h = _visible-implicit-h(
     atom,
     show-all-h: show-all-h,
   ) > 0
-  has-abbrev or has-hetero or has-explicit-h or has-implicit-h
+  has-abbrev or has-hetero or has-isotope or has-explicit-h or has-implicit-h
 }
 
 #let _atom-color(sym) = {
@@ -140,8 +141,8 @@
   let inner-trim      = 0.07
   let multiple-bond-trim = 0.10
   let stroke-w        = actual-bond-stroke
-  let subscript-size  = actual-font-size * 0.62
-  let superscript-size = actual-font-size * 0.62
+  let subscript-size  = actual-font-size * 1.00
+  let superscript-size = actual-font-size * 1.00
   let lone-pair-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.6)
   let lone-pair-terminal-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.5)
   let lone-pair-dot-r = calc.max(0.018, stroke-units * 0.75)
@@ -685,7 +686,13 @@
           h(0.12em) + super(atom-label(charge-str, fill: fill, size: superscript-size))
         }
 
-        let sym-text = atom-label(atom.symbol, fill: fill)
+        let isotope = atom.at("isotope", default: 0)
+        let isotope-content = if isotope > 0 {
+          super(atom-label(str(isotope), fill: fill, size: superscript-size))
+        } else {
+          []
+        }
+        let sym-text = isotope-content + atom-label(atom.symbol, fill: fill)
         let h-text = if abbrev != "" or h-count == 0 or (_is-carbon(atom) and not show-all-h) {
           []
         } else if h-count == 1 {
@@ -969,8 +976,8 @@
   let font = sp.at("font", default: "New Computer Modern")
   let show-all-h = sp.at("show-all-h", default: false)
   let label-margin = calc.max(0.27, fs / cs * 0.70)
-  let subscript-size = fs * 0.62
-  let superscript-size = fs * 0.62
+  let subscript-size = fs * 1.00
+  let superscript-size = fs * 1.00
   let atom-label(body, size: fs) = text(
     size: size,
     font: font,

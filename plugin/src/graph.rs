@@ -101,6 +101,8 @@ pub struct Atom {
     pub aromatic: bool,
     pub hcount: u8,
     pub has_explicit_h: bool,
+    /// Mass number from a bracket isotope specification, e.g. `[2H]`.
+    pub isotope: Option<u16>,
     pub charge: i8,
     pub chirality: AtomChirality,
     /// Non-empty when this atom was created by a `{label}` abbreviation substitution.
@@ -230,6 +232,31 @@ impl GraphBuilder {
 
         // Add this atom
         let atom = smiles_atom_to_atom(&ba.atom);
+
+        // Fold a terminal plain hydrogen (`[H]`) into its heavy neighbor's
+        // hydrogen count instead of keeping it as a drawn atom, mirroring how
+        // depiction tools treat explicit hydrogens. Isotopic, charged, or
+        // further-bonded hydrogens, and H2, stay as real atoms.
+        if let Some(prev) = prev_atom {
+            if atom.symbol == "H"
+                && atom.charge == 0
+                && atom.isotope.is_none()
+                && ba.ring_bonds.is_empty()
+                && ba.branches.is_empty()
+                && chain.chain.is_none()
+                && self.atoms[prev].symbol != "H"
+            {
+                self.atoms[prev].hcount = self.atoms[prev].hcount.saturating_add(1);
+                self.atoms[prev].has_explicit_h = true;
+                // Release the neighbor slot the parent reserved for this bond so
+                // it is dropped from the parent's neighbor ordering.
+                if let Some(slot) = self.neighbor_slots[prev].last_mut() {
+                    *slot = -1;
+                }
+                return;
+            }
+        }
+
         let cur = self.add_atom(atom);
 
         // Bond to the previous atom using the bond the PARENT passed down; the
@@ -314,6 +341,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             aromatic: false,
             hcount: 0,
             has_explicit_h: false,
+            isotope: None,
             charge: 0,
             chirality: AtomChirality::None,
             abbrev: String::new(),
@@ -325,6 +353,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             aromatic: false,
             hcount: 0,
             has_explicit_h: false,
+            isotope: None,
             charge: 0,
             chirality: AtomChirality::None,
             abbrev: String::new(),
@@ -344,6 +373,7 @@ fn bracket_to_atom(b: &BracketAtom) -> Atom {
         aromatic,
         hcount: b.hcount,
         has_explicit_h: true,
+        isotope: b.isotope,
         charge: b.charge,
         chirality: b
             .chiral
