@@ -4,6 +4,9 @@ plugin/target/
 # Compiled test outputs
 tests/*.pdf
 
+# Editor compile artifacts of the library source
+src/*.pdf
+
 # Local agent context files
 AGENTS.md
 CLAUDE.md
