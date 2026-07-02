@@ -10,11 +10,13 @@
 
   stack(
     spacing: 0.4cm,
-    strong[Carbonyl highlight],
+    strong[Bond path highlight],
     smiles(
-      "CC(=O)C",
-      lone-pairs: "dots",
-      highlight(bond(1, 2), fill: rgb("#FFE45C"), include-atoms: true),
+      "N1CCN(CC1)C(C(F)=C2)=CC(=C2C4=O)N(C3CC3)C=C4C(=O)O",
+      highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23), bond(23, 25)), fill: rgb("#96BF0D"), include-atoms: true),
+      scale: 0.5,
+      bond-stroke: 0.8pt,
+      rotation: 90deg,
     ),
   ),
 
@@ -24,7 +26,12 @@
     reaction(
       mol("[OH-]", lone-pairs: "dots", offset: (1.5, 1)),
       mol("C(I)(C)C"),
-      arrow(from: lp(0, 0), to: atom(1, 0), bend: "left"),
+      arrow(
+        from: lp(0, 0, offset: (-0.3, -0.2)),
+        to: atom(1, 0, offset: (0.1, -0.1)),
+        bend: "right",
+        color: black,
+      ),
     ),
   ),
 
