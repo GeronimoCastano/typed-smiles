@@ -7,7 +7,7 @@
 #import "@preview/codly-languages:0.1.1": *
 #import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets
 
-#let version = "0.4.2"
+#let version = "0.5.0"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -169,13 +169,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.4.2": *
+#import "@preview/typed-smiles:0.5.0": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.4.2": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.5.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports five symbols:
@@ -383,15 +383,37 @@ section covers the points specific to typed-smiles.
 == Aromatic rings
 
 #demo[
-  #warn[The bundled parser does not yet read lowercase aromatic atoms
-  (#c("c1ccccc1")). Write aromatic rings in Kekulé form: uppercase atoms with
-  explicit alternating double bonds.]
+  Aromatic rings can be written in either OpenSMILES form: lowercase aromatic
+  atoms (#c("c1ccccc1")) or Kekulé notation with explicit alternating double
+  bonds (#c("C1=CC=CC=C1")). Aromatic input is kekulized on parse, so both
+  render identically.
 
   #example(```typ
+  #smiles("c1ccccc1") \
   #smiles("C1=CC=CC=C1") \
-  #smiles("C1=CC=NC=C1")
+  #smiles("c1ccncc1")
   ```)
 ]
+
+#demo[
+  Bracket aromatic atoms carry their hydrogen count explicitly, as in pyrrole's
+  #c("[nH]"). A single bond between two aromatic rings (biphenyl) may be
+  written with or without the explicit #c("-").
+
+  #example(```typ
+  #smiles("c1cc[nH]c1") \
+  #smiles("c1occc1") \
+  #smiles("c1ccccc1-c1ccccc1", scale: 0.8)
+  ```)
+]
+
+#note[Kekulization does not renumber anything: atom indices follow SMILES
+writing order for aromatic input exactly as for Kekulé input, so
+#c("show-indices"), #c("highlight(...)"), and #c("arrow(...)") references work
+unchanged, including on ring bonds whose double bond only appears after
+kekulization. A ring that cannot be kekulized (for example pyrrole written
+#c("c1ccnc1"), without the #c("[nH]") hydrogen) or an aromatic atom outside a
+ring is reported as an error.]
 
 == Charges
 
@@ -410,6 +432,26 @@ section covers the points specific to typed-smiles.
 #note[A bracketed element such as #c("[N]") is a nitrogen atom. To print an
 arbitrary text label instead, use the abbreviation syntax #c("{N}")
 (see @sec-abbrev).]
+
+== Salts and disconnected structures
+
+#demo[
+  A dot (#c(".")) means "no bond": it separates disconnected fragments, as in
+  salts, counterions, and hydrates. Each fragment is laid out on its own and
+  the fragments are arranged left to right in writing order.
+
+  #example(```typ
+  #smiles("CC(=O)[O-].[Na+]") \
+  #smiles("[NH4+].[Cl-]") \
+  #smiles("CC[NH3+].[Cl-]")
+  ```)
+]
+
+#note[Atom indices stay global across fragments, still following SMILES
+writing order, so #c("show-indices"), #c("highlight(...)"), and
+#c("arrow(...)") can reference atoms in any fragment of the same
+#c("smiles()") call. A ring closure written across a dot (as in the
+OpenSMILES example #c("C1.C1"), ethane) still forms its bond.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Hydrogens <sec-hydrogens>
@@ -515,6 +557,26 @@ adjustment (see @sec-limits).]
   cis: #smiles("F/C=C\F")
   ```)
 ]
+
+== Square-planar centers: #raw("@SP1"), #raw("@SP2"), #raw("@SP3")
+
+#demo[
+  Square-planar stereochemistry is depicted exactly: the four neighbors sit at
+  90° around the center, arranged so the line traced through them in SMILES
+  order forms the class's shape — 'U' for #c("@SP1"), '4' for #c("@SP2"), 'Z'
+  for #c("@SP3"). The classic example is cis- versus trans-platin.
+
+  #example(```typ
+  cis: #smiles("N[Pt@SP1](N)(Cl)Cl")
+  #h(2em)
+  trans: #smiles("N[Pt@SP2](N)(Cl)Cl")
+  ```)
+]
+
+#note[Trigonal-bipyramidal (#c("@TB1")–#c("@TB20")), octahedral
+(#c("@OH1")–#c("@OH30")), and allenal (#c("@AL1"), #c("@AL2")) centers are
+accepted and drawn with correct connectivity, but without stereo decoration —
+their 3D arrangement is not translated into wedges.]
 
 == Manual wedges: #raw("!w") and #raw("!h")
 
@@ -1004,7 +1066,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.4.2": *
+#import "@preview/typed-smiles:0.5.0": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
@@ -1028,10 +1090,11 @@ parameter.
 = Limitations <sec-limits>
 // ═════════════════════════════════════════════════════════════════════════════
 
-- Lowercase aromatic SMILES (#c("c1ccccc1")) are not parsed. Use Kekulé notation.
 - Directional bonds (#c("/"), #c("\\")) draw the correct cis/trans geometry, but
   E/Z descriptors are not computed.
 - R/S and E/Z descriptors are not calculated.
+- Trigonal-bipyramidal (#c("@TB")), octahedral (#c("@OH")), and allenal
+  (#c("@AL")) centers are accepted but drawn without stereo wedges.
 - Ring stereochemistry between adjacent centers and bridged bicyclics can overlap
   or need a manual adjustment (try #c("rotation"), or the manual #c("!w") and
   #c("!h") wedges).
@@ -1047,8 +1110,13 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Syntax*], [*Meaning*],
+  [#c("c") #c("n") #c("o") …], [Aromatic atom (lowercase); kekulized on parse.],
+  [#c(".")], [Disconnected fragment (no bond): salts, hydrates.],
   [#c("[...]")], [Bracket atom (any element, charges, explicit H).],
   [#c("@") / #c("@@")], [Tetrahedral anticlockwise / clockwise.],
+  [#c("@SP1")–#c("@SP3")], [Square planar (U / 4 / Z shape), depicted exactly.],
+  [#c("@TB") #c("@OH") #c("@AL")], [Extended stereo: accepted, drawn without wedges.],
+  [#c("$")], [Quadruple bond (four parallel lines).],
   [#c("/") #c("\\")], [Double-bond cis/trans geometry.],
   [#c("!w") / #c("!h")], [Manual solid / hashed wedge (typed-smiles extension).],
   [#c("{label}")], [Abbreviated group pseudo-atom.],

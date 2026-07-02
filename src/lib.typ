@@ -433,17 +433,19 @@
         split-line(q1x + ux * trim - ox, q1y + uy * trim - oy, q2x - ux * trim - ox, q2y - uy * trim - oy, c1, c2)
 
       } else if bond.order == 4 {
-        split-line(q1x, q1y, q2x, q2y, c1, c2)
-        let ox = -uy * double-gap
-        let oy =  ux * double-gap
-        line(
-          (q1x + ox, q1y + oy), (mx + ox, my + oy),
-          stroke: (paint: c1, thickness: stroke-w, dash: "dashed"),
-        )
-        line(
-          (mx + ox, my + oy), (q2x + ox, q2y + oy),
-          stroke: (paint: c2, thickness: stroke-w, dash: "dashed"),
-        )
+        // Quadruple bond: four parallel lines symmetric about the bond axis,
+        // outer pair shortened like the outer lines of a triple bond.
+        let trim = calc.min(multiple-bond-trim, len * 0.25)
+        for k in (-1.5, -0.5, 0.5, 1.5) {
+          let ox = -uy * double-gap * k
+          let oy =  ux * double-gap * k
+          let t = if calc.abs(k) > 1.0 { trim } else { 0.0 }
+          split-line(
+            q1x + ux * t + ox, q1y + uy * t + oy,
+            q2x - ux * t + ox, q2y - uy * t + oy,
+            c1, c2,
+          )
+        }
       }
     }
 

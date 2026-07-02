@@ -15,7 +15,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.4.2": *
+#import "@preview/typed-smiles:0.5.0": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -25,9 +25,12 @@ mechanism helpers: `smiles`, `ce`, `mol`, `rxn-arrow`, `reaction`, `atom`,
 ## Basic molecule drawing
 
 Pass a SMILES string to `#smiles()` and it draws the skeletal structure.
+Aromatic rings can be written either in lowercase aromatic notation
+(`c1ccccc1`) or in Kekulé form (`C1=CC=CC=C1`); aromatic input is kekulized
+on parse and both render identically.
 
 ```typst
-#import "@preview/typed-smiles:0.4.2": smiles
+#import "@preview/typed-smiles:0.5.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -143,7 +146,7 @@ or any `#RRGGBB` hex code. See the documentation for the full color reference.
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.4.2": ce
+#import "@preview/typed-smiles:0.5.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -168,7 +171,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.4.2": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.5.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -382,12 +385,23 @@ styling; other arguments pass through to chemformula.
 The package uses the [`smiles-parser`](https://crates.io/crates/smiles-parser)
 crate for parsing.
 
+Aromatic lowercase notation (`c1ccccc1`, `c1cc[nH]c1`, …) is kekulized on
+parse following OpenSMILES; rings that cannot be kekulized are reported as
+errors.
+
+Dot-disconnected SMILES (`CC(=O)[O-].[Na+]`) draw each fragment separately,
+side by side in writing order — salts, counterions, and hydrates render
+without a spurious bond between fragments.
+
 Current limitations:
 
-- Aromatic lowercase atoms are not parsed (`c1ccccc1` → use `C1=CC=CC=C1`).
 - `@`/`@@` and `/`/`\` stereochemistry is depicted but R/S and E/Z descriptors are not computed.
+- Square-planar `@SP1`–`@SP3` centers are depicted exactly (the geometry is
+  planar); quadruple bonds (`$`) render as four parallel lines.
+- Trigonal-bipyramidal (`@TB`), octahedral (`@OH`), and allenal (`@AL`)
+  centers are accepted and drawn with correct connectivity, but without
+  stereo wedges.
 - Bridged bicyclics may overlap; template matching is not implemented.
-- Allene, square-planar, and octahedral stereochemistry are not supported.
 
 ## Building
 

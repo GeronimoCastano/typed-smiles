@@ -14,6 +14,9 @@ use std::f64::consts::PI;
 use crate::graph::{AtomChirality, BondDirection, BondOrder, BondStereo, MoleculeGraph};
 use crate::render::{AtomOutput, BondOutput, LayoutOutput, Vec2};
 
+/// Gap between the bounding boxes of dot-separated fragments, in bond lengths.
+const FRAGMENT_GAP: f64 = 1.5;
+
 pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
     if mol.n_atoms() == 0 {
         return Ok(LayoutOutput {
@@ -24,71 +27,11 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
         });
     }
 
-    let mut coords = vec![Vec2::new(0.0, 0.0); mol.n_atoms()];
-    let mut placed = vec![false; mol.n_atoms()];
+    let coords = layout_coords(mol)?;
 
-    // ── 1. Ring detection ──────────────────────────────────────────────────
+    // ── Build output ──────────────────────────────────────────────────────
 
     let rings = find_rings(mol);
-
-    // ── 2. Place ring systems first ───────────────────────────────────────
-
-    if !rings.is_empty() {
-        place_initial_ring_system(mol, &rings, &mut coords, &mut placed);
-    }
-
-    // ── 3. Place ring substituents radially outward ──────────────────────
-
-    place_substituents_for_placed_rings(mol, &rings, &mut coords, &mut placed);
-
-    // ── 4. Place remaining acyclic atoms (pure chain molecules) ──────────
-
-    // For a ring-free molecule, grow the chain from the graph's center atom when
-    // that center is a symmetric branch hub, so structures like a quaternary
-    // carbon bearing four equal arms are laid out symmetrically instead of
-    // lopsidedly from atom 0.
-    let (root, symmetric_hub_root) = match placed.iter().position(|&p| p) {
-        Some(p) => (p, false),
-        None => acyclic_root(mol),
-    };
-    if !placed[root] {
-        coords[root] = Vec2::new(0.0, 0.0);
-        placed[root] = true;
-    }
-
-    // A symmetric hub places its arms straddling the vertical axis so the figure
-    // reads upright and mirror-symmetric; a plain chain starts at -30° so the
-    // first bond is horizontal in the conventional zigzag.
-    let initial_dir = if symmetric_hub_root {
-        PI / 2.0 + PI / mol.adj[root].len() as f64
-    } else {
-        -PI / 6.0
-    };
-    place_chain(
-        mol,
-        root,
-        initial_dir,
-        symmetric_hub_root,
-        &rings,
-        &mut coords,
-        &mut placed,
-    );
-
-    apply_cis_trans_layout(mol, &mut coords)?;
-
-    // ── 5. Center the molecule ────────────────────────────────────────────
-
-    center_coords(&mut coords);
-
-    // Mirror to match the layout handedness used by RDKit/PubChem, so wedges read
-    // in the conventional orientation. Done before stereo assignment, so the
-    // recomputed wedges still depict the correct enantiomer.
-    for c in coords.iter_mut() {
-        c.x = -c.x;
-    }
-
-    // ── 6. Build output ───────────────────────────────────────────────────
-
     let ring_bonds = ring_bond_set(mol, &rings);
     let mut rendered_stereo: Vec<BondStereo> = mol.bonds.iter().map(|b| b.stereo).collect();
     let mut stereo_h: Vec<Option<(BondStereo, Vec2)>> = vec![None; mol.n_atoms()];
@@ -196,10 +139,11 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
         if mol_atom.has_explicit_h && mol_atom.hcount > 0 {
             // Bracket atom with explicit H (e.g. [OH-], [NH4+]).
             // Skip atoms whose H is drawn as a stereo label (stereo_h set) or
-            // absorbed into a tetrahedral stereo bond assignment (chirality set,
-            // which causes preferred_tetrahedral_bond to carry the stereo on a
-            // neighbor bond instead of drawing an H label).
-            if stereo_h[i].is_some() || mol_atom.chirality != AtomChirality::None {
+            // absorbed into a tetrahedral stereo bond assignment (which causes
+            // preferred_tetrahedral_bond to carry the stereo on a neighbor
+            // bond instead of drawing an H label). Non-tetrahedral chirality
+            // classes never consume the H, so their label still renders.
+            if stereo_h[i].is_some() || mol_atom.chirality.is_tetrahedral() {
                 continue;
             }
             let angle = h_label_angle(&existing_adj);
@@ -230,6 +174,181 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
         bbox_width: bbox_w,
         bbox_height: bbox_h,
     })
+}
+
+/// Coordinates for every atom. Each connected fragment is laid out on its own;
+/// dot-separated fragments are then arranged left to right in writing order,
+/// vertically centered, with a fixed gap between their bounding boxes.
+fn layout_coords(mol: &MoleculeGraph) -> Result<Vec<Vec2>, String> {
+    let components = connected_components(mol);
+    if components.len() <= 1 {
+        return place_molecule(mol);
+    }
+
+    let mut coords = vec![Vec2::new(0.0, 0.0); mol.n_atoms()];
+    let mut cursor = 0.0;
+    for (k, comp) in components.iter().enumerate() {
+        let sub = fragment_subgraph(mol, comp);
+        let sub_coords = place_molecule(&sub)?;
+
+        let min_x = sub_coords.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
+        let max_x = sub_coords.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
+        let min_y = sub_coords.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
+        let max_y = sub_coords.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+        let mid_y = (min_y + max_y) / 2.0;
+
+        if k > 0 {
+            cursor += FRAGMENT_GAP;
+        }
+        for (local, &global) in comp.iter().enumerate() {
+            coords[global] = Vec2::new(
+                sub_coords[local].x - min_x + cursor,
+                sub_coords[local].y - mid_y,
+            );
+        }
+        cursor += max_x - min_x;
+    }
+
+    center_coords(&mut coords);
+    Ok(coords)
+}
+
+/// Lays out one connected molecule: rings first, then substituents, then
+/// acyclic chains; centered and mirrored to the conventional handedness.
+fn place_molecule(mol: &MoleculeGraph) -> Result<Vec<Vec2>, String> {
+    let mut coords = vec![Vec2::new(0.0, 0.0); mol.n_atoms()];
+    let mut placed = vec![false; mol.n_atoms()];
+
+    // ── 1. Ring detection ──────────────────────────────────────────────────
+
+    let rings = find_rings(mol);
+
+    // ── 2. Place ring systems first ───────────────────────────────────────
+
+    if !rings.is_empty() {
+        place_initial_ring_system(mol, &rings, &mut coords, &mut placed);
+    }
+
+    // ── 3. Place ring substituents radially outward ──────────────────────
+
+    place_substituents_for_placed_rings(mol, &rings, &mut coords, &mut placed);
+
+    // ── 4. Place remaining acyclic atoms (pure chain molecules) ──────────
+
+    // For a ring-free molecule, grow the chain from the graph's center atom when
+    // that center is a symmetric branch hub, so structures like a quaternary
+    // carbon bearing four equal arms are laid out symmetrically instead of
+    // lopsidedly from atom 0.
+    let (root, symmetric_hub_root) = match placed.iter().position(|&p| p) {
+        Some(p) => (p, false),
+        None => acyclic_root(mol),
+    };
+    if !placed[root] {
+        coords[root] = Vec2::new(0.0, 0.0);
+        placed[root] = true;
+    }
+
+    // A symmetric hub places its arms straddling the vertical axis so the figure
+    // reads upright and mirror-symmetric; a plain chain starts at -30° so the
+    // first bond is horizontal in the conventional zigzag.
+    let initial_dir = if symmetric_hub_root {
+        PI / 2.0 + PI / mol.adj[root].len() as f64
+    } else {
+        -PI / 6.0
+    };
+    place_chain(
+        mol,
+        root,
+        initial_dir,
+        symmetric_hub_root,
+        &rings,
+        &mut coords,
+        &mut placed,
+    );
+
+    apply_cis_trans_layout(mol, &mut coords)?;
+
+    // ── 5. Center the molecule ────────────────────────────────────────────
+
+    center_coords(&mut coords);
+
+    // Mirror to match the layout handedness used by RDKit/PubChem, so wedges read
+    // in the conventional orientation. Done before stereo assignment, so the
+    // recomputed wedges still depict the correct enantiomer.
+    for c in coords.iter_mut() {
+        c.x = -c.x;
+    }
+
+    Ok(coords)
+}
+
+/// Connected components as sorted atom-index lists, ordered by first atom, so
+/// fragments follow SMILES writing order.
+fn connected_components(mol: &MoleculeGraph) -> Vec<Vec<usize>> {
+    let n = mol.n_atoms();
+    let mut seen = vec![false; n];
+    let mut components = Vec::new();
+    for start in 0..n {
+        if seen[start] {
+            continue;
+        }
+        let mut component = vec![start];
+        seen[start] = true;
+        let mut stack = vec![start];
+        while let Some(u) = stack.pop() {
+            for &(v, _) in &mol.adj[u] {
+                if !seen[v] {
+                    seen[v] = true;
+                    component.push(v);
+                    stack.push(v);
+                }
+            }
+        }
+        component.sort_unstable();
+        components.push(component);
+    }
+    components
+}
+
+/// Copy of one connected component with atom and bond indices renumbered to
+/// 0..k, so the single-molecule placement can run on it unchanged.
+fn fragment_subgraph(mol: &MoleculeGraph, component: &[usize]) -> MoleculeGraph {
+    let mut local_atom = vec![usize::MAX; mol.n_atoms()];
+    for (local, &global) in component.iter().enumerate() {
+        local_atom[global] = local;
+    }
+
+    let mut local_bond = vec![usize::MAX; mol.bonds.len()];
+    let mut bonds = Vec::new();
+    for (b_idx, bond) in mol.bonds.iter().enumerate() {
+        // Bonds never cross components, so checking one endpoint suffices.
+        if local_atom[bond.from] != usize::MAX {
+            local_bond[b_idx] = bonds.len();
+            let mut b = bond.clone();
+            b.from = local_atom[bond.from];
+            b.to = local_atom[bond.to];
+            bonds.push(b);
+        }
+    }
+
+    MoleculeGraph {
+        atoms: component.iter().map(|&g| mol.atoms[g].clone()).collect(),
+        bonds,
+        adj: component
+            .iter()
+            .map(|&g| {
+                mol.adj[g]
+                    .iter()
+                    .map(|&(v, b)| (local_atom[v], local_bond[b]))
+                    .collect()
+            })
+            .collect(),
+        neighbor_bonds: component
+            .iter()
+            .map(|&g| mol.neighbor_bonds[g].iter().map(|&b| local_bond[b]).collect())
+            .collect(),
+        has_preceding: component.iter().map(|&g| mol.has_preceding[g]).collect(),
+    }
 }
 
 pub(crate) fn implicit_h_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {
@@ -548,11 +667,13 @@ fn apply_tetrahedral_stereo(
 ) -> Result<(), String> {
     for (center, atom) in mol.atoms.iter().enumerate() {
         let parity = match atom.chirality {
-            AtomChirality::None => continue,
+            // Square-planar centers are depicted exactly by the flat layout;
+            // TB/OH/AL centers are accepted without stereo decoration.
+            AtomChirality::None
+            | AtomChirality::SquarePlanar(_)
+            | AtomChirality::Undepicted => continue,
             AtomChirality::Unsupported => {
-                return Err(
-                    "Only tetrahedral @, @@, @TH1, and @TH2 stereochemistry is supported".into(),
-                );
+                return Err("Unsupported chirality class".into());
             }
             AtomChirality::TetraAnti => -1.0,      // @  ⇒ negative signed volume
             AtomChirality::TetraClockwise => 1.0,  // @@ ⇒ positive signed volume
@@ -1527,16 +1648,19 @@ fn place_chain(
             size_b.cmp(&size_a).then_with(|| a.2.cmp(&b.2))
         });
 
-        let dirs = chain_neighbor_directions(
-            mol,
-            u,
-            dir,
-            sign,
-            unplaced_neighbors.len(),
-            incoming_bond_idx.is_some(),
-            coords,
-            placed,
-        );
+        let dirs = square_planar_directions(mol, u, &unplaced_neighbors, coords, placed)
+            .unwrap_or_else(|| {
+                chain_neighbor_directions(
+                    mol,
+                    u,
+                    dir,
+                    sign,
+                    unplaced_neighbors.len(),
+                    incoming_bond_idx.is_some(),
+                    coords,
+                    placed,
+                )
+            });
 
         for (i, &(v, bond_idx, _)) in unplaced_neighbors.iter().enumerate() {
             let new_dir = dirs[i];
@@ -1569,6 +1693,75 @@ fn place_chain(
 
 /// Computes outgoing bond directions for the `count` unplaced neighbors of `u`.
 ///
+/// Exact placement for a square-planar (`@SP`) center with four neighbors:
+/// they sit at 90° steps around the atom, in the cyclic order given by the
+/// shape class — the line traced through the neighbors in SMILES order reads
+/// 'U' (@SP1), '4' (@SP2), or 'Z' (@SP3). An already-placed neighbor anchors
+/// the rotation. Returns `None` (generic placement) for anything that is not
+/// a clean four-coordinate @SP chain atom.
+fn square_planar_directions(
+    mol: &MoleculeGraph,
+    center: usize,
+    unplaced: &[(usize, usize, usize)],
+    coords: &[Vec2],
+    placed: &[bool],
+) -> Option<Vec<f64>> {
+    let AtomChirality::SquarePlanar(class) = mol.atoms[center].chirality else {
+        return None;
+    };
+    let neighbor_bonds = &mol.neighbor_bonds[center];
+    if neighbor_bonds.len() != 4 {
+        return None;
+    }
+
+    // Neighbor atoms in SMILES writing order.
+    let writing: Vec<usize> = neighbor_bonds
+        .iter()
+        .map(|&b| {
+            let bond = &mol.bonds[b];
+            if bond.from == center {
+                bond.to
+            } else {
+                bond.from
+            }
+        })
+        .collect();
+
+    // corner_seq[j] = writing-order index occupying corner j; corners are 90°
+    // apart. The three classes are the three ways to pair up trans neighbors.
+    let corner_seq: [usize; 4] = match class {
+        1 => [0, 1, 2, 3], // U: consecutive around the square
+        2 => [0, 2, 1, 3], // 4: n1 trans n2
+        _ => [0, 1, 3, 2], // Z: n1 trans n4
+    };
+    let mut corner_of = [0usize; 4];
+    for (corner, &w) in corner_seq.iter().enumerate() {
+        corner_of[w] = corner;
+    }
+
+    // An already-placed neighbor (the atom we were reached from, or a prior
+    // fragment of the walk) fixes the square's rotation; a bare root center
+    // defaults to an upright + cross.
+    let base = writing
+        .iter()
+        .enumerate()
+        .find(|&(_, &a)| placed[a])
+        .map(|(w_idx, &a)| {
+            let angle = (coords[a].y - coords[center].y).atan2(coords[a].x - coords[center].x);
+            angle - corner_of[w_idx] as f64 * (PI / 2.0)
+        })
+        .unwrap_or(PI);
+
+    let dirs = unplaced
+        .iter()
+        .map(|&(atom, _, _)| {
+            let w_idx = writing.iter().position(|&a| a == atom)?;
+            Some(normalize_angle(base + corner_of[w_idx] as f64 * (PI / 2.0)))
+        })
+        .collect::<Option<Vec<f64>>>()?;
+    Some(dirs)
+}
+
 /// One or two substituents use the ±60° zigzag; three or more are spread across
 /// the angular space left free by already-placed neighbors.
 fn chain_neighbor_directions(
@@ -1711,7 +1904,7 @@ fn is_linear_atom(mol: &MoleculeGraph, atom_idx: usize) -> bool {
     for &(_, bond_idx) in &mol.adj[atom_idx] {
         match mol.bonds[bond_idx].order {
             BondOrder::Double => double_count += 1,
-            BondOrder::Triple => has_triple = true,
+            BondOrder::Triple | BondOrder::Quadruple => has_triple = true,
             BondOrder::Single | BondOrder::Aromatic => {}
         }
     }
@@ -1837,6 +2030,7 @@ mod tests {
         let mol = MoleculeGraph::from_smiles(
             "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O",
             Vec::new(),
+            Vec::new(),
         )
         .expect("steroid-like molecule should parse");
         let rings = find_rings(&mol);
@@ -1847,6 +2041,7 @@ mod tests {
     fn fused_double_bond_prefers_unsaturated_ring_side() {
         let mol = MoleculeGraph::from_smiles(
             "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O",
+            Vec::new(),
             Vec::new(),
         )
         .expect("steroid-like molecule should parse");

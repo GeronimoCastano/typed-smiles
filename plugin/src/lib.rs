@@ -1,5 +1,6 @@
 mod error;
 mod graph;
+mod kekulize;
 mod layout;
 mod render;
 
@@ -8,14 +9,19 @@ pub use render::LayoutOutput;
 use graph::MoleculeGraph;
 use layout::compute_layout;
 
-// ── Extended SMILES preprocessing ────────────────────────────────────────────
+// ── SMILES preprocessing ─────────────────────────────────────────────────────
 //
-// Handles two extensions before handing the string to smiles-parser:
+// Rewrites the input into the subset of SMILES that smiles-parser accepts and
+// collects side-channel data the parser cannot carry:
 //
 //   {label}  →  [*]   Abbreviated group (e.g. {PPh3}, {OEt}).
 //                     The Nth [*] atom in the output gets abbrev = the Nth label.
+//   c, n, …  →  C, N  Unbracketed aromatic atoms are uppercased (the parser
+//                     only accepts aliphatic organic-subset symbols); a marker
+//                     records which atoms were aromatic so the graph stage can
+//                     kekulize. Bracket aromatics ([nH], [se]) parse natively.
 //
-// The cleaned string is valid standard SMILES; extensions are stripped out.
+// The cleaned string is valid parser input; extensions are stripped out.
 
 pub(crate) struct Preprocessed {
     pub smiles: String,
@@ -24,6 +30,9 @@ pub(crate) struct Preprocessed {
     /// One flag for each `/` or `\` token in `smiles`.
     /// `true` means the token came from a typed-smiles `!w`/`!h` drawing extension.
     pub forced_direction_markers: Vec<bool>,
+    /// One flag per unbracketed organic-subset atom token in `smiles`, in
+    /// writing order. `true` means the atom was written lowercase (aromatic).
+    pub aromatic_atom_markers: Vec<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,9 +45,20 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
     let mut smiles = String::with_capacity(input.len());
     let mut abbrev_labels = Vec::new();
     let mut forced_direction_markers = Vec::new();
+    let mut aromatic_atom_markers = Vec::new();
+    let mut in_bracket = false;
 
     let mut chars = input.chars().peekable();
     while let Some(ch) = chars.next() {
+        // Bracket atoms pass through untouched; their contents (element
+        // symbols, hcount, charge) must not be mistaken for atom tokens.
+        if in_bracket {
+            if ch == ']' {
+                in_bracket = false;
+            }
+            smiles.push(ch);
+            continue;
+        }
         if ch == '{' {
             let mut raw_label = String::new();
             for inner in chars.by_ref() {
@@ -70,8 +90,23 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
                 }
             }
         } else {
-            if ch == '/' || ch == '\\' {
-                forced_direction_markers.push(false);
+            match ch {
+                '[' => in_bracket = true,
+                '/' | '\\' => forced_direction_markers.push(false),
+                // Aromatic organic-subset atoms: uppercase for the parser,
+                // remember the aromatic designation.
+                'b' | 'c' | 'n' | 'o' | 'p' | 's' => {
+                    smiles.push(ch.to_ascii_uppercase());
+                    aromatic_atom_markers.push(true);
+                    continue;
+                }
+                // Aliphatic organic-subset atom starts ('l' of Cl and 'r' of
+                // Br fall through to the default arm, so each two-letter
+                // symbol counts once).
+                'B' | 'C' | 'N' | 'O' | 'S' | 'P' | 'F' | 'I' => {
+                    aromatic_atom_markers.push(false);
+                }
+                _ => {}
             }
             smiles.push(ch);
         }
@@ -81,6 +116,7 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
         smiles,
         abbrev_labels,
         forced_direction_markers,
+        aromatic_atom_markers,
     }
 }
 
@@ -114,7 +150,11 @@ mod wasm_entrypoint {
     pub fn layout(smiles: &[u8]) -> Result<Vec<u8>, String> {
         let s = core::str::from_utf8(smiles).map_err(|e| format!("UTF-8 error: {e}"))?;
         let pre = preprocess_smiles(s);
-        let mut mol = MoleculeGraph::from_smiles(&pre.smiles, pre.forced_direction_markers)?;
+        let mut mol = MoleculeGraph::from_smiles(
+            &pre.smiles,
+            pre.forced_direction_markers,
+            pre.aromatic_atom_markers,
+        )?;
         assign_abbrevs(&mut mol, &pre.abbrev_labels);
         let out = compute_layout(&mol)?;
         serde_json::to_vec(&out).map_err(|e| format!("JSON error: {e}"))
@@ -126,7 +166,11 @@ mod wasm_entrypoint {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
     let pre = preprocess_smiles(smiles);
-    let mut mol = MoleculeGraph::from_smiles(&pre.smiles, pre.forced_direction_markers)?;
+    let mut mol = MoleculeGraph::from_smiles(
+        &pre.smiles,
+        pre.forced_direction_markers,
+        pre.aromatic_atom_markers,
+    )?;
     assign_abbrevs(&mut mol, &pre.abbrev_labels);
     compute_layout(&mol)
 }
@@ -135,8 +179,6 @@ pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
 mod tests {
     use super::*;
 
-    // smiles-parser 0.4 does not support unbracketed aromatic atoms (c, n, o).
-    // Use Kekulé notation until we add a preprocessing step.
     #[test]
     fn benzene_kekule() {
         let out = layout_native("C1=CC=CC=C1").expect("benzene layout failed");
@@ -299,6 +341,245 @@ mod tests {
         let out = layout_native("C1=CC2=CC=CC=C2C=C1").expect("naphthalene layout failed");
         assert_eq!(out.atoms.len(), 10);
         assert_eq!(out.bonds.len(), 11);
+    }
+
+    // ── Dot-disconnected structures ──────────────────────────────────────────
+
+    #[test]
+    fn dot_creates_no_bond() {
+        let out = layout_native("CCO.CCO").expect("two ethanols failed");
+        assert_eq!(out.atoms.iter().filter(|a| !a.virtual_h).count(), 6);
+        // Two C-C-O fragments: 4 real bonds, none crossing the dot.
+        let real: Vec<_> = out.bonds.iter().filter(|b| !b.virtual_bond).collect();
+        assert_eq!(real.len(), 4);
+        assert!(real.iter().all(|b| (b.from < 3) == (b.to < 3)));
+    }
+
+    #[test]
+    fn salt_fragments_are_disconnected_and_ordered() {
+        // Sodium acetate: no bond may touch the sodium ion, and fragments keep
+        // SMILES writing order left to right with a visible gap.
+        let out = layout_native("CC(=O)[O-].[Na+]").expect("sodium acetate failed");
+        let na = 4;
+        assert_eq!(out.atoms[na].symbol, "Na");
+        assert_eq!(out.atoms[na].charge, 1);
+        assert!(out.bonds.iter().all(|b| b.from != na && b.to != na));
+
+        let max_acetate_x = (0..4).map(|i| out.atoms[i].pos.x).fold(f64::MIN, f64::max);
+        assert!(
+            out.atoms[na].pos.x >= max_acetate_x + 1.0,
+            "Na+ should sit clearly right of the acetate fragment"
+        );
+    }
+
+    #[test]
+    fn bare_ion_pair() {
+        let out = layout_native("[Na+].[Cl-]").expect("sodium chloride failed");
+        assert_eq!(out.atoms.len(), 2);
+        assert!(out.bonds.is_empty());
+        assert!(out.atoms[1].pos.x > out.atoms[0].pos.x);
+    }
+
+    #[test]
+    fn three_fragments() {
+        let out = layout_native("O.O.O").expect("three waters failed");
+        let heavy: Vec<_> = out.atoms.iter().filter(|a| !a.virtual_h).collect();
+        assert_eq!(heavy.len(), 3);
+        assert!(out.bonds.iter().all(|b| b.virtual_bond));
+        assert!(heavy[0].pos.x < heavy[1].pos.x && heavy[1].pos.x < heavy[2].pos.x);
+    }
+
+    #[test]
+    fn ring_closure_across_dot_joins_fragments() {
+        // OpenSMILES: "C1.C1" is ethane — the ring-closure bond still forms
+        // even though a dot separates the digits.
+        let out = layout_native("C1.C1").expect("dot ring closure failed");
+        assert_eq!(out.atoms.len(), 2);
+        assert_eq!(out.bonds.len(), 1);
+        assert_eq!(out.atoms[0].implicit_h, 3);
+    }
+
+    #[test]
+    fn aromatic_fragments_kekulize_independently() {
+        let out = layout_native("c1ccccc1.c1ccccc1").expect("two benzenes failed");
+        assert_eq!(out.atoms.len(), 12);
+        assert_eq!(order_counts(&out), (6, 6));
+        assert!(out.bonds.iter().all(|b| (b.from < 6) == (b.to < 6)));
+    }
+
+    // ── Aromatic (lowercase) SMILES and kekulization ─────────────────────────
+
+    fn order_counts(out: &LayoutOutput) -> (usize, usize) {
+        let real = out.bonds.iter().filter(|b| !b.virtual_bond);
+        (
+            real.clone().filter(|b| b.order == 1).count(),
+            real.filter(|b| b.order == 2).count(),
+        )
+    }
+
+    #[test]
+    fn benzene_aromatic() {
+        let out = layout_native("c1ccccc1").expect("aromatic benzene failed");
+        assert_eq!(out.atoms.len(), 6);
+        assert_eq!(order_counts(&out), (3, 3));
+        assert!(out.atoms.iter().all(|a| a.implicit_h == 1));
+    }
+
+    #[test]
+    fn aromatic_atom_indices_match_writing_order() {
+        // Kekulization must not reorder atoms: index N is the Nth atom token,
+        // so show-indices / highlight / arrow references keep working.
+        let out = layout_native("Cc1ccncc1").expect("4-methylpyridine failed");
+        let symbols: Vec<&str> = out
+            .atoms
+            .iter()
+            .filter(|a| !a.virtual_h)
+            .map(|a| a.symbol.as_str())
+            .collect();
+        assert_eq!(symbols, vec!["C", "C", "C", "C", "N", "C", "C"]);
+    }
+
+    #[test]
+    fn pyridine_aromatic() {
+        let out = layout_native("c1ccncc1").expect("pyridine failed");
+        assert_eq!(out.atoms[3].symbol, "N");
+        assert_eq!(out.atoms[3].implicit_h, 0);
+        assert_eq!(order_counts(&out), (3, 3));
+    }
+
+    #[test]
+    fn pyrrole_aromatic() {
+        let out = layout_native("c1cc[nH]c1").expect("pyrrole failed");
+        let n = out.atoms.iter().find(|a| a.symbol == "N").unwrap();
+        assert_eq!(n.hcount, 1);
+        assert_eq!(order_counts(&out), (3, 2));
+    }
+
+    #[test]
+    fn furan_and_thiophene_aromatic() {
+        for smiles in ["c1occc1", "c1sccc1"] {
+            let out = layout_native(smiles).expect("5-ring heteroaromatic failed");
+            assert_eq!(order_counts(&out), (3, 2), "wrong kekulization for {smiles}");
+            let hetero = &out.atoms[1];
+            assert_eq!(hetero.implicit_h, 0);
+        }
+    }
+
+    #[test]
+    fn imidazole_aromatic() {
+        let out = layout_native("c1cnc[nH]1").expect("imidazole failed");
+        assert_eq!(order_counts(&out), (3, 2));
+    }
+
+    #[test]
+    fn n_methylpyrrole_aromatic() {
+        // A three-connected aromatic n carries no H and no double bond.
+        let out = layout_native("Cn1cccc1").expect("N-methylpyrrole failed");
+        assert_eq!(out.atoms[1].symbol, "N");
+        assert_eq!(out.atoms[1].implicit_h, 0);
+        assert_eq!(order_counts(&out), (4, 2));
+    }
+
+    #[test]
+    fn naphthalene_aromatic() {
+        let out = layout_native("c1ccc2ccccc2c1").expect("aromatic naphthalene failed");
+        assert_eq!(out.atoms.len(), 10);
+        assert_eq!(order_counts(&out), (6, 5));
+    }
+
+    #[test]
+    fn indane_mixed_aromatic_aliphatic() {
+        // Spec example: aromatic ring fused to an aliphatic ring.
+        let out = layout_native("c1ccc2CCCc2c1").expect("indane failed");
+        assert_eq!(out.atoms.len(), 9);
+        assert_eq!(order_counts(&out), (7, 3));
+    }
+
+    #[test]
+    fn biphenyl_explicit_and_implicit_single_link() {
+        for smiles in ["c1ccccc1-c1ccccc1", "c1ccccc1c1ccccc1"] {
+            let out = layout_native(smiles).expect("biphenyl failed");
+            assert_eq!(out.atoms.len(), 12);
+            assert_eq!(order_counts(&out), (7, 6), "wrong kekulization for {smiles}");
+            // The inter-ring bond stays single.
+            let link = out
+                .bonds
+                .iter()
+                .find(|b| (b.from < 6) != (b.to < 6))
+                .unwrap();
+            assert_eq!(link.order, 1);
+        }
+    }
+
+    #[test]
+    fn pyridinone_exocyclic_double_bond() {
+        // The carbonyl carbon already has its double bond outside the ring and
+        // must not receive another one during kekulization.
+        let out = layout_native("O=c1cccc[nH]1").expect("2-pyridinone failed");
+        assert_eq!(order_counts(&out), (4, 3));
+    }
+
+    #[test]
+    fn explicit_aromatic_bond_symbol() {
+        let out = layout_native("c1:c:c:c:c:c1").expect("explicit ':' benzene failed");
+        assert_eq!(order_counts(&out), (3, 3));
+    }
+
+    #[test]
+    fn charged_aromatic_rings() {
+        // Pyridinium: the protonated nitrogen still takes part in a double bond.
+        let pyridinium = layout_native("c1cc[nH+]cc1").expect("pyridinium failed");
+        assert_eq!(order_counts(&pyridinium), (3, 3));
+
+        // Pyrylium: positively charged oxygen participates in a double bond.
+        let pyrylium = layout_native("c1cc[o+]cc1").expect("pyrylium failed");
+        assert_eq!(order_counts(&pyrylium), (3, 3));
+    }
+
+    #[test]
+    fn wildcard_in_aromatic_ring() {
+        let out = layout_native("c1cc*cc1").expect("aromatic ring with wildcard failed");
+        let (_, doubles) = order_counts(&out);
+        assert!(doubles >= 2, "expected an alternating pattern, got {doubles} double bonds");
+    }
+
+    #[test]
+    fn azulene_aromatic() {
+        // Non-alternant 5-7 fused system: every carbon needs a double bond.
+        let out = layout_native("c1ccc2cccc2cc1").expect("azulene failed");
+        assert_eq!(out.atoms.len(), 10);
+        assert_eq!(order_counts(&out), (6, 5));
+    }
+
+    #[test]
+    fn caffeine_aromatic() {
+        let out =
+            layout_native("Cn1cnc2c1c(=O)n(C)c(=O)n2C").expect("caffeine failed");
+        // Purine core: the imidazole C=N plus the C4=C5 bridge double bond,
+        // and the two exocyclic carbonyls.
+        assert_eq!(out.atoms.iter().filter(|a| !a.virtual_h).count(), 14);
+        let (_, doubles) = order_counts(&out);
+        assert_eq!(doubles, 4);
+    }
+
+    #[test]
+    fn aromatic_bond_symbol_requires_aromatic_atoms() {
+        let err = layout_native("C:C").expect_err("':' between aliphatic atoms should fail");
+        assert!(err.contains("aromatic"));
+    }
+
+    #[test]
+    fn aromatic_atom_outside_ring_errors() {
+        let err = layout_native("Cc").expect_err("acyclic aromatic atom should fail");
+        assert!(err.contains("ring"));
+    }
+
+    #[test]
+    fn unkekulizable_ring_errors() {
+        // Pyrrole written without its hydrogen has five atoms all demanding a
+        // double bond; no perfect matching exists.
+        let err = layout_native("c1ccnc1").expect_err("H-less pyrrole should fail");
+        assert!(err.contains("kekulize"));
     }
 
     // ── Standards-first stereochemistry and drawing extensions ───────────────
@@ -469,10 +750,69 @@ mod tests {
         assert!(chirality_matches_smiles(smiles));
     }
 
+    // ── Extended chirality classes and quadruple bonds ───────────────────────
+
+    /// Cosine of the angle neighbor-a → center → neighbor-b.
+    fn bond_angle_cos(out: &LayoutOutput, center: usize, a: usize, b: usize) -> f64 {
+        let c = out.atoms[center].pos;
+        let (ax, ay) = (out.atoms[a].pos.x - c.x, out.atoms[a].pos.y - c.y);
+        let (bx, by) = (out.atoms[b].pos.x - c.x, out.atoms[b].pos.y - c.y);
+        (ax * bx + ay * by) / ((ax * ax + ay * ay).sqrt() * (bx * bx + by * by).sqrt())
+    }
+
     #[test]
-    fn unsupported_chirality_errors() {
-        let err = layout_native("C[Fe@SP1](Cl)(Br)I").expect_err("unsupported stereo should fail");
-        assert!(err.contains("Only tetrahedral"));
+    fn square_planar_cis_and_trans() {
+        // Neighbors in writing order: N(0), N(2), Cl(3), Cl(4) around Pt(1).
+        // @SP1 (U shape) puts the two Cl on adjacent corners: cis, 90° apart.
+        let cis = layout_native("N[Pt@SP1](N)(Cl)Cl").expect("cisplatin failed");
+        assert!(bond_angle_cos(&cis, 1, 3, 4).abs() < 1e-6);
+        // @SP2 (4 shape) pairs Cl trans to Cl: 180° apart.
+        let trans = layout_native("N[Pt@SP2](N)(Cl)Cl").expect("transplatin failed");
+        assert!((bond_angle_cos(&trans, 1, 3, 4) + 1.0).abs() < 1e-6);
+        // @SP3 (Z shape) pairs N1 trans to Cl4, so the Cl pair is cis again.
+        let z = layout_native("N[Pt@SP3](N)(Cl)Cl").expect("SP3 failed");
+        assert!(bond_angle_cos(&z, 1, 3, 4).abs() < 1e-6);
+        assert!((bond_angle_cos(&z, 1, 0, 4) + 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn square_planar_all_neighbors_at_right_angles() {
+        let out = layout_native("C[Fe@SP1](Cl)(Br)I").expect("SP iron failed");
+        assert_eq!(out.atoms[1].chirality, "square_planar");
+        for (a, b) in [(0, 2), (2, 3), (3, 4)] {
+            assert!(bond_angle_cos(&out, 1, a, b).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn tb_oh_al_accepted_without_stereo_marks() {
+        for smiles in [
+            "S[As@TB1](F)(Cl)(Br)N",
+            "C[Co@OH1](F)(Cl)(Br)(I)N",
+            "NC(Br)=[C@AL1]=C(O)C",
+        ] {
+            let out = layout_native(smiles).expect("extended chirality should parse");
+            assert!(
+                out.atoms.iter().any(|a| a.chirality == "undepicted"),
+                "missing undepicted center for {smiles}"
+            );
+            assert!(out.bonds.iter().all(|b| b.stereo == "none"));
+            assert!(out.atoms.iter().all(|a| a.stereo_h == "none"));
+        }
+    }
+
+    #[test]
+    fn quadruple_bond_order() {
+        // The classic metal-metal quadruple bond, e.g. in [Re2Cl8]2-.
+        let out = layout_native("[Re]$[Re]").expect("quadruple bond failed");
+        assert_eq!(out.bonds[0].order, 4);
+    }
+
+    #[test]
+    fn quadruple_bond_counts_toward_valence() {
+        let out = layout_native("C$C").expect("C$C failed");
+        assert_eq!(out.bonds[0].order, 4);
+        assert!(out.atoms.iter().all(|a| a.implicit_h == 0));
     }
 
     // ── Abbreviation tests ────────────────────────────────────────────────────
@@ -515,6 +855,28 @@ mod tests {
         let p = preprocess_smiles("CCO");
         assert_eq!(p.smiles, "CCO");
         assert!(p.abbrev_labels.is_empty());
+        assert_eq!(p.aromatic_atom_markers, vec![false, false, false]);
+    }
+
+    #[test]
+    fn preprocess_uppercases_aromatic_atoms() {
+        let p = preprocess_smiles("Clc1ccccc1");
+        assert_eq!(p.smiles, "ClC1CCCCC1");
+        // One marker per unbracketed organic-subset atom, in writing order;
+        // the two-letter Cl counts once.
+        assert_eq!(
+            p.aromatic_atom_markers,
+            vec![false, true, true, true, true, true, true]
+        );
+    }
+
+    #[test]
+    fn preprocess_leaves_bracket_atoms_alone() {
+        // Bracket contents are the parser's business: [nH] parses natively as
+        // an aromatic atom, and the 'c' in [Sc] is not an aromatic carbon.
+        let p = preprocess_smiles("c1cc[nH]c1[Sc]");
+        assert_eq!(p.smiles, "C1CC[nH]C1[Sc]");
+        assert_eq!(p.aromatic_atom_markers, vec![true, true, true, true]);
     }
 
     #[test]
@@ -661,8 +1023,12 @@ mod tests {
         use crate::layout::{implicit_h_count, signed_volume, stereo_h_direction};
 
         let pre = preprocess_smiles(smiles);
-        let mol = MoleculeGraph::from_smiles(&pre.smiles, pre.forced_direction_markers)
-            .expect("graph build failed");
+        let mol = MoleculeGraph::from_smiles(
+            &pre.smiles,
+            pre.forced_direction_markers,
+            pre.aromatic_atom_markers,
+        )
+        .expect("graph build failed");
         let out = compute_layout(&mol).expect("layout failed");
         let coords: Vec<crate::render::Vec2> = out.atoms.iter().map(|a| a.pos).collect();
 

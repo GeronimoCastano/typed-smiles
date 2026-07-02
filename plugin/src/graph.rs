@@ -19,6 +19,7 @@ pub enum BondOrder {
     Single,
     Double,
     Triple,
+    Quadruple,
     Aromatic,
 }
 
@@ -28,7 +29,10 @@ impl BondOrder {
             Self::Single => 1,
             Self::Double => 2,
             Self::Triple => 3,
-            Self::Aromatic => 4,
+            Self::Quadruple => 4,
+            // Aromatic orders are internal: kekulization replaces them with
+            // single/double before any valence arithmetic or JSON output.
+            Self::Aromatic => 1,
         }
     }
 }
@@ -79,6 +83,12 @@ pub enum AtomChirality {
     None,
     TetraAnti,
     TetraClockwise,
+    /// `@SP1`..`@SP3`: square-planar shape class (1 = U, 2 = 4, 3 = Z).
+    /// Depicted exactly, since the geometry is planar.
+    SquarePlanar(u8),
+    /// `@TB`, `@OH`, `@AL`: accepted; connectivity is drawn without stereo
+    /// decoration.
+    Undepicted,
     Unsupported,
 }
 
@@ -88,8 +98,16 @@ impl AtomChirality {
             Self::None => "none",
             Self::TetraAnti => "tetra_anti",
             Self::TetraClockwise => "tetra_clockwise",
+            Self::SquarePlanar(_) => "square_planar",
+            Self::Undepicted => "undepicted",
             Self::Unsupported => "unsupported",
         }
+    }
+
+    /// Whether this is a tetrahedral center whose stereo is rendered as
+    /// wedge/hash bonds (possibly carried by the implicit hydrogen).
+    pub fn is_tetrahedral(self) -> bool {
+        matches!(self, Self::TetraAnti | Self::TetraClockwise)
     }
 }
 
@@ -97,7 +115,6 @@ impl AtomChirality {
 pub struct Atom {
     /// Element symbol, e.g. "C", "N", "O"
     pub symbol: String,
-    #[allow(dead_code)]
     pub aromatic: bool,
     pub hcount: u8,
     pub has_explicit_h: bool,
@@ -133,13 +150,18 @@ pub struct MoleculeGraph {
 }
 
 impl MoleculeGraph {
-    pub fn from_smiles(smiles: &str, forced_direction_markers: Vec<bool>) -> Result<Self, String> {
+    pub fn from_smiles(
+        smiles: &str,
+        forced_direction_markers: Vec<bool>,
+        aromatic_atom_markers: Vec<bool>,
+    ) -> Result<Self, String> {
         // smiles_parser::chain takes &[u8] and returns IResult<&[u8], Chain>
         let (_, chain_ast) = parse_chain(smiles.as_bytes())
             .map_err(|e| format!("SMILES parse failed for {:?}: {e:?}", smiles))?;
 
         let mut builder = GraphBuilder {
             forced_direction_markers: VecDeque::from(forced_direction_markers),
+            aromatic_atom_markers: VecDeque::from(aromatic_atom_markers),
             ..GraphBuilder::default()
         };
         builder.walk_chain(&chain_ast, None, None);
@@ -157,13 +179,15 @@ impl MoleculeGraph {
             })
             .collect();
 
-        Ok(MoleculeGraph {
+        let mut mol = MoleculeGraph {
             atoms: builder.atoms,
             bonds: builder.bonds,
             adj: builder.adj,
             neighbor_bonds,
             has_preceding: builder.has_preceding,
-        })
+        };
+        crate::kekulize::kekulize(&mut mol, &builder.bond_implicit)?;
+        Ok(mol)
     }
 
     pub fn n_atoms(&self) -> usize {
@@ -188,6 +212,13 @@ struct GraphBuilder {
     /// One flag for every `/` or `\` bond token seen by smiles-parser.
     /// `true` means the token originated from typed-smiles `!w`/`!h`, not SMILES.
     forced_direction_markers: VecDeque<bool>,
+    /// One flag per unbracketed organic-subset atom token, in writing order.
+    /// `true` means the atom was written lowercase (aromatic) and uppercased
+    /// during preprocessing. Bracket atoms carry their own aromatic flag.
+    aromatic_atom_markers: VecDeque<bool>,
+    /// bond_implicit[i] = bond `i` had no bond symbol in the SMILES. Implicit
+    /// bonds between aromatic atoms are aromatic; explicit `-` bonds are not.
+    bond_implicit: Vec<bool>,
 }
 
 impl GraphBuilder {
@@ -200,7 +231,7 @@ impl GraphBuilder {
         idx
     }
 
-    fn add_bond(&mut self, from: usize, to: usize, spec: BondSpec) {
+    fn add_bond(&mut self, from: usize, to: usize, spec: BondSpec, implicit: bool) {
         let b_idx = self.bonds.len();
         self.bonds.push(Bond {
             from,
@@ -209,6 +240,7 @@ impl GraphBuilder {
             stereo: spec.stereo,
             direction: spec.direction,
         });
+        self.bond_implicit.push(implicit);
         self.adj[from].push((to, b_idx));
         self.adj[to].push((from, b_idx));
     }
@@ -230,8 +262,14 @@ impl GraphBuilder {
     ) {
         let ba = &chain.branched_atom;
 
-        // Add this atom
-        let atom = smiles_atom_to_atom(&ba.atom);
+        // Add this atom. Unbracketed organic-subset atoms consume one aromatic
+        // marker each; bracket atoms carry the flag from the parser instead.
+        let mut atom = smiles_atom_to_atom(&ba.atom);
+        if matches!(ba.atom, SAtom::AliphaticOrganic(_))
+            && self.aromatic_atom_markers.pop_front().unwrap_or(false)
+        {
+            atom.aromatic = true;
+        }
 
         // Fold a terminal plain hydrogen (`[H]`) into its heavy neighbor's
         // hydrogen count instead of keeping it as a drawn atom, mirroring how
@@ -264,7 +302,8 @@ impl GraphBuilder {
         if let Some(prev) = prev_atom {
             self.has_preceding[cur] = true;
             let b_idx = self.bonds.len();
-            self.add_bond(prev, cur, incoming.unwrap_or_else(BondSpec::single));
+            let implicit = incoming.is_none();
+            self.add_bond(prev, cur, incoming.unwrap_or_else(BondSpec::single), implicit);
             self.neighbor_slots[cur].push(b_idx as i64);
         }
 
@@ -276,9 +315,10 @@ impl GraphBuilder {
             let ring_spec = rb.bond.as_ref().map(|b| self.sparser_to_bond_spec(b));
 
             if let Some((open_atom, open_spec, open_slot)) = self.open_rings.remove(&ring_num) {
+                let implicit = ring_spec.is_none() && open_spec.is_none();
                 let spec = ring_spec.or(open_spec).unwrap_or_else(BondSpec::single);
                 let b_idx = self.bonds.len();
-                self.add_bond(open_atom, cur, spec);
+                self.add_bond(open_atom, cur, spec, implicit);
                 self.neighbor_slots[open_atom][open_slot] = b_idx as i64;
                 self.neighbor_slots[cur].push(b_idx as i64);
             } else {
@@ -288,8 +328,14 @@ impl GraphBuilder {
             }
         }
 
-        // Process branches — each branch starts from `cur`.
+        // Process branches — each branch starts from `cur`. A dot separator
+        // means "no bond": the branch is a disconnected fragment and gets no
+        // bond and no neighbor slot on `cur`.
         for branch in &ba.branches {
+            if matches!(branch.bond_or_dot, Some(BondOrDot::Dot(_))) {
+                self.walk_chain(&branch.chain, None, None);
+                continue;
+            }
             let branch_bond = branch.bond_or_dot.as_ref().and_then(|bod| match bod {
                 BondOrDot::Bond(b) => Some(self.sparser_to_bond_spec(b)),
                 BondOrDot::Dot(_) => None,
@@ -298,8 +344,13 @@ impl GraphBuilder {
             self.walk_chain(&branch.chain, Some(cur), branch_bond);
         }
 
-        // Continue the main chain, forwarding THIS node's outgoing bond
+        // Continue the main chain, forwarding THIS node's outgoing bond. A dot
+        // starts a new disconnected fragment instead of bonding to `cur`.
         if let Some(next) = &chain.chain {
+            if matches!(chain.bond_or_dot, Some(BondOrDot::Dot(_))) {
+                self.walk_chain(next, None, None);
+                return;
+            }
             let outgoing = chain.bond_or_dot.as_ref().and_then(|bod| match bod {
                 BondOrDot::Bond(b) => Some(self.sparser_to_bond_spec(b)),
                 BondOrDot::Dot(_) => None,
@@ -388,6 +439,10 @@ fn chirality_to_atom_chirality(chirality: Chirality) -> AtomChirality {
     match chirality {
         Chirality::Anticlockwise | Chirality::Tetrahedral(1) => AtomChirality::TetraAnti,
         Chirality::Clockwise | Chirality::Tetrahedral(2) => AtomChirality::TetraClockwise,
+        Chirality::SquarePlanar(class) => AtomChirality::SquarePlanar(class),
+        Chirality::Allenal(_) | Chirality::TrigonalBipyramidal(_) | Chirality::Octahedral(_) => {
+            AtomChirality::Undepicted
+        }
         _ => AtomChirality::Unsupported,
     }
 }
@@ -400,7 +455,8 @@ fn sparser_bond_to_order(b: &SBond) -> BondOrder {
     match b {
         SBond::Single | SBond::Up | SBond::Down => BondOrder::Single,
         SBond::Double => BondOrder::Double,
-        SBond::Triple | SBond::Quadruple => BondOrder::Triple,
+        SBond::Triple => BondOrder::Triple,
+        SBond::Quadruple => BondOrder::Quadruple,
         SBond::Aromatic => BondOrder::Aromatic,
     }
 }

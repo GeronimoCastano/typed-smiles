@@ -1968,3 +1968,133 @@ Charged or isotopic hydrogens such as `[2H]` are kept as drawn atoms.
   [*All-H still works* \ #text(size: 8pt, `C([H])([H])([H])[H]`, ) \
    #smiles("C([H])([H])([H])[H]", show-all-h: true)],
 )
+= Aromatic SMILES (kekulization)
+
+Lowercase aromatic notation (`c1ccccc1`) is kekulized on input per OpenSMILES:
+implicit bonds between aromatic atoms become alternating single/double bonds.
+Both notations must render identically.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Benzene, aromatic* \ #text(size: 8pt, `c1ccccc1`) \ #smiles("c1ccccc1")],
+  [*Benzene, Kekulé* \ #text(size: 8pt, `C1=CC=CC=C1`) \ #smiles("C1=CC=CC=C1")],
+  [*Toluene* \ #text(size: 8pt, `Cc1ccccc1`) \ #smiles("Cc1ccccc1")],
+
+  [*Pyridine* \ #text(size: 8pt, `c1ccncc1`) \ #smiles("c1ccncc1")],
+  [*Pyrrole* \ #text(size: 8pt, `c1cc[nH]c1`) \ #smiles("c1cc[nH]c1")],
+  [*Furan* \ #text(size: 8pt, `c1occc1`) \ #smiles("c1occc1")],
+
+  [*Thiophene* \ #text(size: 8pt, `c1sccc1`) \ #smiles("c1sccc1")],
+  [*Imidazole* \ #text(size: 8pt, `c1cnc[nH]1`) \ #smiles("c1cnc[nH]1")],
+  [*N-methylpyrrole* \ #text(size: 8pt, `Cn1cccc1`) \ #smiles("Cn1cccc1")],
+
+  [*Naphthalene* \ #text(size: 8pt, `c1ccc2ccccc2c1`) \ #smiles("c1ccc2ccccc2c1")],
+  [*Indane* \ #text(size: 8pt, `c1ccc2CCCc2c1`) \ #smiles("c1ccc2CCCc2c1")],
+  [*Biphenyl* \ #text(size: 8pt, `c1ccccc1-c1ccccc1`) \ #smiles("c1ccccc1-c1ccccc1", scale: 0.8)],
+
+  [*2-Pyridinone* \ #text(size: 8pt, `O=c1cccc[nH]1`) \ #smiles("O=c1cccc[nH]1")],
+  [*Pyridinium* \ #text(size: 8pt, `c1cc[nH+]cc1`) \ #smiles("c1cc[nH+]cc1")],
+  [*Aniline* \ #text(size: 8pt, `Nc1ccccc1`) \ #smiles("Nc1ccccc1")],
+)
+
+#v(1em)
+Atom indices follow SMILES writing order even through kekulization, so
+`show-indices`, `highlight()`, and `arrow()` references address aromatic input
+exactly like Kekulé input.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Indices on aromatic input* \ #text(size: 8pt, `Cc1ccncc1`) \
+   #smiles("Cc1ccncc1", show-indices: true)],
+
+  [*Highlights on aromatic input* \ #text(size: 8pt, `c1ccccc1O` + ", " + `bond(0, 1)` + ", " + `atom(6)`) \
+   #smiles(
+     "c1ccccc1O",
+     highlight(bond(0, 1), fill: rgb("#FFE45C"), include-atoms: true),
+     highlight(atom(6), fill: rgb("#BBE1FA")),
+   )],
+)
+
+= Dot-disconnected structures
+
+The dot (`.`) means "no bond": fragments are laid out independently and
+arranged left to right in SMILES writing order. Atom indices stay global
+across fragments, so annotations keep working.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Sodium acetate* \ #text(size: 8pt, `CC(=O)[O-].[Na+]`) \
+   #smiles("CC(=O)[O-].[Na+]")],
+  [*Sodium chloride* \ #text(size: 8pt, `[Na+].[Cl-]`) \
+   #smiles("[Na+].[Cl-]")],
+  [*Ammonium chloride* \ #text(size: 8pt, `[NH4+].[Cl-]`) \
+   #smiles("[NH4+].[Cl-]")],
+
+  [*Sodium phenoxide* \ #text(size: 8pt, `[O-]c1ccccc1.[Na+]`) \
+   #smiles("[O-]c1ccccc1.[Na+]")],
+  [*Amine hydrochloride* \ #text(size: 8pt, `CC[NH3+].[Cl-]`) \
+   #smiles("CC[NH3+].[Cl-]")],
+  [*Hydrate* \ #text(size: 8pt, `O=C(O)C(=O)O.O.O`) \
+   #smiles("O=C(O)C(=O)O.O.O", scale: 0.85)],
+)
+
+#v(1em)
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Global indices across fragments* \ #text(size: 8pt, `CC(=O)[O-].[Na+]`) \
+   #smiles("CC(=O)[O-].[Na+]", show-indices: true)],
+
+  [*Annotations across fragments* \ #text(size: 8pt, `atom(4)` + ", " + `bond(1, 3)`) \
+   #smiles(
+     "CC(=O)[O-].[Na+]",
+     highlight(atom(4), fill: rgb("#BBE1FA")),
+     highlight(bond(1, 3), fill: rgb("#FFE45C")),
+   )],
+)
+
+= Extended stereo classes and quadruple bonds
+
+Square-planar `@SP1`/`@SP2`/`@SP3` is depicted exactly: neighbors at 90°, in
+the cyclic order given by the shape class (U / 4 / Z traced through the
+neighbors in SMILES order). `@TB`/`@OH`/`@AL` centers are accepted and drawn
+without stereo wedges. `$` renders a quadruple bond.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*cis-Platin (`@SP1`)* \ #text(size: 8pt, `N[Pt@SP1](N)(Cl)Cl`) \
+   #smiles("N[Pt@SP1](N)(Cl)Cl")],
+  [*trans-Platin (`@SP2`)* \ #text(size: 8pt, `N[Pt@SP2](N)(Cl)Cl`) \
+   #smiles("N[Pt@SP2](N)(Cl)Cl")],
+  [*Z shape (`@SP3`)* \ #text(size: 8pt, `N[Pt@SP3](N)(Cl)Cl`) \
+   #smiles("N[Pt@SP3](N)(Cl)Cl")],
+
+  [*Trigonal bipyramidal* \ #text(size: 8pt, `S[As@TB1](F)(Cl)(Br)N`) \
+   #smiles("S[As@TB1](F)(Cl)(Br)N")],
+  [*Octahedral* \ #text(size: 8pt, `C[Co@OH1](F)(Cl)(Br)(I)N`) \
+   #smiles("C[Co@OH1](F)(Cl)(Br)(I)N")],
+  [*Allene (`@AL1`)* \ #text(size: 8pt, `NC(Br)=[C@AL1]=C(O)C`) \
+   #smiles("NC(Br)=[C@AL1]=C(O)C")],
+
+  [*Re–Re quadruple bond* \ #text(size: 8pt, `[Re]$[Re]`) \
+   #smiles("[Re]$[Re]")],
+  [*With ligands* \ #text(size: 8pt, `Cl[Re]$[Re]Cl`) \
+   #smiles("Cl[Re]$[Re]Cl")],
+  [*Chromium(II) acetate core* \ #text(size: 8pt, `[Cr]$[Cr]`) \
+   #smiles("[Cr]$[Cr]")],
+)
