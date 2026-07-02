@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets
+#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 
 #set text(font: "New Computer Modern", size: 11pt)
 #set page(margin: 2cm)
@@ -2156,4 +2156,156 @@ short next to bonds ending at a bare vertex.
   [*Ether* \ #text(size: 8pt, `COC`) \ #smiles("COC")],
   [*Ester* \ #text(size: 8pt, `CC(=O)OC`) \ #smiles("CC(=O)OC")],
   [*Metal–metal* \ #text(size: 8pt, `Cl[Re]$[Re]Cl`) \ #smiles("Cl[Re]$[Re]Cl")],
+)
+
+
+
+  #smiles(
+    "N1CCN(CC1)C(C(F)=C2)=CC(=C2C4=O)N(C3CC3)C=C4C(=O)O",
+    highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23), bond(23, 25)), fill : rgb("#96BF0D"), include-atoms:true),
+    highlight((bond(15, 16), bond(16, 18), bond(18, 17), bond(17, 16)), fill : rgb("#F29401"), include-atoms:  true),
+    highlight((bond(3, 2), bond(2, 1), bond(1, 0)), fill : rgb("#89C7A8"), include-atoms: true),
+    highlight((bond(6, 7), bond(7, 8), bond(7, 9), bond(9, 12)), fill : rgb("#C98F4B"), include-atoms: true),
+    highlight((bond(11, 12), bond(12, 13), bond(13, 20), bond(13, 14)), fill : rgb("#EC7789"), include-atoms: true),
+    highlight((bond(21, 22)), fill : rgb("#0086CB"), include-atoms: true),
+    rotation : 90deg,
+    bond-stroke : 1.5pt,
+  )
+
+= Wavy and dashed bonds (`!s`, `!d`)
+
+`!s` forces a wavy (squiggly) bond — the standard depiction of unspecified
+stereochemistry or an attachment point — and `!d` forces a dashed bond for
+hydrogen bonds, partial bonds, and coordination. Both are drawing extensions
+on a single bond and bicolor at the midpoint like plain bonds.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Wavy* \ #text(size: 8pt, `C!sN`) \ #smiles("C!sN")],
+  [*Dashed* \ #text(size: 8pt, `C!dN`) \ #smiles("C!dN")],
+  [*Wavy in chain* \ #text(size: 8pt, `CC(!sC)C1=CC=CC=C1`) \
+   #smiles("CC(!sC)C1=CC=CC=C1", scale: 0.9)],
+  [*Dashed coordination* \ #text(size: 8pt, `CN!d[Cu]`) \ #smiles("CN!d[Cu]")],
+
+  [*Wavy attachment* \ #text(size: 8pt, `OC1CCCC1!sC`) \
+   #smiles("OC1CCCC1!sC", scale: 0.9)],
+  [*Bicolor wavy* \ #text(size: 8pt, `O!sN`) \ #smiles("O!sN")],
+  [*Bicolor dashed* \ #text(size: 8pt, `O!dN`) \ #smiles("O!dN")],
+  [*Next to real stereo* \ #text(size: 8pt, `F/C=C/C!sN`) \
+   #smiles("F/C=C/C!sN", scale: 0.9)],
+)
+
+= Dashed and wavy reaction arrows
+
+`rxn-arrow(kind: "dashed")` and `rxn-arrow(kind: "wavy")`, in both
+orientations, alongside the existing kinds.
+
+#reaction(
+  mol("CC=O", label: [acetaldehyde]),
+  rxn-arrow(kind: "dashed", above: [formal]),
+  mol("CCO", label: [ethanol]),
+  rxn-arrow(kind: "wavy", above: [hv]),
+  mol("C=C", label: [ethylene]),
+)
+
+#reaction(
+  mol("C1CCCCC1"),
+  rxn-arrow(dir: "down", kind: "dashed"),
+  mol("C1=CC=CC=C1"),
+)
+
+#reaction(
+  mol("CCO"),
+  rxn-arrow(dir: "down", kind: "wavy"),
+  mol("CC=O"),
+)
+
+= Molecular weight (`mol-weight`)
+
+`mol-weight(smiles)` returns the molecular weight in g/mol as a float, summing
+IUPAC standard atomic weights (the PubChem periodic-table values bundled with
+the plugin) over all atoms and implicit/explicit hydrogens. Reference values
+below are PubChem computed molecular weights. Wildcards (`*`), abbreviations
+(`{...}`), and isotope labels raise a compile error; those paths are covered
+by the Rust test suite.
+
+#let mw-row(name, s, reference, digits: 2) = (
+  [#name], raw(s), [#calc.round(mol-weight(s), digits: digits)], [#reference],
+)
+
+#table(
+  columns: (auto, auto, auto, auto),
+  align: (left, left, right, right),
+  stroke: 0.4pt + rgb("#d8d8d8"),
+  table.header([*Molecule*], [*SMILES*], [*mol-weight*], [*PubChem*]),
+
+  ..mw-row([Water], "O", [18.015], digits: 3),
+  ..mw-row([Ethanol], "CCO", [46.07]),
+  ..mw-row([Benzene (aromatic)], "c1ccccc1", [78.11]),
+  ..mw-row([Glucose], "C(C1C(C(C(C(O1)O)O)O)O)O", [180.16]),
+  ..mw-row([Caffeine], "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", [194.19]),
+  ..mw-row([Sodium acetate], "CC(=O)[O-].[Na+]", [82.03]),
+  ..mw-row([Ammonium ion], "[NH4+]", [18.04]),
+)
+
+= Mirroring (`mirror`)
+
+`mirror: "horizontal"` swaps left and right, `mirror: "vertical"` swaps top
+and bottom; both are applied before `rotation`. Wedges and hashes are
+exchanged in the same pass, so a mirrored stereocenter still depicts the same
+configuration (an unswapped flip would draw the enantiomer).
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Original* \ #text(size: 8pt, `CC(=O)OC1=CC=CC=C1C(=O)O`) \
+   #smiles("CC(=O)OC1=CC=CC=C1C(=O)O", scale: 0.85)],
+  [*Horizontal* \ #text(size: 8pt, `mirror: "horizontal"`) \
+   #smiles("CC(=O)OC1=CC=CC=C1C(=O)O", scale: 0.85, mirror: "horizontal")],
+  [*Vertical* \ #text(size: 8pt, `mirror: "vertical"`) \
+   #smiles("CC(=O)OC1=CC=CC=C1C(=O)O", scale: 0.85, mirror: "vertical")],
+
+  [*Stereocenter* \ #text(size: 8pt, `N[C@@H](C)C(=O)O`) \
+   #smiles("N[C@@H](C)C(=O)O", scale: 0.85)],
+  [*Same configuration, flipped* \ #text(size: 8pt, `mirror: "horizontal"`) \
+   #smiles("N[C@@H](C)C(=O)O", scale: 0.85, mirror: "horizontal")],
+  [*Mirror then rotate* \ #text(size: 8pt, `mirror + rotation: 90deg`) \
+   #smiles("N[C@@H](C)C(=O)O", scale: 0.85, mirror: "horizontal", rotation: 90deg)],
+)
+
+Per-molecule mirroring inside a reaction, e.g. to face the reacting group
+toward the arrow:
+
+#reaction(
+  mol("OC1CCCCC1", mirror: "horizontal", label: [mirrored]),
+  rxn-arrow(above: [ox.]),
+  mol("O=C1CCCCC1", label: [ketone]),
+)
+
+= Branch collision avoidance
+
+Substituent chains growing from nearby anchor points (e.g. ortho ring
+positions) no longer land on top of atoms another branch already placed: the
+blocking branch flips to the other side of its attachment bond, or the
+colliding bond flips its zigzag turn to the opposite ideal slot. Bond angles
+are never bent to arbitrary values — every resolution keeps the ideal angles
+(120° at a chain carbon). In aspirin the acetyl `C=O` and the carboxyl `OH`
+previously coincided exactly.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Aspirin* \ #text(size: 8pt, `CC(=O)OC1=CC=CC=C1C(=O)O`) \
+   #smiles("CC(=O)OC1=CC=CC=C1C(=O)O", scale: 0.85)],
+  [*Ortho chains* \ #text(size: 8pt, `CCCC1=CC=CC=C1CCC`) \
+   #smiles("CCCC1=CC=CC=C1CCC", scale: 0.85)],
+  [*Salicylic acid* \ #text(size: 8pt, `OC1=CC=CC=C1C(=O)O`) \
+   #smiles("OC1=CC=CC=C1C(=O)O", scale: 0.85)],
 )

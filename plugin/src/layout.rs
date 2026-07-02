@@ -1667,7 +1667,14 @@ fn place_chain(
             });
 
         for (i, &(v, bond_idx, _)) in unplaced_neighbors.iter().enumerate() {
-            let new_dir = dirs[i];
+            // Independent branches can converge on the same lattice point (e.g.
+            // ortho ring substituents growing toward each other). If the
+            // proposed spot is already crowded, deflect toward a clear one.
+            let new_dir = if is_linear_atom(mol, u) {
+                dirs[i]
+            } else {
+                resolve_chain_direction(mol, u, dirs[i], dir, coords, placed)
+            };
 
             coords[v] = Vec2::new(coords[u].x + new_dir.cos(), coords[u].y + new_dir.sin());
             placed[v] = true;
@@ -1686,6 +1693,17 @@ fn place_chain(
                     } else {
                         -1.0
                     }
+                } else if (normalize_angle(new_dir - dirs[i])).abs() > 1e-9 {
+                    // A deflected bond changed which way this step turned, so
+                    // the child's zigzag continues from the actual turn taken.
+                    let turn = normalize_angle(new_dir - dir);
+                    if turn > 1e-9 {
+                        -1.0
+                    } else if turn < -1e-9 {
+                        1.0
+                    } else {
+                        -sign
+                    }
                 } else {
                     -sign
                 };
@@ -1694,6 +1712,145 @@ fn place_chain(
         }
     }
 }
+
+/// Minimum clearance between a newly placed chain atom and any atom already
+/// placed elsewhere, in bond-length units.
+const CHAIN_CLEARANCE: f64 = 0.55;
+
+/// Distance from `p` to the nearest already-placed atom.
+fn nearest_placed_distance(p: Vec2, coords: &[Vec2], placed: &[bool]) -> f64 {
+    let mut min = f64::INFINITY;
+    for i in 0..coords.len() {
+        if placed[i] {
+            min = min.min(p.dist(coords[i]));
+        }
+    }
+    min
+}
+
+/// Chooses the direction for the bond `u → next`. The natural (zigzag)
+/// proposal is kept whenever its endpoint is clear of already-placed atoms.
+/// On a collision, the preferred resolution is global: mirror the blocking
+/// branch to the other side of its attachment bond, which frees the natural
+/// spot and keeps both branches in textbook geometry. Otherwise the zigzag
+/// turn flips to the opposite ideal slot if that one is free. Bond angles
+/// are never bent to arbitrary values — every considered position keeps the
+/// ideal angles a reference renderer would use — so if no ideal slot is
+/// clear, the natural one is kept.
+fn resolve_chain_direction(
+    mol: &MoleculeGraph,
+    u: usize,
+    proposed: f64,
+    incoming: f64,
+    coords: &mut Vec<Vec2>,
+    placed: &[bool],
+) -> f64 {
+    let origin = coords[u];
+    let end_of = move |d: f64| Vec2::new(origin.x + d.cos(), origin.y + d.sin());
+    if nearest_placed_distance(end_of(proposed), coords, placed) >= CHAIN_CLEARANCE {
+        return proposed;
+    }
+    if mirror_blocking_branch(mol, u, end_of(proposed), coords, placed) {
+        return proposed;
+    }
+
+    // Flip the zigzag turn: the proposal mirrored across the incoming
+    // direction is the other ideal slot at this atom.
+    let flipped = normalize_angle(2.0 * incoming - proposed);
+    if normalize_angle(flipped - proposed).abs() > 1e-9
+        && nearest_placed_distance(end_of(flipped), coords, placed) >= CHAIN_CLEARANCE
+    {
+        let taken = mol.adj[u].iter().any(|&(v2, _)| {
+            placed[v2] && {
+                let na = (coords[v2].y - coords[u].y).atan2(coords[v2].x - coords[u].x);
+                normalize_angle(flipped - na).abs() < PI / 6.0
+            }
+        });
+        if !taken {
+            return flipped;
+        }
+    }
+    proposed
+}
+
+/// Tries to clear the crowded spot `target` by reflecting the branch that
+/// occupies it across its attachment bond (e.g. flipping an ortho substituent
+/// to lean the other way). Candidate branches are subtrees hanging off a
+/// single bond that contain every blocking atom, are fully placed, and do not
+/// contain `u`. A candidate is accepted only if, after reflection, both the
+/// target spot and every moved atom have full clearance; the smallest such
+/// branch is flipped. Returns whether a reflection was applied.
+fn mirror_blocking_branch(
+    mol: &MoleculeGraph,
+    u: usize,
+    target: Vec2,
+    coords: &mut Vec<Vec2>,
+    placed: &[bool],
+) -> bool {
+    let n = mol.n_atoms();
+    let blockers: Vec<usize> = (0..n)
+        .filter(|&i| placed[i] && i != u && target.dist(coords[i]) < CHAIN_CLEARANCE)
+        .collect();
+    if blockers.is_empty() {
+        return false;
+    }
+
+    let mut best: Option<(Vec<usize>, usize, usize)> = None;
+    for bond in &mol.bonds {
+        for (a, b) in [(bond.from, bond.to), (bond.to, bond.from)] {
+            if !placed[a] || !placed[b] {
+                continue;
+            }
+            let subtree = collect_subtree(mol, b, a, a);
+            if subtree.contains(&u) {
+                continue;
+            }
+            if !subtree.iter().all(|&t| placed[t]) {
+                continue;
+            }
+            if !blockers.iter().all(|bl| subtree.contains(bl)) {
+                continue;
+            }
+            if best.as_ref().is_some_and(|(prev, _, _)| prev.len() <= subtree.len()) {
+                continue;
+            }
+
+            let mut in_subtree = vec![false; n];
+            for &t in &subtree {
+                in_subtree[t] = true;
+            }
+            let reflect = |p: Vec2| reflect_point_across_line(p, coords[a], coords[b]);
+
+            // The target spot must actually clear once the branch flips.
+            let target_clear = (0..n).filter(|&i| placed[i] && i != u).all(|i| {
+                let p = if in_subtree[i] { reflect(coords[i]) } else { coords[i] };
+                target.dist(p) >= CHAIN_CLEARANCE
+            });
+            // The flipped branch must land in open space: full clearance from
+            // every atom outside it (internal distances are preserved).
+            let branch_clear = target_clear
+                && subtree.iter().all(|&t| {
+                    let tp = reflect(coords[t]);
+                    (0..n)
+                        .filter(|&i| placed[i] && !in_subtree[i] && i != a)
+                        .all(|i| tp.dist(coords[i]) >= CHAIN_CLEARANCE)
+                });
+            if branch_clear {
+                best = Some((subtree, a, b));
+            }
+        }
+    }
+
+    let Some((subtree, a, b)) = best else {
+        return false;
+    };
+    let (axis_a, axis_b) = (coords[a], coords[b]);
+    for &t in &subtree {
+        coords[t] = reflect_point_across_line(coords[t], axis_a, axis_b);
+    }
+    true
+}
+
 
 /// Computes outgoing bond directions for the `count` unplaced neighbors of `u`.
 ///

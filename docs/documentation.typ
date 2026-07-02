@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets
+#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 
 #let version = "0.5.0"
 #let accent = rgb("#239dad")
@@ -59,7 +59,7 @@
 #let pkg-scope = (
   smiles: smiles, ce: ce, rxn-arrow: rxn-arrow, mol: mol, reaction: reaction,
   atom: atom, bond: bond, lp: lp, species: species, arrow: arrow,
-  highlight: highlight, brackets: brackets,
+  highlight: highlight, brackets: brackets, mol-weight: mol-weight,
 )
 
 #let example(body, side: true) = block(
@@ -219,9 +219,11 @@ The package exports five symbols:
     bond-stroke: none,
     color: true,
     rotation: 0deg,
+    mirror: none,
     show-all-h: false,
     lone-pairs: none,
     atom-colors: (:),
+    show-indices: false,
   )
   ```
 ]
@@ -241,6 +243,7 @@ The package exports five symbols:
   [#c("bond-stroke")], [`length` / `none`], [`none`], [Bond stroke width. Overrides #c("scale") for strokes.],
   [#c("color")], [`bool`], [`true`], [Apply Jmol CPK atom colors.],
   [#c("rotation")], [`angle`], [`0deg`], [Rotate the molecule; labels stay upright.],
+  [#c("mirror")], [`none` / `"horizontal"` / `"vertical"`], [`none`], [Reflect the molecule across an axis; applied before #c("rotation"). Wedges and hashes are exchanged to preserve the depicted configuration.],
   [#c("show-all-h")], [`bool`], [`false`], [Also label carbon implicit hydrogens.],
   [#c("lone-pairs")], [`none` / `"dots"` / `"lines"`], [`none`], [Draw optional non-bonding electron pairs on skeletal atom labels.],
   [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
@@ -335,6 +338,42 @@ each defaults to #c("none"), meaning it follows #c("scale").]
   #example(```typ
   #smiles("CC(N)C(=O)O", rotation: 0deg) \
   #smiles("CC(N)C(=O)O", rotation: 90deg)
+  ```)
+]
+
+== #raw("mirror")
+
+#demo[
+  Reflects the molecule across an axis — something no #c("rotation") can do,
+  since a rotated drawing is never its own mirror image. #c("\"horizontal\"")
+  swaps left and right, #c("\"vertical\"") swaps top and bottom; mirroring is
+  applied before #c("rotation"). Useful to face a reacting group toward a
+  reaction arrow. Inside #c("reaction()"), pass it per molecule:
+  #c("mol(\"OC1CCCCC1\", mirror: \"horizontal\")").
+
+  #example(```typ
+  #smiles("CC(=O)OC1=CC=CC=C1C(=O)O") \
+  #smiles(
+    "CC(=O)OC1=CC=CC=C1C(=O)O",
+    mirror: "horizontal",
+  )
+  ```)
+]
+
+#note[Mirroring exchanges wedges and hashes: a reflected 2D skeleton with
+unchanged wedges would depict the enantiomer, while reflecting and swapping is
+equivalent to turning the molecule over — the depicted configuration at every
+stereocenter is preserved.]
+
+#demo[
+  A stereocenter keeps its configuration when mirrored.
+
+  #example(```typ
+  #smiles("N[C@@H](C)C(=O)O") \
+  #smiles(
+    "N[C@@H](C)C(=O)O",
+    mirror: "horizontal",
+  )
   ```)
 ]
 
@@ -596,6 +635,27 @@ double bonds would read as one long double bond.]
   ```)
 ]
 
+== Wavy and dashed bonds: #raw("!s") and #raw("!d")
+
+#demo[
+  Two more drawing extensions on single bonds: #c("!s") draws a wavy
+  (squiggly) bond — the conventional depiction of unspecified stereochemistry
+  or an attachment point — and #c("!d") draws a dashed bond for hydrogen
+  bonds, partial bonds, and coordination. Like plain bonds, they are colored
+  by the atoms at each end.
+
+  #example(```typ
+  #smiles("C!sN") \
+  #smiles("C!dN") \
+  #smiles("CC(!sC)C1=CC=CC=C1") \
+  #smiles("CN!d[Cu]")
+  ```)
+]
+
+#note[#c("!s") and #c("!d") carry no cis/trans meaning and never consume a
+double-bond geometry slot; they can appear next to real #c("/") and #c("\\")
+directional bonds.]
+
 // ═════════════════════════════════════════════════════════════════════════════
 = Colors <sec-colors>
 // ═════════════════════════════════════════════════════════════════════════════
@@ -804,6 +864,38 @@ in `atom-colors`.]
 ]
 
 // ═════════════════════════════════════════════════════════════════════════════
+= Molecular weight: #raw("mol-weight()")
+// ═════════════════════════════════════════════════════════════════════════════
+
+#demo[
+  #c("mol-weight(smiles)") returns the molecular weight in g/mol as a plain
+  #c("float"): the sum of IUPAC standard atomic weights over every atom,
+  including implicit and explicit hydrogens. Round it for display with
+  #c("calc.round").
+
+  #example(```typ
+  Ethanol: #calc.round(mol-weight("CCO"), digits: 2) g/mol \
+  Caffeine: #calc.round(
+    mol-weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C"),
+    digits: 2,
+  ) g/mol \
+  Sodium acetate: #calc.round(
+    mol-weight("CC(=O)[O-].[Na+]"),
+    digits: 2,
+  ) g/mol
+  ```)
+]
+
+Dot-separated fragments are summed together, so salts and hydrates work as
+written. Charges are accepted; as in standard formula-weight arithmetic, the
+electron mass difference of ions is ignored.
+
+#note[Compilation fails with a descriptive error when the weight is undefined:
+wildcard #c("*") atoms, #c("{label}") abbreviations (no defined composition),
+and isotope-labeled atoms such as #c("[2H]") (a specific nuclide needs a
+nuclide mass, not a standard atomic weight).]
+
+// ═════════════════════════════════════════════════════════════════════════════
 = Reaction schemes
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -831,7 +923,8 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 
 #c("rxn-arrow(above: none, below: none, dir: \"right\", kind: \"single\")") draws an arrow.
 #c("dir") may be #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").
-#c("kind") may be #c("\"single\""), #c("\"equilibrium\""), or #c("\"equilibrium-filled\"").
+#c("kind") may be #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""),
+#c("\"dashed\""), or #c("\"wavy\"").
 #c("above") and #c("below") carry reagents and conditions.
 
 #table(
@@ -842,7 +935,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   [#c("above")], [`none`], [Label above a horizontal arrow, or right of a vertical arrow.],
   [#c("below")], [`none`], [Label below a horizontal arrow, or left of a vertical arrow.],
   [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
-  [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), or #c("\"equilibrium-filled\"").],
+  [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
 )
 
 #demo[
@@ -855,6 +948,21 @@ Three helpers compose molecules, formulas, and arrows into schemes.
     rxn-arrow(kind: "equilibrium", above: ce("H+"), below: [heat]),
     ce("B"),
     rxn-arrow(kind: "equilibrium-filled", above: [cat.]),
+    ce("C"),
+  )
+  ```, side: false)
+]
+
+#demo[
+  A dashed arrow marks a hypothetical or formal transformation; a wavy arrow
+  marks a distorted or non-elementary one.
+
+  #example(```typ
+  #reaction(
+    ce("A"),
+    rxn-arrow(kind: "dashed", above: [formal]),
+    ce("B"),
+    rxn-arrow(kind: "wavy", above: [hv]),
     ce("C"),
   )
   ```, side: false)
@@ -1113,7 +1221,11 @@ parameter.
   (#c("@AL")) centers are accepted but drawn without stereo wedges.
 - Ring stereochemistry between adjacent centers and bridged bicyclics can overlap
   or need a manual adjustment (try #c("rotation"), or the manual #c("!w") and
-  #c("!h") wedges).
+  #c("!h") wedges). Ordinary substituent branches resolve crowding automatically —
+  a blocking branch flips to the other side of its attachment bond (e.g. the
+  ortho acetyl and carboxyl groups of aspirin), or the colliding bond flips
+  its zigzag turn — always keeping ideal bond angles, so plain branches do
+  not overlap.
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Quick reference
@@ -1135,6 +1247,7 @@ parameter.
   [#c("$")], [Quadruple bond (four parallel lines).],
   [#c("/") #c("\\")], [Double-bond cis/trans geometry.],
   [#c("!w") / #c("!h")], [Manual solid / hashed wedge (typed-smiles extension).],
+  [#c("!s") / #c("!d")], [Wavy / dashed bond (typed-smiles extension).],
   [#c("{label}")], [Abbreviated group pseudo-atom.],
   [#c("{>label}")], [Abbreviated group anchored at the glyph after #c(">").],
   [#c("{label|style}")], [Colored abbreviated group.],
@@ -1154,6 +1267,7 @@ parameter.
   [#c("bond-stroke")], [`none`], [Bond width only.],
   [#c("color")], [`true`], [CPK colors on or off.],
   [#c("rotation")], [`0deg`], [Rotate, labels stay upright.],
+  [#c("mirror")], [`none`], [Reflect #c("\"horizontal\"") or #c("\"vertical\""); wedges/hashes swap to keep stereo.],
   [#c("show-all-h")], [`false`], [Label carbon hydrogens too.],
   [#c("lone-pairs")], [`none`], [Draw lone pairs as #c("\"dots\"") or #c("\"lines\"").],
   [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
@@ -1185,7 +1299,17 @@ parameter.
   [#c("above")], [`none`], [Condition label above a horizontal arrow, or right of a vertical arrow.],
   [#c("below")], [`none`], [Condition label below a horizontal arrow, or left of a vertical arrow.],
   [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
-  [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), or #c("\"equilibrium-filled\"").],
+  [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
+)
+
+== Data helpers
+
+#table(
+  columns: (auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Helper*], [*Purpose*],
+  [#c("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float"); errors on wildcards, abbreviations, and isotopes.],
 )
 
 == Mechanism helpers

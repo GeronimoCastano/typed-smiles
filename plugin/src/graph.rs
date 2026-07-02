@@ -42,6 +42,8 @@ pub enum BondStereo {
     None,
     WedgeUp,
     WedgeDown,
+    Wavy,
+    Dashed,
 }
 
 impl BondStereo {
@@ -50,8 +52,21 @@ impl BondStereo {
             Self::None => "none",
             Self::WedgeUp => "wedge_up",
             Self::WedgeDown => "wedge_down",
+            Self::Wavy => "wavy",
+            Self::Dashed => "dashed",
         }
     }
+}
+
+/// Origin of a `/` or `\` bond token after preprocessing. `Plain` tokens are
+/// genuine SMILES directional bonds; the others come from typed-smiles drawing
+/// extensions and carry a forced rendering style instead of cis/trans meaning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForcedBondKind {
+    Plain,
+    Wedge,
+    Wavy,
+    Dashed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,7 +169,7 @@ pub struct MoleculeGraph {
 impl MoleculeGraph {
     pub fn from_smiles(
         smiles: &str,
-        forced_direction_markers: Vec<bool>,
+        forced_direction_markers: Vec<ForcedBondKind>,
         aromatic_atom_markers: Vec<bool>,
     ) -> Result<Self, String> {
         // smiles_parser::chain takes &[u8] and returns IResult<&[u8], Chain>
@@ -211,9 +226,10 @@ struct GraphBuilder {
     has_preceding: Vec<bool>,
     /// ring_number → (atom_idx, bond_spec_or_none, slot_index_in_opener)
     open_rings: HashMap<u8, (usize, Option<BondSpec>, usize)>,
-    /// One flag for every `/` or `\` bond token seen by smiles-parser.
-    /// `true` means the token originated from typed-smiles `!w`/`!h`, not SMILES.
-    forced_direction_markers: VecDeque<bool>,
+    /// One entry for every `/` or `\` bond token seen by smiles-parser,
+    /// recording whether it is genuine SMILES or a typed-smiles drawing
+    /// extension (`!w`/`!h`/`!s`/`!d`) and which forced style it carries.
+    forced_direction_markers: VecDeque<ForcedBondKind>,
     /// One flag per unbracketed organic-subset atom token, in writing order.
     /// `true` means the atom was written lowercase (aromatic) and uppercased
     /// during preprocessing. Bracket atoms carry their own aromatic flag.
@@ -363,24 +379,23 @@ impl GraphBuilder {
     }
 
     fn sparser_to_bond_spec(&mut self, b: &SBond) -> BondSpec {
-        let direction = sparser_bond_to_direction(b);
-        let forced = if matches!(b, SBond::Up | SBond::Down) {
-            self.forced_direction_markers.pop_front().unwrap_or(false)
+        let kind = if matches!(b, SBond::Up | SBond::Down) {
+            self.forced_direction_markers
+                .pop_front()
+                .unwrap_or(ForcedBondKind::Plain)
         } else {
-            false
+            ForcedBondKind::Plain
+        };
+        let (stereo, direction) = match kind {
+            ForcedBondKind::Plain => (BondStereo::None, sparser_bond_to_direction(b)),
+            ForcedBondKind::Wedge => (sparser_bond_to_forced_stereo(b), BondDirection::None),
+            ForcedBondKind::Wavy => (BondStereo::Wavy, BondDirection::None),
+            ForcedBondKind::Dashed => (BondStereo::Dashed, BondDirection::None),
         };
         BondSpec {
             order: sparser_bond_to_order(b),
-            stereo: if forced {
-                sparser_bond_to_forced_stereo(b)
-            } else {
-                BondStereo::None
-            },
-            direction: if forced {
-                BondDirection::None
-            } else {
-                direction
-            },
+            stereo,
+            direction,
         }
     }
 }

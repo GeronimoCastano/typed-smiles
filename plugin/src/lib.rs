@@ -6,8 +6,9 @@ mod render;
 
 pub use render::LayoutOutput;
 
-use graph::MoleculeGraph;
+use graph::{ForcedBondKind, MoleculeGraph};
 use layout::compute_layout;
+use ptable::Element;
 
 // ── SMILES preprocessing ─────────────────────────────────────────────────────
 //
@@ -28,9 +29,10 @@ pub(crate) struct Preprocessed {
     pub smiles: String,
     /// Labels in the order they appeared, one per {label} token.
     pub abbrev_labels: Vec<AbbrevLabel>,
-    /// One flag for each `/` or `\` token in `smiles`.
-    /// `true` means the token came from a typed-smiles `!w`/`!h` drawing extension.
-    pub forced_direction_markers: Vec<bool>,
+    /// One entry for each `/` or `\` token in `smiles`, recording whether it
+    /// is plain SMILES or which `!w`/`!h`/`!s`/`!d` drawing extension it
+    /// carries.
+    pub forced_direction_markers: Vec<ForcedBondKind>,
     /// One flag per unbracketed organic-subset atom token in `smiles`, in
     /// writing order. `true` means the atom was written lowercase (aromatic).
     pub aromatic_atom_markers: Vec<bool>,
@@ -77,12 +79,22 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
                 Some('w') => {
                     chars.next();
                     smiles.push('/');
-                    forced_direction_markers.push(true);
+                    forced_direction_markers.push(ForcedBondKind::Wedge);
                 }
                 Some('h') => {
                     chars.next();
                     smiles.push('\\');
-                    forced_direction_markers.push(true);
+                    forced_direction_markers.push(ForcedBondKind::Wedge);
+                }
+                Some('s') => {
+                    chars.next();
+                    smiles.push('/');
+                    forced_direction_markers.push(ForcedBondKind::Wavy);
+                }
+                Some('d') => {
+                    chars.next();
+                    smiles.push('/');
+                    forced_direction_markers.push(ForcedBondKind::Dashed);
                 }
                 _ => {
                     smiles.push(ch);
@@ -95,7 +107,7 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
         } else {
             match ch {
                 '[' => in_bracket = true,
-                '/' | '\\' => forced_direction_markers.push(false),
+                '/' | '\\' => forced_direction_markers.push(ForcedBondKind::Plain),
                 // Aromatic organic-subset atoms: uppercase for the parser,
                 // remember the aromatic designation.
                 'b' | 'c' | 'n' | 'o' | 'p' | 's' => {
@@ -194,6 +206,44 @@ fn assign_abbrevs(mol: &mut MoleculeGraph, labels: &[AbbrevLabel]) {
     }
 }
 
+// ── Molecular weight ─────────────────────────────────────────────────────────
+
+/// Sums standard atomic weights (PubChem / IUPAC values via ptable) over all
+/// atoms, including explicit and implicit hydrogens. Errors on anything whose
+/// mass is undefined: wildcard atoms, `{label}` abbreviations, and isotope
+/// labels (standard atomic weights do not apply to specific nuclides).
+fn compute_mol_weight(mol: &MoleculeGraph) -> Result<f64, String> {
+    let h_mass = Element::Hydrogen.get_atomic_mass() as f64;
+    let mut total = 0.0f64;
+    for (i, atom) in mol.atoms.iter().enumerate() {
+        if !atom.abbrev.is_empty() {
+            return Err(format!(
+                "cannot compute molecular weight: abbreviation {{{}}} has no defined composition",
+                atom.abbrev
+            ));
+        }
+        if atom.symbol == "*" {
+            return Err(
+                "cannot compute molecular weight: wildcard atom `*` has no mass".to_string(),
+            );
+        }
+        if let Some(isotope) = atom.isotope {
+            return Err(format!(
+                "cannot compute molecular weight: isotope [{isotope}{}] needs a nuclide mass, \
+                 not a standard atomic weight",
+                atom.symbol
+            ));
+        }
+        let element = Element::from_symbol(&atom.symbol).ok_or_else(|| {
+            format!("cannot compute molecular weight: unknown element {}", atom.symbol)
+        })?;
+        total += element.get_atomic_mass() as f64;
+        let hydrogens = atom.hcount as f64 + layout::implicit_h_count(mol, i) as f64;
+        total += hydrogens * h_mass;
+    }
+    Ok(total)
+}
+
 // ── WASM / Typst plugin entrypoint ──────────────────────────────────────────
 
 #[cfg(target_arch = "wasm32")]
@@ -219,6 +269,22 @@ mod wasm_entrypoint {
         let out = compute_layout(&mol)?;
         serde_json::to_vec(&out).map_err(|e| format!("JSON error: {e}"))
     }
+
+    /// Called from Typst as `smiles-plugin.mol_weight(bytes(smiles-str))`.
+    /// Returns the molecular weight in g/mol as a JSON number.
+    #[wasm_func]
+    pub fn mol_weight(smiles: &[u8]) -> Result<Vec<u8>, String> {
+        let s = core::str::from_utf8(smiles).map_err(|e| format!("UTF-8 error: {e}"))?;
+        let pre = preprocess_smiles(s)?;
+        let mut mol = MoleculeGraph::from_smiles(
+            &pre.smiles,
+            pre.forced_direction_markers,
+            pre.aromatic_atom_markers,
+        )?;
+        assign_abbrevs(&mut mol, &pre.abbrev_labels);
+        let weight = compute_mol_weight(&mol)?;
+        serde_json::to_vec(&weight).map_err(|e| format!("JSON error: {e}"))
+    }
 }
 
 // ── Native entrypoint for tests / CLI ───────────────────────────────────────
@@ -235,9 +301,80 @@ pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
     compute_layout(&mol)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub fn mol_weight_native(smiles: &str) -> Result<f64, String> {
+    let pre = preprocess_smiles(smiles)?;
+    let mut mol = MoleculeGraph::from_smiles(
+        &pre.smiles,
+        pre.forced_direction_markers,
+        pre.aromatic_atom_markers,
+    )?;
+    assign_abbrevs(&mut mol, &pre.abbrev_labels);
+    compute_mol_weight(&mol)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Smallest distance between any two distinct non-virtual atoms.
+    fn min_atom_distance(out: &LayoutOutput) -> f64 {
+        let mut min = f64::INFINITY;
+        for i in 0..out.atoms.len() {
+            for j in (i + 1)..out.atoms.len() {
+                if out.atoms[i].virtual_h || out.atoms[j].virtual_h {
+                    continue;
+                }
+                min = min.min(out.atoms[i].pos.dist(out.atoms[j].pos));
+            }
+        }
+        min
+    }
+
+    #[test]
+    fn ortho_ring_substituents_do_not_collide() {
+        // Aspirin: the acetyl C=O and the carboxyl OH grow from ortho ring
+        // positions toward each other and must not land on the same point.
+        let out = layout_native("CC(=O)OC1=CC=CC=C1C(=O)O").unwrap();
+        assert!(
+            min_atom_distance(&out) > 0.5,
+            "atoms overlap: min distance {}",
+            min_atom_distance(&out)
+        );
+
+        // The carboxyl carbon (atom 10: ring C9, =O 11, OH 12) must keep its
+        // textbook trigonal geometry: the conflict is resolved by flipping
+        // the acetyl branch aside, not by squeezing the carboxyl bonds into a
+        // narrow fan or a straight line.
+        let c = out.atoms[10].pos;
+        let angles: Vec<f64> = [9, 11, 12]
+            .iter()
+            .map(|&n| {
+                let p = out.atoms[n].pos;
+                (p.y - c.y).atan2(p.x - c.x)
+            })
+            .collect();
+        for i in 0..angles.len() {
+            for j in (i + 1)..angles.len() {
+                let mut delta = (angles[i] - angles[j]).abs();
+                if delta > std::f64::consts::PI {
+                    delta = 2.0 * std::f64::consts::PI - delta;
+                }
+                let deg = delta.to_degrees();
+                assert!(
+                    (deg - 120.0).abs() < 1.0,
+                    "carboxyl bond angle {deg:.1} degrees is not the ideal 120"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn crowded_branch_chains_do_not_collide() {
+        // Two ortho substituent chains long enough to sweep past each other.
+        let out = layout_native("CCCC1=CC=CC=C1CCC").unwrap();
+        assert!(min_atom_distance(&out) > 0.5);
+    }
 
     #[test]
     fn benzene_kekule() {
@@ -659,6 +796,39 @@ mod tests {
     }
 
     #[test]
+    fn forced_wavy_bond() {
+        let out = layout_native("C!sN").expect("forced wavy bond failed");
+        assert_eq!(out.bonds[0].stereo, "wavy");
+        assert_eq!(out.bonds[0].direction, "none");
+    }
+
+    #[test]
+    fn forced_dashed_bond() {
+        let out = layout_native("C!dN").expect("forced dashed bond failed");
+        assert_eq!(out.bonds[0].stereo, "dashed");
+        assert_eq!(out.bonds[0].direction, "none");
+    }
+
+    #[test]
+    fn forced_wavy_and_dashed_in_chain() {
+        let out = layout_native("CC!sO!dN").expect("wavy/dashed chain failed");
+        assert_eq!(out.bonds[0].stereo, "none");
+        assert_eq!(out.bonds[1].stereo, "wavy");
+        assert_eq!(out.bonds[2].stereo, "dashed");
+    }
+
+    #[test]
+    fn forced_wavy_does_not_disturb_real_directional_bonds() {
+        // A genuine trans alkene next to a forced wavy bond: the wavy marker
+        // must not consume or shift the cis/trans direction tokens.
+        let out = layout_native("F/C=C/C!sN").expect("mixed directional/wavy failed");
+        let wavy = out.bonds.iter().filter(|b| b.stereo == "wavy").count();
+        assert_eq!(wavy, 1);
+        let directional = out.bonds.iter().filter(|b| b.direction != "none").count();
+        assert_eq!(directional, 2);
+    }
+
+    #[test]
     fn slash_without_double_bond_is_invalid() {
         let err = layout_native("C/N").expect_err("isolated slash should fail");
         assert!(err.contains("Directional"));
@@ -929,7 +1099,10 @@ mod tests {
     fn preprocess_forced_wedge_markers() {
         let p = preprocess_smiles("C!wN!hO").expect("preprocess failed");
         assert_eq!(p.smiles, "C/N\\O");
-        assert_eq!(p.forced_direction_markers, vec![true, true]);
+        assert_eq!(
+            p.forced_direction_markers,
+            vec![ForcedBondKind::Wedge, ForcedBondKind::Wedge]
+        );
     }
 
     #[test]
@@ -1260,5 +1433,143 @@ mod tests {
         } else {
             -1
         }
+    }
+
+    // ── Molecular weight ──────────────────────────────────────────────────────
+    //
+    // Reference values are PubChem's computed molecular weights, which use the
+    // IUPAC/CIAAW standard atomic weights (the same table ptable embeds via
+    // PubChemElements_all.json).
+
+    fn assert_weight(smiles: &str, expected: f64) {
+        let w = mol_weight_native(smiles).expect("mol weight failed");
+        assert!(
+            (w - expected).abs() < 0.01,
+            "mol_weight({smiles}) = {w}, expected {expected}"
+        );
+    }
+
+    /// Extracts every SMILES string literal passed to `smiles("...")` or
+    /// `mol("...")` in the visual test file, undoing Typst string escapes.
+    fn test_typ_smiles_strings() -> Vec<String> {
+        let src = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tests/test.typ"
+        ))
+        .expect("tests/test.typ not found");
+        let src: String = src
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut found = Vec::new();
+        for opener in ["smiles(\"", "mol(\""] {
+            let mut rest = src.as_str();
+            while let Some(pos) = rest.find(opener) {
+                rest = &rest[pos + opener.len()..];
+                let mut literal = String::new();
+                let mut chars = rest.chars();
+                while let Some(ch) = chars.next() {
+                    match ch {
+                        '"' => break,
+                        '\\' => {
+                            if let Some(esc) = chars.next() {
+                                literal.push(esc);
+                            }
+                        }
+                        _ => literal.push(ch),
+                    }
+                }
+                found.push(literal);
+            }
+        }
+        found.sort();
+        found.dedup();
+        found
+    }
+
+    #[test]
+    fn every_molecule_in_test_typ_has_no_overlapping_atoms() {
+        let molecules = test_typ_smiles_strings();
+        assert!(molecules.len() > 50, "extraction looks broken: {molecules:?}");
+        let mut failures = Vec::new();
+        for m in &molecules {
+            match layout_native(m) {
+                Ok(out) => {
+                    let min = min_atom_distance(&out);
+                    if out.atoms.len() > 1 && min < 0.5 {
+                        failures.push(format!("{m}: min atom distance {min:.3}"));
+                    }
+                }
+                Err(e) => failures.push(format!("{m}: layout failed: {e}")),
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "molecules with overlaps or errors:\n{}",
+            failures.join("\n")
+        );
+    }
+
+    #[test]
+    fn mol_weight_water() {
+        // PubChem CID 962: 18.015 g/mol
+        assert_weight("O", 18.015);
+    }
+
+    #[test]
+    fn mol_weight_ethanol() {
+        // PubChem CID 702: 46.07 g/mol
+        assert_weight("CCO", 46.069);
+    }
+
+    #[test]
+    fn mol_weight_benzene_aromatic_input() {
+        // PubChem CID 241: 78.11 g/mol; aromatic input exercises kekulization.
+        assert_weight("c1ccccc1", 78.114);
+    }
+
+    #[test]
+    fn mol_weight_glucose() {
+        // PubChem CID 5793: 180.16 g/mol
+        assert_weight("C(C1C(C(C(C(O1)O)O)O)O)O", 180.156);
+    }
+
+    #[test]
+    fn mol_weight_caffeine() {
+        // PubChem CID 2519: 194.19 g/mol
+        assert_weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C", 194.19);
+    }
+
+    #[test]
+    fn mol_weight_sodium_acetate_dot_fragments() {
+        // PubChem CID 517045: 82.03 g/mol; dot-separated ion pair sums both
+        // fragments (the electron mass difference of the ions is ignored, as
+        // in standard formula-weight arithmetic).
+        assert_weight("CC(=O)[O-].[Na+]", 82.034);
+    }
+
+    #[test]
+    fn mol_weight_ammonium_bracket_h() {
+        // PubChem CID 223: 18.039 g/mol; explicit bracket hydrogens counted.
+        assert_weight("[NH4+]", 18.039);
+    }
+
+    #[test]
+    fn mol_weight_wildcard_errors() {
+        let err = mol_weight_native("*CC").expect_err("wildcard should fail");
+        assert!(err.contains("wildcard"));
+    }
+
+    #[test]
+    fn mol_weight_abbreviation_errors() {
+        let err = mol_weight_native("{PPh3}C=O").expect_err("abbreviation should fail");
+        assert!(err.contains("PPh3"));
+    }
+
+    #[test]
+    fn mol_weight_isotope_errors() {
+        let err = mol_weight_native("[2H]O[2H]").expect_err("isotope should fail");
+        assert!(err.contains("isotope"));
     }
 }

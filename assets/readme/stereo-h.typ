@@ -4,7 +4,7 @@
 #set text(font: "New Computer Modern", size: 10pt)
 
 #table(
-  columns: (1fr, 1fr, 1fr, 1fr),
+  columns: (1fr, 1fr, 1fr, 1fr, 1fr, 1fr),
   gutter: 0em,
   row-gutter: 0em,
   align: center + horizon,
@@ -12,11 +12,15 @@
 
   [*Manual wedge*],
   [*Manual hash*],
+  [*Wavy*],
+  [*Dashed*],
   [*Tetrahedral @@*],
   [*trans alkene*],
 
   [#smiles("C!wN", bond-length: 1.6)],
   [#smiles("C!hN", bond-length: 1.6)],
+  [#smiles("C!sN", bond-length: 1.6)],
+  [#smiles("C!dN", bond-length: 1.6)],
   [#smiles("N[C@@H](C)C(=O)O", bond-length: 0.9)],
   [#smiles("F/C=C/F", bond-length: 1.25)],
 )
