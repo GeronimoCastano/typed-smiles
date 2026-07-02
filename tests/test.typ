@@ -2098,3 +2098,20 @@ without stereo wedges. `$` renders a quadruple bond.
   [*Chromium(II) acetate core* \ #text(size: 8pt, `[Cr]$[Cr]`) \
    #smiles("[Cr]$[Cr]")],
 )
+
+= Cumulated double bonds label the sp carbon
+
+An invisible carbon between two double bonds would make them read as one long
+double bond, so cumulene centers always show an explicit `C`.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Carbon dioxide* \ #text(size: 8pt, `O=C=O`) \ #smiles("O=C=O")],
+  [*Ketene* \ #text(size: 8pt, `C=C=O`) \ #smiles("C=C=O")],
+  [*Allene* \ #text(size: 8pt, `NC(Br)=[C@AL1]=C(O)C`) \
+   #smiles("NC(Br)=[C@AL1]=C(O)C", scale: 0.85)],
+  [*Butatriene* \ #text(size: 8pt, `C=C=C=C`) \ #smiles("C=C=C=C")],
+)

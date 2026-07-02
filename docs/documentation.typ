@@ -578,6 +578,10 @@ adjustment (see @sec-limits).]
 accepted and drawn with correct connectivity, but without stereo decoration —
 their 3D arrangement is not translated into wedges.]
 
+#note[Cumulated double bonds always label the central sp carbon (#ce("O=C=O"),
+ketenes, allenes): the neighbors are collinear, so without the #c("C") the two
+double bonds would read as one long double bond.]
+
 == Manual wedges: #raw("!w") and #raw("!h")
 
 #demo[
