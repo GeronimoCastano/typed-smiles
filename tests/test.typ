@@ -700,14 +700,38 @@ Standard SMILES bonding rules apply around it.
 
   [#text(size: 8pt, `{OEt}C=O`) \ #smiles("{OEt}C=O")],
 
-  [#text(size: 8pt, `{PPh3|P}C=O`) \
-   #smiles("{PPh3|P}C=O")],
+  [#text(size: 8pt, `{>PPh3|P}C=O`) \
+   #smiles("{>PPh3|P}C=O")],
 
   [#text(size: 8pt, `{LG|red}C=O`) \
    #smiles("{LG|red}C=O")],
 
   [#text(size: 8pt, `[N] vs {N}`) \
    #smiles("[N]") #h(1em) #smiles("{N}")],
+)
+
+#v(1em)
+*Anchored label attachment points (`>` marker):*
+
+#table(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 0em,
+  row-gutter: 0em,
+  align: center + horizon,
+  stroke: 0.4pt + rgb("#d8d8d8"),
+
+  [*Anchor C, 0°*],
+  [*Anchor A, 45°*],
+  [*Anchor T, -45°*],
+
+  [#text(size: 8pt, `{>CAT}C`) \
+   #smiles("{>CAT}C", rotation: 0deg, show-indices: true, highlight(atom(0), fill: rgb("#D8F7C7")))],
+
+  [#text(size: 8pt, `{C>AT}C`) \
+   #smiles("{C>AT}C", rotation: 45deg, show-indices: true, highlight(atom(0), fill: rgb("#D8F7C7")))],
+
+  [#text(size: 8pt, `{CA>T}C`) \
+   #smiles("{CA>T}C", rotation: -45deg, show-indices: true, highlight(atom(0), fill: rgb("#D8F7C7")))],
 )
 
 #v(1em)

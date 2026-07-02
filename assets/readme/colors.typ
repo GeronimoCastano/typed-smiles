@@ -20,7 +20,7 @@
   [*Inline label colors*],
 
   [#smiles(
-    "{PPh3}C({OEt})=O",
+    "{>PPh3}C({OEt})=O",
     atom-colors: (O: rgb("#8B4513"), "{PPh3}": rgb("#7B2D8B")),
     bond-length: 1.0,
   )],

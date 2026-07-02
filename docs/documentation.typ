@@ -655,9 +655,9 @@ and arbitrary abbreviated groups. Any Typst color value works — #c("rgb()"),
 
   #example(```typ
   // default — colors come from inline styles or element fallback
-  #smiles("{PPh3|P}C({OEt|O})=O")
+  #smiles("{>PPh3|P}C({OEt|O})=O")
   // override by label name — inline style is ignored for these
-  #smiles("{PPh3|P}C({OEt|O})=O",
+  #smiles("{>PPh3|P}C({OEt|O})=O",
     atom-colors: ("{PPh3}": rgb("#7B2D8B"), "{OEt}": rgb("#008080")))
   ```, side: false)
 ]
@@ -739,7 +739,7 @@ in `atom-colors`.]
   overridden) CPK color to the label and its bonds.
 
   #example(```typ
-  #smiles("{PPh3|P}C({OEt|O})=O")
+  #smiles("{>PPh3|P}C({OEt|O})=O")
   ```)
 ]
 
@@ -751,10 +751,14 @@ in `atom-colors`.]
 
 #demo[
   Wrap text in braces #c("{...}") to place a labeled pseudo-atom that bonds like
-  any other atom. Use it for groups you do not want to draw in full.
+  any other atom. Use #c(">") inside the label to choose the attachment glyph;
+  the marker is not displayed. Rotate the molecule when needed so the bond
+  approaches the chosen glyph roughly perpendicular to the written label.
 
   #example(```typ
-  #smiles("{PPh3}C=O") \
+  #smiles("{>PPh3}C=O") \
+  #smiles("{Me>O}C=O") \
+  #smiles("{CA>T}C=O") \
   #smiles("{OEt}C(=O){NHR}")
   ```)
 ]
@@ -1126,6 +1130,7 @@ parameter.
   [#c("/") #c("\\")], [Double-bond cis/trans geometry.],
   [#c("!w") / #c("!h")], [Manual solid / hashed wedge (typed-smiles extension).],
   [#c("{label}")], [Abbreviated group pseudo-atom.],
+  [#c("{>label}")], [Abbreviated group anchored at the glyph after #c(">").],
   [#c("{label|style}")], [Colored abbreviated group.],
 )
 

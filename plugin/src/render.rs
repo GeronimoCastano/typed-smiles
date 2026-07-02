@@ -28,6 +28,12 @@ pub struct AtomOutput {
     /// Optional color/style token from `{label|style}`.
     #[serde(default)]
     pub abbrev_style: String,
+    /// Character index of the abbreviation attachment glyph.
+    #[serde(default)]
+    pub abbrev_anchor: usize,
+    /// Character length of the abbreviation attachment glyph. Zero means centered.
+    #[serde(default)]
+    pub abbrev_anchor_len: usize,
     /// Parsed bracket chirality, e.g. "tetra_anti" or "tetra_clockwise".
     #[serde(default)]
     pub chirality: String,

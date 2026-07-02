@@ -60,6 +60,8 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
                 lone_pair_dirs: lone_pair_directions(mol, i, &coords, lone_pairs as usize),
                 abbrev: a.abbrev.clone(),
                 abbrev_style: a.abbrev_style.clone(),
+                abbrev_anchor: a.abbrev_anchor,
+                abbrev_anchor_len: a.abbrev_anchor_len,
                 chirality: a.chirality.as_str().to_string(),
                 stereo_h: stereo_h[i]
                     .map(|(stereo, _)| stereo.as_str().to_string())
@@ -111,6 +113,8 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             lone_pair_dirs: Vec::new(),
             abbrev: String::new(),
             abbrev_style: String::new(),
+            abbrev_anchor: 0,
+            abbrev_anchor_len: 0,
             chirality: "none".to_string(),
             stereo_h: "none".to_string(),
             stereo_h_dir: Vec2::default(),

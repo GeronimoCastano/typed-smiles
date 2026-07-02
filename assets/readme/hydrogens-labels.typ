@@ -19,6 +19,6 @@
   [#smiles("CC(N)C(=O)O", bond-length: 1.0)],
   [#smiles("CCO", bond-length: 1.15, show-all-h: true)],
   [#smiles("[NH3]", bond-length: 1.25)],
-  [#smiles("{PPh3|P}C=O", bond-length: 1.1)],
+  [#smiles("{>PPh3|P}C=O", bond-length: 1.1)],
   [#smiles("CCN", font: "Libertinus Serif", bond-length: 1.1)],
 )

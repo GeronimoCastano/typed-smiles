@@ -16,6 +16,7 @@ use layout::compute_layout;
 //
 //   {label}  →  [*]   Abbreviated group (e.g. {PPh3}, {OEt}).
 //                     The Nth [*] atom in the output gets abbrev = the Nth label.
+//                     A `>` marker inside the label selects the attachment glyph.
 //   c, n, …  →  C, N  Unbracketed aromatic atoms are uppercased (the parser
 //                     only accepts aliphatic organic-subset symbols); a marker
 //                     records which atoms were aromatic so the graph stage can
@@ -39,9 +40,11 @@ pub(crate) struct Preprocessed {
 pub(crate) struct AbbrevLabel {
     pub text: String,
     pub style: String,
+    pub anchor: usize,
+    pub anchor_len: usize,
 }
 
-pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
+pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
     let mut smiles = String::with_capacity(input.len());
     let mut abbrev_labels = Vec::new();
     let mut forced_direction_markers = Vec::new();
@@ -67,11 +70,7 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
                 }
                 raw_label.push(inner);
             }
-            let (text, style) = raw_label
-                .split_once('|')
-                .map(|(text, style)| (text.to_string(), style.trim().to_string()))
-                .unwrap_or_else(|| (raw_label, String::new()));
-            abbrev_labels.push(AbbrevLabel { text, style });
+            abbrev_labels.push(parse_abbrev_label(&raw_label)?);
             smiles.push_str("[*]");
         } else if ch == '!' {
             match chars.peek().copied() {
@@ -89,6 +88,10 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
                     smiles.push(ch);
                 }
             }
+        } else if ch == '>' {
+            return Err(
+                "`>` is only valid inside an abbreviation label like `{>PPh3}`".to_string(),
+            );
         } else {
             match ch {
                 '[' => in_bracket = true,
@@ -112,12 +115,67 @@ pub(crate) fn preprocess_smiles(input: &str) -> Preprocessed {
         }
     }
 
-    Preprocessed {
+    Ok(Preprocessed {
         smiles,
         abbrev_labels,
         forced_direction_markers,
         aromatic_atom_markers,
+    })
+}
+
+fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
+    let (raw_text, style) = raw_label
+        .split_once('|')
+        .map(|(text, style)| (text, style.trim().to_string()))
+        .unwrap_or((raw_label, String::new()));
+    let marker_count = raw_text.chars().filter(|&ch| ch == '>').count();
+    if marker_count > 1 {
+        return Err(
+            "abbreviation labels may contain at most one `>` attachment marker".to_string(),
+        );
     }
+
+    let mut text = String::with_capacity(raw_text.len());
+    let mut marker = None;
+    for ch in raw_text.chars() {
+        if ch == '>' {
+            marker = Some(text.chars().count());
+        } else {
+            text.push(ch);
+        }
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    let (anchor, anchor_len) = if let Some(pos) = marker {
+        if chars.is_empty() {
+            return Err("abbreviation attachment marker `>` needs a label glyph".to_string());
+        }
+        if pos >= chars.len() {
+            return Err(
+                "abbreviation attachment marker `>` must precede a label glyph".to_string(),
+            );
+        }
+        let anchor = pos;
+        let len = if chars.get(anchor).is_some_and(|ch| ch.is_ascii_uppercase())
+            && chars
+                .get(anchor + 1)
+                .is_some_and(|ch| ch.is_ascii_lowercase())
+        {
+            2
+        } else {
+            1
+        };
+        (anchor, len)
+    } else {
+        (0, 0)
+    };
+
+    Ok(AbbrevLabel {
+        text,
+        style,
+        anchor,
+        anchor_len,
+    })
 }
 
 /// Apply collected abbreviation labels to the matching `*` atoms in the graph
@@ -129,6 +187,8 @@ fn assign_abbrevs(mol: &mut MoleculeGraph, labels: &[AbbrevLabel]) {
             if let Some(label) = label_iter.next() {
                 atom.abbrev = label.text.clone();
                 atom.abbrev_style = label.style.clone();
+                atom.abbrev_anchor = label.anchor;
+                atom.abbrev_anchor_len = label.anchor_len;
             }
         }
     }
@@ -149,7 +209,7 @@ mod wasm_entrypoint {
     #[wasm_func]
     pub fn layout(smiles: &[u8]) -> Result<Vec<u8>, String> {
         let s = core::str::from_utf8(smiles).map_err(|e| format!("UTF-8 error: {e}"))?;
-        let pre = preprocess_smiles(s);
+        let pre = preprocess_smiles(s)?;
         let mut mol = MoleculeGraph::from_smiles(
             &pre.smiles,
             pre.forced_direction_markers,
@@ -165,7 +225,7 @@ mod wasm_entrypoint {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
-    let pre = preprocess_smiles(smiles);
+    let pre = preprocess_smiles(smiles)?;
     let mut mol = MoleculeGraph::from_smiles(
         &pre.smiles,
         pre.forced_direction_markers,
@@ -819,15 +879,16 @@ mod tests {
 
     #[test]
     fn preprocess_single_abbrev() {
-        let p = preprocess_smiles("C({PPh3})=O");
+        let p = preprocess_smiles("C({PPh3})=O").expect("preprocess failed");
         assert_eq!(p.smiles, "C([*])=O");
         assert_eq!(p.abbrev_labels[0].text, "PPh3");
         assert_eq!(p.abbrev_labels[0].style, "");
+        assert_eq!(p.abbrev_labels[0].anchor_len, 0);
     }
 
     #[test]
     fn preprocess_multiple_abbrevs() {
-        let p = preprocess_smiles("{OEt}C(=O){NHR}");
+        let p = preprocess_smiles("{OEt}C(=O){NHR}").expect("preprocess failed");
         assert_eq!(p.smiles, "[*]C(=O)[*]");
         assert_eq!(p.abbrev_labels[0].text, "OEt");
         assert_eq!(p.abbrev_labels[1].text, "NHR");
@@ -835,7 +896,7 @@ mod tests {
 
     #[test]
     fn preprocess_abbrev_style() {
-        let p = preprocess_smiles("{PPh3|P}C({LG|red})=O");
+        let p = preprocess_smiles("{PPh3|P}C({LG|red})=O").expect("preprocess failed");
         assert_eq!(p.smiles, "[*]C([*])=O");
         assert_eq!(p.abbrev_labels[0].text, "PPh3");
         assert_eq!(p.abbrev_labels[0].style, "P");
@@ -844,15 +905,36 @@ mod tests {
     }
 
     #[test]
+    fn preprocess_abbrev_anchor_positions() {
+        let p = preprocess_smiles("{>CAT}C({C>AT}){CA>T}").expect("preprocess failed");
+        assert_eq!(p.smiles, "[*]C([*])[*]");
+        assert_eq!(p.abbrev_labels[0].text, "CAT");
+        assert_eq!(p.abbrev_labels[0].anchor, 0);
+        assert_eq!(p.abbrev_labels[0].anchor_len, 1);
+        assert_eq!(p.abbrev_labels[1].text, "CAT");
+        assert_eq!(p.abbrev_labels[1].anchor, 1);
+        assert_eq!(p.abbrev_labels[1].anchor_len, 1);
+        assert_eq!(p.abbrev_labels[2].text, "CAT");
+        assert_eq!(p.abbrev_labels[2].anchor, 2);
+        assert_eq!(p.abbrev_labels[2].anchor_len, 1);
+    }
+
+    #[test]
+    fn preprocess_rejects_arrow_marker_outside_abbrev() {
+        assert!(preprocess_smiles("C>C").is_err());
+        assert!(preprocess_smiles("{CAT>}C").is_err());
+    }
+
+    #[test]
     fn preprocess_forced_wedge_markers() {
-        let p = preprocess_smiles("C!wN!hO");
+        let p = preprocess_smiles("C!wN!hO").expect("preprocess failed");
         assert_eq!(p.smiles, "C/N\\O");
         assert_eq!(p.forced_direction_markers, vec![true, true]);
     }
 
     #[test]
     fn preprocess_no_abbrev() {
-        let p = preprocess_smiles("CCO");
+        let p = preprocess_smiles("CCO").expect("preprocess failed");
         assert_eq!(p.smiles, "CCO");
         assert!(p.abbrev_labels.is_empty());
         assert_eq!(p.aromatic_atom_markers, vec![false, false, false]);
@@ -860,7 +942,7 @@ mod tests {
 
     #[test]
     fn preprocess_uppercases_aromatic_atoms() {
-        let p = preprocess_smiles("Clc1ccccc1");
+        let p = preprocess_smiles("Clc1ccccc1").expect("preprocess failed");
         assert_eq!(p.smiles, "ClC1CCCCC1");
         // One marker per unbracketed organic-subset atom, in writing order;
         // the two-letter Cl counts once.
@@ -874,7 +956,7 @@ mod tests {
     fn preprocess_leaves_bracket_atoms_alone() {
         // Bracket contents are the parser's business: [nH] parses natively as
         // an aromatic atom, and the 'c' in [Sc] is not an aromatic carbon.
-        let p = preprocess_smiles("c1cc[nH]c1[Sc]");
+        let p = preprocess_smiles("c1cc[nH]c1[Sc]").expect("preprocess failed");
         assert_eq!(p.smiles, "C1CC[nH]C1[Sc]");
         assert_eq!(p.aromatic_atom_markers, vec![true, true, true, true]);
     }
@@ -900,6 +982,14 @@ mod tests {
         let out = layout_native("{PPh3|P}C=O").expect("styled abbrev layout failed");
         assert_eq!(out.atoms[0].abbrev, "PPh3");
         assert_eq!(out.atoms[0].abbrev_style, "P");
+    }
+
+    #[test]
+    fn abbrev_anchor_assigned_in_layout() {
+        let out = layout_native("{>PPh3}C=O").expect("anchored abbrev layout failed");
+        assert_eq!(out.atoms[0].abbrev, "PPh3");
+        assert_eq!(out.atoms[0].abbrev_anchor, 0);
+        assert_eq!(out.atoms[0].abbrev_anchor_len, 1);
     }
 
     #[test]
@@ -1022,7 +1112,7 @@ mod tests {
     fn chirality_matches_smiles(smiles: &str) -> bool {
         use crate::layout::{implicit_h_count, signed_volume, stereo_h_direction};
 
-        let pre = preprocess_smiles(smiles);
+        let pre = preprocess_smiles(smiles).expect("preprocess failed");
         let mol = MoleculeGraph::from_smiles(
             &pre.smiles,
             pre.forced_direction_markers,
@@ -1172,5 +1262,3 @@ mod tests {
         }
     }
 }
-
-

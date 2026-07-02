@@ -125,6 +125,8 @@ pub struct Atom {
     /// Non-empty when this atom was created by a `{label}` abbreviation substitution.
     pub abbrev: String,
     pub abbrev_style: String,
+    pub abbrev_anchor: usize,
+    pub abbrev_anchor_len: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -397,6 +399,8 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             chirality: AtomChirality::None,
             abbrev: String::new(),
             abbrev_style: String::new(),
+            abbrev_anchor: 0,
+            abbrev_anchor_len: 0,
         },
         SAtom::Bracket(b) => bracket_to_atom(b),
         SAtom::Unknown => Atom {
@@ -409,6 +413,8 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             chirality: AtomChirality::None,
             abbrev: String::new(),
             abbrev_style: String::new(),
+            abbrev_anchor: 0,
+            abbrev_anchor_len: 0,
         },
     }
 }
@@ -432,6 +438,8 @@ fn bracket_to_atom(b: &BracketAtom) -> Atom {
             .unwrap_or(AtomChirality::None),
         abbrev: String::new(),
         abbrev_style: String::new(),
+        abbrev_anchor: 0,
+        abbrev_anchor_len: 0,
     }
 }
 
