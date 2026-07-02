@@ -2115,3 +2115,21 @@ double bond, so cumulene centers always show an explicit `C`.
    #smiles("NC(Br)=[C@AL1]=C(O)C", scale: 0.85)],
   [*Butatriene* \ #text(size: 8pt, `C=C=C=C`) \ #smiles("C=C=C=C")],
 )
+
+= Measured label trims
+
+Bonds retreat from a bare atom label (no hydrogens, charge, or isotope) only
+as far as the measured glyph extent, so bonds between two labeled atoms —
+cumulenes, ethers, metal–metal bonds — no longer look disproportionately
+short next to bonds ending at a bare vertex.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Ketene* \ #text(size: 8pt, `C=C=O`) \ #smiles("C=C=O")],
+  [*Ether* \ #text(size: 8pt, `COC`) \ #smiles("COC")],
+  [*Ester* \ #text(size: 8pt, `CC(=O)OC`) \ #smiles("CC(=O)OC")],
+  [*Metal–metal* \ #text(size: 8pt, `Cl[Re]$[Re]Cl`) \ #smiles("Cl[Re]$[Re]Cl")],
+)
