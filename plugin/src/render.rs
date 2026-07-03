@@ -72,6 +72,19 @@ pub struct BondOutput {
     /// atom() references resolve to meaningful positions.
     #[serde(default)]
     pub virtual_bond: bool,
+    /// True for ring bonds that were aromatic in the input. Lets the renderer
+    /// offer the inscribed-circle depiction instead of alternating doubles.
+    #[serde(default)]
+    pub aromatic: bool,
+}
+
+/// An aromatic ring eligible for the inscribed-circle depiction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AromaticRing {
+    /// Ring centroid in layout coordinates.
+    pub center: Vec2,
+    /// Circle radius in bond-length units.
+    pub radius: f64,
 }
 
 /// 2D coordinate pair in layout-space units (1 unit = 1 bond length).
@@ -98,6 +111,10 @@ impl Vec2 {
 pub struct LayoutOutput {
     pub atoms: Vec<AtomOutput>,
     pub bonds: Vec<BondOutput>,
+    /// Rings whose bonds were all aromatic in the input, for the optional
+    /// circle depiction.
+    #[serde(default)]
+    pub aromatic_rings: Vec<AromaticRing>,
     /// Bounding box dimensions in bond-length units (for auto-scaling in Typst)
     pub bbox_width: f64,
     pub bbox_height: f64,

@@ -277,7 +277,7 @@ wedge and hash bonds are bicolored by atom like plain bonds.
   align: center,
 
   [*Default hetero H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2)],
-  [*All H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, show-all-h: true)],
+  [*All H* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.2, show-h: "all")],
   [*Explicit H* \ #text(size: 8pt, `[NH4+]`) \ #smiles("[NH4+]", bond-length: 1.2)],
   [*Literal label* \ #text(size: 8pt, `{O}`) \ #smiles("CC{O}", bond-length: 1.2)],
 )
@@ -1990,7 +1990,7 @@ Charged or isotopic hydrogens such as `[2H]` are kept as drawn atoms.
    #smiles("[2H]C([H])([H])[H]")],
 
   [*All-H still works* \ #text(size: 8pt, `C([H])([H])([H])[H]`, ) \
-   #smiles("C([H])([H])([H])[H]", show-all-h: true)],
+   #smiles("C([H])([H])([H])[H]", show-h: "all")],
 )
 = Aromatic SMILES (kekulization)
 
@@ -2308,4 +2308,145 @@ previously coincided exactly.
    #smiles("CCCC1=CC=CC=C1CCC", scale: 0.85)],
   [*Salicylic acid* \ #text(size: 8pt, `OC1=CC=CC=C1C(=O)O`) \
    #smiles("OC1=CC=CC=C1C(=O)O", scale: 0.85)],
+)
+
+= Dark theme and foreground (`fg`, `theme`)
+
+`fg: auto` (the default) inherits the surrounding text color, so molecules
+recolor automatically on dark slides; `theme: auto` switches to a dark CPK
+variant (lifted N, O, Br, I and named label colors) when the foreground is
+light. Reaction arrows inherit the text color the same way.
+
+#block(fill: rgb("#1E1E24"), inset: 10pt, radius: 4pt, width: 100%)[
+  #set text(fill: white)
+  #grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 1.5em,
+    align: center + horizon,
+
+    [*Caffeine, inherited* \ #text(size: 8pt, `fg: auto`) \
+     #smiles("CN1C=NC2=C1C(=O)N(C(=O)N2C)C", scale: 0.8)],
+    [*Dark N, Br, I* \ #text(size: 8pt, `NC(Br)C(I)C(=O)O`) \
+     #smiles("NC(Br)C(I)C(=O)O", scale: 0.8)],
+    [*Labels on dark* \ #text(size: 8pt, `{X|navy}C(=O){Y|maroon}`) \
+     #smiles("{X|navy}C(=O){Y|maroon}", scale: 0.8)],
+  )
+  #reaction(
+    mol("CCO", label: text(size: 8pt)[ethanol]),
+    rxn-arrow(above: text(size: 8pt)[ox.]),
+    mol("CC=O", label: text(size: 8pt)[acetaldehyde]),
+    rxn-arrow(kind: "equilibrium-filled"),
+    mol("CC(O)O", label: text(size: 8pt)[hydrate]),
+  )
+]
+
+Explicit values still override: `fg` recolors bonds and carbon labels on any
+background, and `theme: "dark"` can be forced independently.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Explicit `fg: navy`* \ #smiles("CC(N)C(=O)O", fg: navy)],
+  [*`color: false` uses `fg`* \ #smiles("CC(N)C(=O)O", color: false, fg: maroon)],
+  [*Forced dark palette on white* \ #text(size: 8pt, `theme: "dark"`) \
+   #smiles("NC(Br)C(I)C(=O)O", theme: "dark")],
+)
+
+
+= Aromatic ring circles (`aromatic: "circle"`)
+
+Rings written in aromatic (lowercase) notation can draw as single bonds with
+an inscribed circle instead of alternating double bonds. Kekulé-written input
+keeps its explicit bonds; in fused systems each fully aromatic ring gets its
+own circle.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Benzene, Kekulé style* \ #text(size: 8pt, `c1ccccc1`) \
+   #smiles("c1ccccc1")],
+  [*Benzene, circle* \ #text(size: 8pt, `aromatic: "circle"`) \
+   #smiles("c1ccccc1", aromatic: "circle")],
+  [*Naphthalene* \ #text(size: 8pt, `c1ccc2ccccc2c1`) \
+   #smiles("c1ccc2ccccc2c1", aromatic: "circle", scale: 0.9)],
+  [*Pyridine* \ #text(size: 8pt, `Cc1ccncc1`) \
+   #smiles("Cc1ccncc1", aromatic: "circle")],
+
+  [*Only aromatic ring circled* \ #text(size: 8pt, `c1ccc2CCCc2c1`) \
+   #smiles("c1ccc2CCCc2c1", aromatic: "circle", scale: 0.9)],
+  [*Kekulé input unaffected* \ #text(size: 8pt, `C1=CC=CC=C1`) \
+   #smiles("C1=CC=CC=C1", aromatic: "circle")],
+  [*Circle + mirror* \ #text(size: 8pt, `mirror: "horizontal"`) \
+   #smiles("Cc1ccncc1", aromatic: "circle", mirror: "horizontal")],
+  [*Circle + rotation* \ #text(size: 8pt, `rotation: 30deg`) \
+   #smiles("Cc1ccncc1", aromatic: "circle", rotation: 30deg)],
+)
+
+= Atom annotations (`atom-annotations`)
+
+Small gray side labels placed on the emptiest side of the atom. Entries are
+tuples: `(index, content)` or `(index, content, offset)`.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Offsets* \ #text(size: 8pt, `((1, [$alpha$], (...)), ...)`) \
+   #smiles("N[C@@H](C)C(=O)O", atom-annotations: (
+     (1, [$alpha$], (-0.4, -0.05)),
+     (2, [$beta$], (0.2, -0.3)),
+     (3, [$gamma$])
+   ))],
+  [*No offsets* \ #text(size: 8pt, `((1, [α]), (2, [β]))`) \
+   #smiles("N[C@@H](C)C(=O)O", atom-annotations: (
+     (1, [α]),
+     (2, [β]),
+   ))],
+  [*Next to subscript labels* \ #text(size: 8pt, `NH₂ and OH untouched`) \
+   #smiles(
+     "NCCO",
+     atom-annotations: ((0, [N1]), (3, [O1], (0.18, 0))),
+   )],
+  [*Custom style* \ #text(size: 8pt, `text(fill: red, size: 9pt)[..]`) \
+   #smiles(
+     "CC(=O)OC1=CC=CC=C1C(=O)O",
+     scale: 0.8,
+     atom-annotations: (
+       (1, text(fill: red, size: 9pt)[Ac]),
+       (10, text(fill: red, size: 9pt)[C1], (0.14, -0.10)),
+     ),
+   )],
+)
+
+Annotations also work per molecule inside a reaction:
+
+#reaction(
+  mol("CC(=O)O", atom-annotations: ((1, [C1]),)),
+  rxn-arrow(above: text(size: 8pt)[Δ]),
+  mol("CC=O", atom-annotations: ((1, [C1], (0.18, 0)),)),
+)
+
+= Per-atom hydrogen display (`show-h`)
+
+`show-h` labels selected implicit hydrogens on carbon. It accepts a single
+index, an index array, or `"all"`.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Default* \ #text(size: 8pt, `CC(N)C(=O)O`) \
+   #smiles("CC(N)C(=O)O")],
+  [*`show-h: 1`* \ #text(size: 8pt, [central C-H only]) \
+   #smiles("CC(N)C(=O)O", show-h: 1)],
+  [*`show-h: (0, 1)`* \ #text(size: 8pt, [methyl too]) \
+   #smiles("CC(N)C(=O)O", show-h: (0, 1))],
+  [*`show-h: "all"`* \ #text(size: 8pt, [everything]) \
+   #smiles("CC(N)C(=O)O", show-h: "all")],
 )

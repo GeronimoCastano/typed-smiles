@@ -151,6 +151,9 @@ pub struct Bond {
     pub order: BondOrder,
     pub stereo: BondStereo,
     pub direction: BondDirection,
+    /// True for ring bonds that were aromatic in the input before
+    /// kekulization assigned them a single or double order.
+    pub aromatic: bool,
 }
 
 #[derive(Debug, Default)]
@@ -257,6 +260,7 @@ impl GraphBuilder {
             order: spec.order,
             stereo: spec.stereo,
             direction: spec.direction,
+            aromatic: false,
         });
         self.bond_implicit.push(implicit);
         self.adj[from].push((to, b_idx));

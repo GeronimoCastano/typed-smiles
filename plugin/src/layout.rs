@@ -12,7 +12,7 @@ use std::collections::{HashSet, VecDeque};
 use std::f64::consts::PI;
 
 use crate::graph::{AtomChirality, BondDirection, BondOrder, BondStereo, MoleculeGraph};
-use crate::render::{AtomOutput, BondOutput, LayoutOutput, Vec2};
+use crate::render::{AromaticRing, AtomOutput, BondOutput, LayoutOutput, Vec2};
 
 /// Gap between the bounding boxes of dot-separated fragments, in bond lengths.
 const FRAGMENT_GAP: f64 = 1.5;
@@ -22,6 +22,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
         return Ok(LayoutOutput {
             atoms: vec![],
             bonds: vec![],
+            aromatic_rings: vec![],
             bbox_width: 0.0,
             bbox_height: 0.0,
         });
@@ -87,6 +88,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             inner_x: inner_dirs[i].0,
             inner_y: inner_dirs[i].1,
             virtual_bond: false,
+            aromatic: b.aromatic,
         })
         .collect();
 
@@ -129,6 +131,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             inner_x: 0.0,
             inner_y: 0.0,
             virtual_bond: true,
+            aromatic: false,
         });
     };
 
@@ -175,9 +178,50 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
     Ok(LayoutOutput {
         atoms,
         bonds,
+        aromatic_rings: aromatic_ring_circles(mol, &rings, &coords),
         bbox_width: bbox_w,
         bbox_height: bbox_h,
     })
+}
+
+/// Circle parameters for every ring whose bonds were all aromatic in the
+/// input, enabling the inscribed-circle depiction. The radius scales with the
+/// ring's inradius so the circle stays clear of the bonds for any ring size.
+fn aromatic_ring_circles(
+    mol: &MoleculeGraph,
+    rings: &[Vec<usize>],
+    coords: &[Vec2],
+) -> Vec<AromaticRing> {
+    let mut circles = Vec::new();
+    for ring in rings {
+        let all_aromatic = (0..ring.len()).all(|k| {
+            let a = ring[k];
+            let b = ring[(k + 1) % ring.len()];
+            bond_between(mol, a, b)
+                .map(|idx| mol.bonds[idx].aromatic)
+                .unwrap_or(false)
+        });
+        if !all_aromatic {
+            continue;
+        }
+        let n = ring.len() as f64;
+        let cx = ring.iter().map(|&i| coords[i].x).sum::<f64>() / n;
+        let cy = ring.iter().map(|&i| coords[i].y).sum::<f64>() / n;
+        let center = Vec2::new(cx, cy);
+        // Inradius: distance from the centroid to the nearest bond midpoint.
+        let inradius = (0..ring.len())
+            .map(|k| {
+                let a = coords[ring[k]];
+                let b = coords[ring[(k + 1) % ring.len()]];
+                center.dist(Vec2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0))
+            })
+            .fold(f64::INFINITY, f64::min);
+        circles.push(AromaticRing {
+            center,
+            radius: inradius * 0.72,
+        });
+    }
+    circles
 }
 
 /// Coordinates for every atom. Each connected fragment is laid out on its own;

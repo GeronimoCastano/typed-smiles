@@ -178,7 +178,7 @@ Or import only what you need:
 #import "@preview/typed-smiles:0.5.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
-The package exports five symbols:
+The package exports these main symbols:
 
 #table(
   columns: (auto, 1fr), inset: 7pt,
@@ -190,6 +190,10 @@ The package exports five symbols:
   [#c("mol")], [Wrap a molecule with an optional caption.],
   [#c("rxn-arrow")], [A reaction arrow with conditions above and below.],
   [#c("reaction")], [Lay out a multi-step reaction scheme.],
+  [#c("atom"), #c("bond"), #c("lp"), #c("species")], [References for arrows and highlights.],
+  [#c("arrow"), #c("highlight")], [Mechanism arrows and shaded atom/bond regions.],
+  [#c("brackets")], [Draw square brackets with optional corner marks.],
+  [#c("mol-weight")], [Compute molecular weight from a SMILES string.],
 )
 
 == Your first molecule
@@ -218,9 +222,13 @@ The package exports five symbols:
     font: "New Computer Modern",
     bond-stroke: none,
     color: true,
+    fg: auto,
+    theme: auto,
     rotation: 0deg,
     mirror: none,
-    show-all-h: false,
+    show-h: (),
+    aromatic: "kekule",
+    atom-annotations: (),
     lone-pairs: none,
     atom-colors: (:),
     show-indices: false,
@@ -242,9 +250,13 @@ The package exports five symbols:
   [#c("font")], [`str`], [`"New Computer Modern"`], [Font family for atom labels.],
   [#c("bond-stroke")], [`length` / `none`], [`none`], [Bond stroke width. Overrides #c("scale") for strokes.],
   [#c("color")], [`bool`], [`true`], [Apply Jmol CPK atom colors.],
+  [#c("fg")], [`auto` / `color`], [`auto`], [Foreground for bonds and carbon labels; `auto` inherits the surrounding text color.],
+  [#c("theme")], [`auto` / `"light"` / `"dark"`], [`auto`], [CPK palette variant; `auto` picks "dark" when #c("fg") is light.],
   [#c("rotation")], [`angle`], [`0deg`], [Rotate the molecule; labels stay upright.],
   [#c("mirror")], [`none` / `"horizontal"` / `"vertical"`], [`none`], [Reflect the molecule across an axis; applied before #c("rotation"). Wedges and hashes are exchanged to preserve the depicted configuration.],
-  [#c("show-all-h")], [`bool`], [`false`], [Also label carbon implicit hydrogens.],
+  [#c("show-h")], [`"all"` / `int` / `array`], [`()`], [Implicit hydrogens to label beyond the default heteroatom hydrogens. Use #c("\"all\"") for every atom.],
+  [#c("aromatic")], [`"kekule"` / `"circle"`], [`"kekule"`], [Depict lowercase-aromatic rings with alternating double bonds or with an inscribed circle.],
+  [#c("atom-annotations")], [`array`], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuple entries.],
   [#c("lone-pairs")], [`none` / `"dots"` / `"lines"`], [`none`], [Draw optional non-bonding electron pairs on skeletal atom labels.],
   [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
 )
@@ -330,6 +342,40 @@ each defaults to #c("none"), meaning it follows #c("scale").]
   ```)
 ]
 
+== #raw("fg") and #raw("theme")
+
+#demo[
+  Bond strokes and carbon labels follow #c("fg"), which defaults to #c("auto")
+  and inherits the surrounding text color — on a dark slide theme (Touying,
+  Polylux, or any #c("set text(fill: white)")) molecules recolor with no
+  configuration. #c("theme: auto") switches to a dark CPK variant whenever the
+  foreground is light, lifting only the hues that vanish on dark backgrounds
+  (N, O, Br, I, and dark named label colors such as navy or maroon).
+
+  #example(```typ
+  #block(fill: rgb("#1E1E24"), inset: 8pt,
+    radius: 4pt)[
+    #set text(fill: white)
+    #smiles("NC(Br)C(I)C(=O)O")
+  ]
+  ```)
+]
+
+#demo[
+  Both can be forced: an explicit #c("fg") recolors the skeleton on any
+  background, and #c("theme: \"dark\"") or #c("theme: \"light\"") pins the
+  palette. To set a document-wide default, rebind once in the preamble:
+  #c("#let smiles = smiles.with(fg: white, theme: \"dark\")").
+
+  #example(```typ
+  #smiles("CC(N)C(=O)O", fg: navy) \
+  #smiles("CC(N)C(=O)O", color: false, fg: maroon)
+  ```)
+]
+
+#note[Reaction arrows inherit the surrounding text color the same way via
+#c("rxn-arrow(color: auto)"), so full schemes work on dark slides too.]
+
 == #raw("rotation")
 
 #demo[
@@ -377,15 +423,41 @@ stereocenter is preserved.]
   ```)
 ]
 
-== #raw("show-all-h")
+== #raw("show-h")
 
 #demo[
-  Hydrogens on heteroatoms are shown by default; carbon hydrogens are hidden. Set
-  #c("show-all-h: true") to label every implicit hydrogen.
+  Hydrogens on heteroatoms are shown by default; carbon hydrogens are hidden.
+  #c("show-h") selects carbon hydrogens without needing a trailing comma for one
+  atom: use an integer for one atom, an array for several atoms, or #c("\"all\"")
+  for every implicit hydrogen. Use #c("show-indices: true") to read off the
+  indices while writing.
 
   #example(```typ
-  #smiles("CCO") \
-  #smiles("CCO", show-all-h: true)
+  #smiles("CC(N)C(=O)O") \
+  #smiles("CC(N)C(=O)O", show-h: 1) \
+  #smiles("CC(N)C(=O)O", show-h: (0, 1)) \
+  #smiles("CC(N)C(=O)O", show-h: "all")
+  ```)
+]
+
+== #raw("atom-annotations")
+
+#demo[
+  Small annotations for NMR numbering, Greek positions, or footnote marks are
+  drawn small and gray on the emptiest side of an atom. #c("atom-annotations")
+  is always a tuple list. Each entry is either #c("(index, content)") or
+  #c("(index, content, offset)"). Values are content, so wrap them in
+  #c("text()") to restyle.
+
+  #example(```typ
+  #smiles(
+    "N[C@@H](C)C(=O)O",
+    atom-annotations: (
+      (1, [$alpha$], (-0.4, -0.05)),
+      (2, [$beta$]),
+      (3, [$gamma$], (-0.05, -0.3)),
+    ),
+  )
   ```)
 ]
 
@@ -446,6 +518,19 @@ section covers the points specific to typed-smiles.
   ```)
 ]
 
+#demo[
+  #c("aromatic: \"circle\"") depicts lowercase-aromatic rings as single bonds
+  with an inscribed circle instead of alternating double bonds. Each fully
+  aromatic ring of a fused system gets its own circle; Kekulé-written input
+  always keeps its explicit bonds.
+
+  #example(```typ
+  #smiles("c1ccccc1", aromatic: "circle") \
+  #smiles("c1ccc2ccccc2c1", aromatic: "circle") \
+  #smiles("Cc1ccncc1", aromatic: "circle")
+  ```)
+]
+
 #note[Kekulization does not renumber anything: atom indices follow SMILES
 writing order for aromatic input exactly as for Kekulé input, so
 #c("show-indices"), #c("highlight(...)"), and #c("arrow(...)") references work
@@ -500,11 +585,11 @@ OpenSMILES example #c("C1.C1"), ethane) still forms its bond.]
 
 #demo[
   Heteroatom hydrogens are shown by default; carbon hydrogens are hidden for a
-  clean skeleton. #c("show-all-h: true") labels carbon hydrogens as well.
+  clean skeleton. #c("show-h: \"all\"") labels carbon hydrogens as well.
 
   #example(```typ
   #smiles("OCCN") \
-  #smiles("OCCN", show-all-h: true)
+  #smiles("OCCN", show-h: "all")
   ```)
 ]
 
@@ -909,7 +994,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   Passing a string lets #c("reaction") render the molecule itself so its atoms become
   addressable by curly arrows (see #link(<sec-mech>)[Reaction mechanisms]). String
   molecules accept common drawing options such as #c("font-size"), #c("font"),
-  #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-all-h"), #c("lone-pairs"),
+  #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-h"), #c("lone-pairs"),
   #c("atom-colors"), and #c("show-indices"). #c("offset") nudges the molecule in
   bond-length units and switches the reaction into mechanism mode; use
   #c("reaction(scale: ...)") to resize a shared mechanism canvas.
@@ -926,6 +1011,8 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 #c("kind") may be #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""),
 #c("\"dashed\""), or #c("\"wavy\"").
 #c("above") and #c("below") carry reagents and conditions.
+#c("color") defaults to #c("auto"), inheriting the surrounding text color
+(so arrows recolor on dark slides).
 
 #table(
   columns: (auto, auto, 1fr), inset: 6.5pt,
@@ -936,6 +1023,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   [#c("below")], [`none`], [Label below a horizontal arrow, or left of a vertical arrow.],
   [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
+  [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
 )
 
 #demo[
@@ -1266,9 +1354,13 @@ parameter.
   [#c("font")], [`"New Computer Modern"`], [Atom-label font.],
   [#c("bond-stroke")], [`none`], [Bond width only.],
   [#c("color")], [`true`], [CPK colors on or off.],
+  [#c("fg")], [`auto`], [Foreground for bonds/carbon labels; `auto` inherits the text color.],
+  [#c("theme")], [`auto`], [CPK palette variant; `auto` goes dark when #c("fg") is light.],
   [#c("rotation")], [`0deg`], [Rotate, labels stay upright.],
   [#c("mirror")], [`none`], [Reflect #c("\"horizontal\"") or #c("\"vertical\""); wedges/hashes swap to keep stereo.],
-  [#c("show-all-h")], [`false`], [Label carbon hydrogens too.],
+  [#c("show-h")], [`()`], [Label selected implicit hydrogens; use #c("\"all\"") for every atom.],
+  [#c("aromatic")], [`"kekule"`], [Lowercase-aromatic rings as doubles or #c("\"circle\"").],
+  [#c("atom-annotations")], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuples.],
   [#c("lone-pairs")], [`none`], [Draw lone pairs as #c("\"dots\"") or #c("\"lines\"").],
   [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
   [#c("show-indices")], [`false`], [Stamp atom indices for writing references.],
@@ -1300,6 +1392,7 @@ parameter.
   [#c("below")], [`none`], [Condition label below a horizontal arrow, or left of a vertical arrow.],
   [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
+  [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
 )
 
 == Data helpers

@@ -1511,6 +1511,38 @@ mod tests {
         );
     }
 
+    // ── Aromatic ring circles ────────────────────────────────────────────────
+
+    #[test]
+    fn aromatic_input_emits_ring_circles() {
+        let out = layout_native("c1ccccc1").expect("benzene layout failed");
+        assert_eq!(out.aromatic_rings.len(), 1);
+        let ring = &out.aromatic_rings[0];
+        // Hexagon with unit bonds: inradius ~0.866, so radius ~0.62.
+        assert!((ring.radius - 0.866 * 0.72).abs() < 0.05);
+        assert!(out.bonds.iter().filter(|b| b.aromatic).count() == 6);
+    }
+
+    #[test]
+    fn kekule_input_emits_no_ring_circles() {
+        let out = layout_native("C1=CC=CC=C1").expect("benzene layout failed");
+        assert!(out.aromatic_rings.is_empty());
+        assert!(out.bonds.iter().all(|b| !b.aromatic));
+    }
+
+    #[test]
+    fn fused_aromatics_emit_one_circle_per_ring() {
+        let out = layout_native("c1ccc2ccccc2c1").expect("naphthalene layout failed");
+        assert_eq!(out.aromatic_rings.len(), 2);
+    }
+
+    #[test]
+    fn aromatic_ring_with_saturated_neighbor_ring() {
+        // Indane: only the aromatic ring gets a circle.
+        let out = layout_native("c1ccc2CCCc2c1").expect("indane layout failed");
+        assert_eq!(out.aromatic_rings.len(), 1);
+    }
+
     #[test]
     fn mol_weight_water() {
         // PubChem CID 962: 18.015 g/mol

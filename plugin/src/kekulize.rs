@@ -34,6 +34,15 @@ pub(crate) fn kekulize(mol: &mut MoleculeGraph, bond_implicit: &[bool]) -> Resul
     mark_aromatic_bonds(mol, bond_implicit)?;
     demote_nonring_aromatic_bonds(mol);
     check_aromatic_atoms_in_rings(mol)?;
+
+    // Remember which ring bonds were aromatic before the orders are fixed,
+    // so renderers can offer the inscribed-circle depiction.
+    for bond in mol.bonds.iter_mut() {
+        if bond.order == BondOrder::Aromatic {
+            bond.aromatic = true;
+        }
+    }
+
     assign_double_bonds(mol)?;
 
     // Whatever aromatic bonds the matching did not turn into double bonds are

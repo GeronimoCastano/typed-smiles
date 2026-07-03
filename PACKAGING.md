@@ -89,6 +89,7 @@ typst compile --root . --ppi 300 assets/readme/reactions.typ assets/readme/react
 typst compile --root . --ppi 300 assets/readme/schemes.typ assets/readme/schemes.png
 typst compile --root . --ppi 300 assets/readme/stereo-h.typ assets/readme/stereo-h.png
 typst compile --root . --ppi 300 assets/readme/mirror.typ assets/readme/mirror.png
+typst compile --root . --ppi 300 assets/readme/dark.typ assets/readme/dark.png
 ```
 
 8. Commit and push `main`.
