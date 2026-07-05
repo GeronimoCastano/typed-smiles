@@ -292,28 +292,6 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
 
 ![Watson-Crick A-T base pair composed with CeTZ anchors](assets/readme/watson-crick-cetz.png)
 
-The same pattern works for annotated nonbonded contacts. Here a soft colored
-band sits under a dashed donor-acceptor interaction, with partial-charge labels
-at the endpoints:
-
-```typst
-#context cetz.canvas(length: 30pt, {
-  import cetz.draw: *
-  smiles-cetz("CC(=O)C", name: "acceptor", origin: (0, 0))
-  smiles-cetz("[H]F", name: "donor", origin: (3.4, -0.05))
-
-  let off(anchor, by) = (rel: by, to: anchor)
-  let o = off("acceptor.atom-2", (0.10, 0.02))
-  let h = off("donor.atom-0", (-0.10, 0.02))
-  line(o, h, stroke: (paint: rgb("#6C63FF").transparentize(78%), thickness: 6pt, cap: "round"))
-  line(o, h, stroke: (paint: rgb("#2D6CDF"), thickness: 0.9pt, dash: "densely-dashed"))
-
-  content(off("acceptor.atom-2", (-0.18, 0.34)), text(size: 8pt, fill: rgb("#1565C0"))[$delta^-$])
-  content(off("donor.atom-0", (0.18, 0.34)), text(size: 8pt, fill: rgb("#B71C1C"))[$delta^+$])
-  content((2.05, 0.78), text(size: 7.5pt, fill: rgb("#5E35B1"))[polar contact])
-})
-```
-
 ## Chemical formulas and equations
 
 `ce` is re-exported from `chemformula`, so one import covers both structures
