@@ -84,6 +84,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             to: b.to,
             order: b.order.as_u8(),
             stereo: rendered_stereo[i].as_str().to_string(),
+            forced_stereo: b.forced_stereo,
             direction: direction_as_str(b.direction).to_string(),
             inner_x: inner_dirs[i].0,
             inner_y: inner_dirs[i].1,
@@ -127,6 +128,7 @@ pub fn compute_layout(mol: &MoleculeGraph) -> Result<LayoutOutput, String> {
             to: h_idx,
             order: 1,
             stereo: "none".to_string(),
+            forced_stereo: false,
             direction: "none".to_string(),
             inner_x: 0.0,
             inner_y: 0.0,
@@ -539,43 +541,56 @@ fn apply_cis_trans_layout(mol: &MoleculeGraph, coords: &mut Vec<Vec2>) -> Result
             continue;
         }
 
-        let left = directional_neighbor(mol, double_bond.from, double_bond.to)?;
-        let right = directional_neighbor(mol, double_bond.to, double_bond.from)?;
+        let left = directional_neighbors(
+            mol,
+            double_bond.from,
+            double_bond.to,
+            &handled_directional_bonds,
+        )?;
+        let right = directional_neighbors(
+            mol,
+            double_bond.to,
+            double_bond.from,
+            &handled_directional_bonds,
+        )?;
 
-        let (Some(left), Some(right)) = (left, right) else {
-            if left.is_some() || right.is_some() {
+        if left.is_empty() || right.is_empty() {
+            if !left.is_empty() || !right.is_empty() {
                 return Err(
                     "Directional / and \\ bonds must mark both ends of a double bond".into(),
                 );
             }
             continue;
-        };
-
-        handled_directional_bonds.insert(left.bond_idx);
-        handled_directional_bonds.insert(right.bond_idx);
+        }
 
         let axis_from = coords[double_bond.from];
         let axis_to = coords[double_bond.to];
-        orient_subtree_to_side(
-            mol,
-            coords,
-            left.neighbor,
-            double_bond.from,
-            double_bond.to,
-            axis_from,
-            axis_to,
-            left.side,
-        );
-        orient_subtree_to_side(
-            mol,
-            coords,
-            right.neighbor,
-            double_bond.to,
-            double_bond.from,
-            axis_from,
-            axis_to,
-            right.side,
-        );
+        for left in left {
+            handled_directional_bonds.insert(left.bond_idx);
+            orient_subtree_to_side(
+                mol,
+                coords,
+                left.neighbor,
+                double_bond.from,
+                double_bond.to,
+                axis_from,
+                axis_to,
+                left.side,
+            );
+        }
+        for right in right {
+            handled_directional_bonds.insert(right.bond_idx);
+            orient_subtree_to_side(
+                mol,
+                coords,
+                right.neighbor,
+                double_bond.to,
+                double_bond.from,
+                axis_from,
+                axis_to,
+                right.side,
+            );
+        }
     }
 
     for (idx, bond) in mol.bonds.iter().enumerate() {
@@ -594,14 +609,15 @@ struct DirectionalNeighbor {
     side: i8,
 }
 
-fn directional_neighbor(
+fn directional_neighbors(
     mol: &MoleculeGraph,
     center: usize,
     double_partner: usize,
-) -> Result<Option<DirectionalNeighbor>, String> {
-    let mut found = None;
+    handled: &HashSet<usize>,
+) -> Result<Vec<DirectionalNeighbor>, String> {
+    let mut found = Vec::new();
     for &(neighbor, bond_idx) in &mol.adj[center] {
-        if neighbor == double_partner {
+        if neighbor == double_partner || handled.contains(&bond_idx) {
             continue;
         }
         let bond = &mol.bonds[bond_idx];
@@ -625,13 +641,13 @@ fn directional_neighbor(
             neighbor,
             side,
         };
-        if found.is_some() {
+        if found.iter().any(|prev: &DirectionalNeighbor| prev.side == side) {
             return Err(
                 "Conflicting or unsupported multiple directional bonds on one end of a double bond"
                     .into(),
             );
         }
-        found = Some(candidate);
+        found.push(candidate);
     }
     Ok(found)
 }
@@ -1224,8 +1240,83 @@ fn place_connected_fused_rings(
             }
         }
 
-        if !progressed {
-            break;
+        if progressed {
+            continue;
+        }
+
+        // No edge-fused ring is ready: try a spiro ring, which joins the placed
+        // structure at a single shared atom. Placing one may expose further
+        // edge fusions, so re-enter the loop afterwards.
+        let spiro = rings.iter().enumerate().find(|(idx, ring)| {
+            !placed_rings.contains(idx)
+                && ring.iter().filter(|&&a| placed[a]).count() == 1
+        });
+        if let Some((ring_idx, ring)) = spiro {
+            place_spiro_ring(mol, ring, coords, placed);
+            placed_rings.insert(ring_idx);
+            continue;
+        }
+
+        break;
+    }
+}
+
+/// Place a ring joined to the already-placed structure at a single shared
+/// (spiro) atom, as a regular polygon opening away from that atom's placed
+/// neighbors so the two rings do not overlap.
+fn place_spiro_ring(
+    mol: &MoleculeGraph,
+    ring: &[usize],
+    coords: &mut Vec<Vec2>,
+    placed: &mut Vec<bool>,
+) {
+    let n = ring.len();
+    let Some(si) = (0..n).find(|&i| placed[ring[i]]) else {
+        place_regular_ring(ring, Vec2::new(0.0, 0.0), 0.0, coords, placed);
+        return;
+    };
+    let s = ring[si];
+    let p = coords[s];
+
+    // Mean unit vector from the spiro atom toward its already-placed neighbors
+    // points into the existing ring system; the new ring is centered opposite.
+    let mut dx = 0.0;
+    let mut dy = 0.0;
+    for bond in &mol.bonds {
+        let other = if bond.from == s {
+            bond.to
+        } else if bond.to == s {
+            bond.from
+        } else {
+            continue;
+        };
+        if placed[other] {
+            let vx = coords[other].x - p.x;
+            let vy = coords[other].y - p.y;
+            let len = (vx * vx + vy * vy).sqrt();
+            if len > 1e-6 {
+                dx += vx / len;
+                dy += vy / len;
+            }
+        }
+    }
+    let into_len = (dx * dx + dy * dy).sqrt();
+    let (ix, iy) = if into_len < 1e-6 {
+        (0.0, -1.0)
+    } else {
+        (dx / into_len, dy / into_len)
+    };
+
+    let r = 1.0 / (2.0 * (PI / n as f64).sin());
+    let center = Vec2::new(p.x - ix * r, p.y - iy * r);
+    let start = (p.y - center.y).atan2(p.x - center.x);
+    let step = 2.0 * PI / n as f64;
+    for (i, &atom) in ring.iter().enumerate() {
+        if !placed[atom] {
+            let offset = i as i64 - si as i64;
+            let angle = start + step * offset as f64;
+            coords[atom] = Vec2::new(center.x + r * angle.cos(), center.y + r * angle.sin());
+            placed[atom] = true;
         }
     }
 }
@@ -2240,6 +2331,35 @@ mod tests {
         .expect("steroid-like molecule should parse");
         let rings = find_rings(&mol);
         assert_eq!(rings.len(), 4, "rings: {rings:?}");
+    }
+
+    #[test]
+    fn ring_closure_after_branch_stays_on_branch_point() {
+        let pre = crate::preprocess_smiles("C1=CCCC(=O)1").expect("preprocess failed");
+        let mol = MoleculeGraph::from_smiles(
+            &pre.smiles,
+            pre.forced_direction_markers,
+            pre.aromatic_atom_markers,
+        )
+        .expect("cyclopentenone should parse");
+        let rings = find_rings(&mol);
+        assert!(rings.iter().any(|ring| ring.len() == 5), "rings: {rings:?}");
+
+        let complex = "O1C=C[C@H]([C@H]1O2)c3c2cc(OC)c4c3OC(=O)C5=C4CCC(=O)5";
+        let pre = crate::preprocess_smiles(complex).expect("preprocess failed");
+        let mol = MoleculeGraph::from_smiles(
+            &pre.smiles,
+            pre.forced_direction_markers,
+            pre.aromatic_atom_markers,
+        )
+        .expect("complex fused system should parse");
+        let rings = find_rings(&mol);
+        assert!(
+            rings
+                .iter()
+                .any(|ring| ring.len() == 5 && ring.contains(&19)),
+            "rings: {rings:?}"
+        );
     }
 
     #[test]

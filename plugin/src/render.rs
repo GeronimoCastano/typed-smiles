@@ -59,6 +59,9 @@ pub struct BondOutput {
     pub order: u8,
     /// Rendered stereochemistry: "none" | "wedge_up" | "wedge_down"
     pub stereo: String,
+    /// True when stereo came from a typed-smiles drawing extension (`!w`/`!h`).
+    #[serde(default)]
+    pub forced_stereo: bool,
     /// OpenSMILES directional marker: "none" | "up" | "down"
     #[serde(default)]
     pub direction: String,

@@ -127,12 +127,174 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
         }
     }
 
+    let smiles = normalize_post_branch_ring_bonds(&smiles)?;
+
     Ok(Preprocessed {
         smiles,
         abbrev_labels,
         forced_direction_markers,
         aromatic_atom_markers,
     })
+}
+
+fn normalize_post_branch_ring_bonds(input: &str) -> Result<String, String> {
+    // Ring closures are branch-like atom modifiers in SMILES, but the parser
+    // crate only accepts them before parenthesized branches on the same atom.
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+
+    while i < bytes.len() {
+        let Some(atom_end) = atom_token_end(input, i)? else {
+            out.push(bytes[i] as char);
+            i += 1;
+            continue;
+        };
+
+        let atom = &input[i..atom_end];
+        let mut j = atom_end;
+        let mut ring_bonds = String::new();
+        let mut branches = Vec::new();
+        let mut seen_branch = false;
+
+        loop {
+            if let Some(end) = ring_bond_token_end(input, j, !seen_branch) {
+                ring_bonds.push_str(&input[j..end]);
+                j = end;
+                continue;
+            }
+
+            if bytes.get(j) == Some(&b'(') {
+                let end = matching_paren_end(input, j)?;
+                let inner = normalize_post_branch_ring_bonds(&input[j + 1..end - 1])?;
+                if ring_bond_sequence_end(&inner, false) == Some(inner.len()) {
+                    ring_bonds.push_str(&inner);
+                } else {
+                    branches.push(format!("({inner})"));
+                    seen_branch = true;
+                }
+                j = end;
+                continue;
+            }
+
+            break;
+        }
+
+        out.push_str(atom);
+        out.push_str(&ring_bonds);
+        for branch in branches {
+            out.push_str(&branch);
+        }
+        i = j;
+    }
+
+    Ok(out)
+}
+
+fn atom_token_end(input: &str, start: usize) -> Result<Option<usize>, String> {
+    let bytes = input.as_bytes();
+    let Some(&ch) = bytes.get(start) else {
+        return Ok(None);
+    };
+
+    if ch == b'[' {
+        let mut i = start + 1;
+        while i < bytes.len() {
+            if bytes[i] == b']' {
+                return Ok(Some(i + 1));
+            }
+            i += 1;
+        }
+        return Err("unclosed bracket atom".to_string());
+    }
+
+    if start + 1 < bytes.len()
+        && ((bytes[start] == b'C' && bytes[start + 1] == b'l')
+            || (bytes[start] == b'B' && bytes[start + 1] == b'r'))
+    {
+        return Ok(Some(start + 2));
+    }
+
+    if matches!(
+        ch,
+        b'B' | b'C' | b'N' | b'O' | b'P' | b'S' | b'F' | b'I' | b'*'
+    ) {
+        return Ok(Some(start + 1));
+    }
+
+    Ok(None)
+}
+
+fn matching_paren_end(input: &str, start: usize) -> Result<usize, String> {
+    let bytes = input.as_bytes();
+    let mut depth = 0usize;
+    let mut i = start;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b'[' => {
+                i += 1;
+                while i < bytes.len() && bytes[i] != b']' {
+                    i += 1;
+                }
+                if i == bytes.len() {
+                    return Err("unclosed bracket atom".to_string());
+                }
+            }
+            b'(' => depth += 1,
+            b')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Ok(i + 1);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    Err("unclosed branch".to_string())
+}
+
+fn ring_bond_sequence_end(input: &str, allow_directional: bool) -> Option<usize> {
+    let mut i = 0;
+    let mut found = false;
+    while let Some(end) = ring_bond_token_end(input, i, allow_directional) {
+        found = true;
+        i = end;
+    }
+    found.then_some(i)
+}
+
+fn ring_bond_token_end(input: &str, start: usize, allow_directional: bool) -> Option<usize> {
+    let bytes = input.as_bytes();
+    if start >= bytes.len() {
+        return None;
+    }
+
+    let mut i = start;
+    if matches!(bytes[i], b'-' | b'=' | b'#' | b'$' | b':')
+        || (allow_directional && matches!(bytes[i], b'/' | b'\\'))
+    {
+        i += 1;
+        if i >= bytes.len() {
+            return None;
+        }
+    }
+
+    if bytes[i].is_ascii_digit() {
+        return Some(i + 1);
+    }
+
+    if bytes[i] == b'%'
+        && i + 2 < bytes.len()
+        && bytes[i + 1].is_ascii_digit()
+        && bytes[i + 2].is_ascii_digit()
+    {
+        return Some(i + 3);
+    }
+
+    None
 }
 
 fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
@@ -374,6 +536,26 @@ mod tests {
         // Two ortho substituent chains long enough to sweep past each other.
         let out = layout_native("CCCC1=CC=CC=C1CCC").unwrap();
         assert!(min_atom_distance(&out) > 0.5);
+    }
+
+    #[test]
+    fn spiro_rings_share_one_atom_without_overlap() {
+        // 1,6-dioxaspiro[4.4]nonane: two five-membered rings joined at a single
+        // spiro atom. Each ring must close as a regular pentagon rather than
+        // unravel into a chain, so no atoms collide.
+        let out = layout_native("CC[C@H](O1)CC[C@@]12CCCO2").unwrap();
+        assert!(
+            min_atom_distance(&out) > 0.5,
+            "spiro atoms overlap: min distance {}",
+            min_atom_distance(&out)
+        );
+        // The two ring oxygens (atoms 3 and 10) both neighbor the spiro carbon
+        // (atom 6) and must sit one bond length away from it.
+        let spiro = out.atoms[6].pos;
+        for o in [3usize, 10] {
+            let d = out.atoms[o].pos.dist(spiro);
+            assert!((d - 1.0).abs() < 0.05, "ring O-spiro bond length {} for atom {}", d, o);
+        }
     }
 
     #[test]
@@ -786,6 +968,7 @@ mod tests {
         let out = layout_native("C!wN").expect("forced wedge up failed");
         assert_eq!(out.bonds[0].stereo, "wedge_up");
         assert_eq!(out.bonds[0].direction, "none");
+        assert!(out.bonds[0].forced_stereo);
     }
 
     #[test]
@@ -793,6 +976,7 @@ mod tests {
         let out = layout_native("C!hN").expect("forced wedge down failed");
         assert_eq!(out.bonds[0].stereo, "wedge_down");
         assert_eq!(out.bonds[0].direction, "none");
+        assert!(out.bonds[0].forced_stereo);
     }
 
     #[test]
@@ -800,6 +984,7 @@ mod tests {
         let out = layout_native("C!sN").expect("forced wavy bond failed");
         assert_eq!(out.bonds[0].stereo, "wavy");
         assert_eq!(out.bonds[0].direction, "none");
+        assert!(!out.bonds[0].forced_stereo);
     }
 
     #[test]
@@ -807,6 +992,7 @@ mod tests {
         let out = layout_native("C!dN").expect("forced dashed bond failed");
         assert_eq!(out.bonds[0].stereo, "dashed");
         assert_eq!(out.bonds[0].direction, "none");
+        assert!(!out.bonds[0].forced_stereo);
     }
 
     #[test]
@@ -839,6 +1025,7 @@ mod tests {
         let out = layout_native("CC!wN").expect("forced wedge in chain failed");
         assert_eq!(out.bonds[0].stereo, "none");
         assert_eq!(out.bonds[1].stereo, "wedge_up");
+        assert!(out.bonds[1].forced_stereo);
     }
 
     #[test]
@@ -871,6 +1058,15 @@ mod tests {
         let cis = layout_native("C(/F)=C/F").expect("branch cis failed");
         assert_eq!(alkene_substituent_side_product(&trans), -1);
         assert_eq!(alkene_substituent_side_product(&cis), 1);
+    }
+
+    #[test]
+    fn pyrethroid_like_smiles_with_multiple_alkene_markers_parses() {
+        let smiles =
+            "CC1=C(C(=O)C[C@@H]1OC(=O)[C@@H]2[C@H](C2(C)C)/C=C(\\C)/C(=O)OC)C/C=C\\C=C";
+        let out = layout_native(smiles).expect("pyrethroid-like molecule failed");
+        assert_eq!(out.atoms.iter().filter(|atom| !atom.virtual_h).count(), 27);
+        assert_eq!(out.bonds.iter().filter(|bond| bond.direction != "none").count(), 5);
     }
 
     #[test]
@@ -1103,6 +1299,15 @@ mod tests {
             p.forced_direction_markers,
             vec![ForcedBondKind::Wedge, ForcedBondKind::Wedge]
         );
+    }
+
+    #[test]
+    fn preprocess_moves_ring_closures_written_after_branches() {
+        let p = preprocess_smiles("C1=CCCC(=O)1").expect("preprocess failed");
+        assert_eq!(p.smiles, "C1=CCCC1(=O)");
+
+        let p = preprocess_smiles("C(=O)(O)1N").expect("preprocess failed");
+        assert_eq!(p.smiles, "C1(=O)(O)N");
     }
 
     #[test]

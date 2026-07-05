@@ -1,4 +1,5 @@
-#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "@preview/cetz:0.5.2"
 
 #set text(font: "New Computer Modern", size: 11pt)
 #set page(margin: 2cm)
@@ -105,7 +106,7 @@
 
 #reaction(
   mol(smiles("C1=CC=CC=C1"), label: text(size: 8pt)[Benzene]),
-  rxn-arrow(above: ce("Br2") + [, FeBr#sub[3]]),
+  rxn-arrow(above: ce("Br2") + [, ] + ce("FeBr3")),
   mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[Bromobenzene]),
 )
 
@@ -116,7 +117,7 @@
   mol(smiles("CC(=O)O"), label: text(size: 8pt)[Acetic acid]),
   [+],
   mol(smiles("CCO"), label: text(size: 8pt)[Ethanol]),
-  rxn-arrow(above: [H#super[+]], below: [Δ]),
+  rxn-arrow(above: ce("H+"), below: [Δ]),
   mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[Ethyl acetate]),
   [+],
   ce("H2O"),
@@ -142,7 +143,7 @@
   mol(smiles("CC(=O)O"), label: text(size: 8pt)[acid]),
   [+],
   mol(smiles("CCO"), label: text(size: 8pt)[alcohol]),
-  rxn-arrow(kind: "equilibrium", above: [H#super[+]], below: [heat]),
+  rxn-arrow(kind: "equilibrium", above: ce("H+"), below: [heat]),
   mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ester]),
   [+],
   ce("H2O"),
@@ -150,9 +151,9 @@
 
 #v(1em)
 #reaction(
-  mol(smiles("N#N"), label: text(size: 8pt)[N#sub[2]]),
+  mol(smiles("N#N"), label: text(size: 8pt)[#ce("N2")]),
   rxn-arrow(kind: "equilibrium", dir: "left", above: [pressure]),
-  mol(smiles("[H][H]"), label: text(size: 8pt)[H#sub[2]]),
+  mol(smiles("[H][H]"), label: text(size: 8pt)[#ce("H2")]),
 )
 
 #v(1em)
@@ -171,7 +172,7 @@
   mol(smiles("CC(=O)O"), label: text(size: 8pt)[acid]),
   [+],
   mol(smiles("CCO"), label: text(size: 8pt)[alcohol]),
-  rxn-arrow(kind: "equilibrium-filled", above: [H#super[+]], below: [heat]),
+  rxn-arrow(kind: "equilibrium-filled", above: ce("H+"), below: [heat]),
   mol(smiles("CCOC(=O)C"), label: text(size: 8pt)[ester]),
   [+],
   ce("H2O"),
@@ -179,9 +180,9 @@
 
 #v(1em)
 #reaction(
-  mol(smiles("N#N"), label: text(size: 8pt)[N#sub[2]]),
+  mol(smiles("N#N"), label: text(size: 8pt)[#ce("N2")]),
   rxn-arrow(kind: "equilibrium-filled", dir: "left", above: [pressure]),
-  mol(smiles("[H][H]"), label: text(size: 8pt)[H#sub[2]]),
+  mol(smiles("[H][H]"), label: text(size: 8pt)[#ce("H2")]),
 )
 
 #v(1em)
@@ -251,9 +252,9 @@ wedge and hash bonds are bicolored by atom like plain bonds.
   stroke: 0.4pt + rgb("#d8d8d8"),
 
   [*Vertical OH (up)*],
-  [*Vertical NH#sub[2] (down)*],
+  [*Vertical #ce("NH2") (down)*],
   [*Bicolor wedge to OH*],
-  [*Bicolor hash to NH#sub[2]*],
+  [*Bicolor hash to #ce("NH2")*],
 
   [#text(size: 8pt, [`CO` (vertical)]) \ #smiles("CO", bond-length: 1.1, rotation: 120deg)],
   [#text(size: 8pt, [`CN` (steep)]) \ #smiles("CN", bond-length: 1.1, rotation: -60deg)],
@@ -262,7 +263,7 @@ wedge and hash bonds are bicolored by atom like plain bonds.
 )
 
 #v(1em)
-*Regression molecule with NH#sub[2] and NH labels by default:*
+*Regression molecule with #ce("NH2") and #ce("NH") labels by default:*
 
 #align(center)[
   #text(size: 7pt, `CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1`) \
@@ -315,10 +316,10 @@ wedge and hash bonds are bicolored by atom like plain bonds.
   [*OH, left* \ #text(size: 8pt, `CCO rotation: 180deg`) \ #smiles("CCO", bond-length: 1.2, rotation: 180deg, lone-pairs: "dots")],
   [*OH, down* \ #text(size: 8pt, `CCO rotation: -90deg`) \ #smiles("CCO", bond-length: 1.2, rotation: -90deg, lone-pairs: "dots")],
 
-  [*NH#sub[2], right* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.2, lone-pairs: "dots")],
-  [*NH#sub[2], up* \ #text(size: 8pt, `CCN rotation: 90deg`) \ #smiles("CCN", bond-length: 1.2, rotation: 90deg, lone-pairs: "dots")],
-  [*NH#sub[2], left* \ #text(size: 8pt, `CCN rotation: 180deg`) \ #smiles("CCN", bond-length: 1.2, rotation: 180deg, lone-pairs: "dots")],
-  [*NH#sub[2], down* \ #text(size: 8pt, `CCN rotation: -90deg`) \ #smiles("CCN", bond-length: 1.2, rotation: -90deg, lone-pairs: "dots")],
+  [*#ce("NH2"), right* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.2, lone-pairs: "dots")],
+  [*#ce("NH2"), up* \ #text(size: 8pt, `CCN rotation: 90deg`) \ #smiles("CCN", bond-length: 1.2, rotation: 90deg, lone-pairs: "dots")],
+  [*#ce("NH2"), left* \ #text(size: 8pt, `CCN rotation: 180deg`) \ #smiles("CCN", bond-length: 1.2, rotation: 180deg, lone-pairs: "dots")],
+  [*#ce("NH2"), down* \ #text(size: 8pt, `CCN rotation: -90deg`) \ #smiles("CCN", bond-length: 1.2, rotation: -90deg, lone-pairs: "dots")],
 )
 
 #v(1em)
@@ -331,7 +332,7 @@ wedge and hash bonds are bicolored by atom like plain bonds.
   align: center,
 
   [*Large OH* \ #text(size: 8pt, `font-size: 22pt`) \ #smiles("CCO", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots")],
-  [*Large NH#sub[2]* \ #text(size: 8pt, `font-size: 22pt`) \ #smiles("CCN", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots")],
+  [*Large #ce("NH2")* \ #text(size: 8pt, `font-size: 22pt`) \ #smiles("CCN", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots")],
   [*Large OH#super[-]* \ #text(size: 8pt, `[OH-]`) \ #smiles("[OH-]", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots")],
 )
 
@@ -393,8 +394,8 @@ stay anchored to the same heavy-atom centers.
   [*OH up* \ #text(size: 8pt, `CCO rotation: 90deg`) \ #smiles("CCO", bond-length: 1.15, rotation: 90deg, lone-pairs: "dots", show-indices: true)],
   [*OH left* \ #text(size: 8pt, `CCO rotation: 180deg`) \ #smiles("CCO", bond-length: 1.15, rotation: 180deg, lone-pairs: "dots", show-indices: true)],
 
-  [*NH#sub[2] right* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.15, lone-pairs: "dots", show-indices: true)],
-  [*NH#sub[2] down* \ #text(size: 8pt, `CCN rotation: -90deg`) \ #smiles("CCN", bond-length: 1.15, rotation: -90deg, lone-pairs: "dots", show-indices: true)],
+  [*#ce("NH2") right* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.15, lone-pairs: "dots", show-indices: true)],
+  [*#ce("NH2") down* \ #text(size: 8pt, `CCN rotation: -90deg`) \ #smiles("CCN", bond-length: 1.15, rotation: -90deg, lone-pairs: "dots", show-indices: true)],
   [*Secondary amine* \ #text(size: 8pt, `CNC`) \ #smiles("CNC", bond-length: 1.15, lone-pairs: "dots", show-indices: true)],
 
   [*Charged OH#super[-]* \ #text(size: 8pt, `[OH-]`) \ #smiles("[OH-]", bond-length: 1.15, lone-pairs: "dots", show-indices: true)],
@@ -432,7 +433,7 @@ stay anchored to the same heavy-atom centers.
   align: center + horizon,
 
   [*Large terminal OH* \ #text(size: 8pt, `C[OH], font-size: 22pt`) \ #smiles("C[OH]", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots", show-indices: true)],
-  [*Large terminal NH#sub[2]* \ #text(size: 8pt, `C[NH2], font-size: 22pt`) \ #smiles("C[NH2]", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots", show-indices: true)],
+  [*Large terminal #ce("NH2")* \ #text(size: 8pt, `C[NH2], font-size: 22pt`) \ #smiles("C[NH2]", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots", show-indices: true)],
 
   [*Large OH#super[-]* \ #text(size: 8pt, `[OH-], font-size: 22pt`) \ #smiles("[OH-]", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots", show-indices: true)],
   [*Large alcohol* \ #text(size: 8pt, `CCO, font-size: 22pt`) \ #smiles("CCO", font-size: 22pt, bond-length: 1.2, lone-pairs: "dots", show-indices: true)],
@@ -472,7 +473,7 @@ stay anchored to the same heavy-atom centers.
 
   [*SMILES OH* \ #text(size: 8pt, `CCO`) \ #smiles("CCO", bond-length: 1.15)],
   [*Literal O* \ #text(size: 8pt, `CC{O|O}`) \ #smiles("CC{O|O}", bond-length: 1.15)],
-  [*SMILES NH#sub[2]* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.15)],
+  [*SMILES #ce("NH2")* \ #text(size: 8pt, `CCN`) \ #smiles("CCN", bond-length: 1.15)],
   [*Literal N* \ #text(size: 8pt, `CC{N|N}`) \ #smiles("CC{N|N}", bond-length: 1.15)],
 
   [*SMILES NH* \ #text(size: 8pt, `CNC`) \ #smiles("CNC", bond-length: 1.15)],
@@ -480,9 +481,9 @@ stay anchored to the same heavy-atom centers.
   [*SMILES SH* \ #text(size: 8pt, `CCS`) \ #smiles("CCS", bond-length: 1.15)],
   [*Literal S* \ #text(size: 8pt, `CC{S|S}`) \ #smiles("CC{S|S}", bond-length: 1.15)],
 
-  [*SMILES PH#sub[2]* \ #text(size: 8pt, `CP`) \ #smiles("CP", bond-length: 1.15)],
+  [*SMILES #ce("PH2")* \ #text(size: 8pt, `CP`) \ #smiles("CP", bond-length: 1.15)],
   [*Literal P* \ #text(size: 8pt, `C{P|P}`) \ #smiles("C{P|P}", bond-length: 1.15)],
-  [*SMILES BH#sub[2]* \ #text(size: 8pt, `CB`) \ #smiles("CB", bond-length: 1.15)],
+  [*SMILES #ce("BH2")* \ #text(size: 8pt, `CB`) \ #smiles("CB", bond-length: 1.15)],
   [*Literal B* \ #text(size: 8pt, `C{B}`) \ #smiles("C{B}", bond-length: 1.15)],
 )
 
@@ -1254,7 +1255,7 @@ rotations, large labels, and reaction-level index overlays.
      show-indices: true,
    )],
 
-  [*Terminal explicit NH#sub[2]* \
+  [*Terminal explicit #ce("NH2")* \
    #text(size: 8pt, `C[NH2]`) \
    #smiles(
      "C[NH2]",
@@ -2253,33 +2254,31 @@ by the Rust test suite.
 
 = Mirroring (`mirror`)
 
-`mirror: "horizontal"` swaps left and right, `mirror: "vertical"` swaps top
-and bottom; both are applied before `rotation`. Wedges and hashes are
-exchanged in the same pass, so a mirrored stereocenter still depicts the same
-configuration (an unswapped flip would draw the enantiomer).
+`mirror` reflects a molecule horizontally or vertically. Single-axis reflection
+exchanges wedges and hashes, so a mirrored stereocenter still depicts the same
+configuration.
 
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 1.5em,
   align: center + horizon,
 
-  [*Original* \ #text(size: 8pt, `CC(=O)OC1=CC=CC=C1C(=O)O`) \
+  [*Default* \ #text(size: 8pt, `mirror: none`) \
    #smiles("CC(=O)OC1=CC=CC=C1C(=O)O", scale: 0.85)],
   [*Horizontal* \ #text(size: 8pt, `mirror: "horizontal"`) \
    #smiles("CC(=O)OC1=CC=CC=C1C(=O)O", scale: 0.85, mirror: "horizontal")],
   [*Vertical* \ #text(size: 8pt, `mirror: "vertical"`) \
    #smiles("CC(=O)OC1=CC=CC=C1C(=O)O", scale: 0.85, mirror: "vertical")],
 
-  [*Stereocenter* \ #text(size: 8pt, `N[C@@H](C)C(=O)O`) \
+  [*Default stereocenter* \ #text(size: 8pt, `N[C@@H](C)C(=O)O`) \
    #smiles("N[C@@H](C)C(=O)O", scale: 0.85)],
-  [*Same configuration, flipped* \ #text(size: 8pt, `mirror: "horizontal"`) \
+  [*Horizontal, same config* \ #text(size: 8pt, `mirror: "horizontal"`) \
    #smiles("N[C@@H](C)C(=O)O", scale: 0.85, mirror: "horizontal")],
-  [*Mirror then rotate* \ #text(size: 8pt, `mirror + rotation: 90deg`) \
+  [*Mirror with rotation* \ #text(size: 8pt, `mirror + rotation: 90deg`) \
    #smiles("N[C@@H](C)C(=O)O", scale: 0.85, mirror: "horizontal", rotation: 90deg)],
 )
 
-Per-molecule mirroring inside a reaction, e.g. to face the reacting group
-toward the arrow:
+Per-molecule orientation inside a reaction:
 
 #reaction(
   mol("OC1CCCCC1", mirror: "horizontal", label: [mirrored]),
@@ -2449,4 +2448,652 @@ index, an index array, or `"all"`.
    #smiles("CC(N)C(=O)O", show-h: (0, 1))],
   [*`show-h: "all"`* \ #text(size: 8pt, [everything]) \
    #smiles("CC(N)C(=O)O", show-h: "all")],
+)
+
+#pagebreak()
+
+= Bond customizations (`bond-customizations`)
+
+Per-bond style overrides keyed by `bond(i, j)` references: `color`, `stroke`
+(bond width), and `opacity`.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Colored bond* \ #text(size: 8pt, `(bond(1, 2), (color: red))`) \
+   #smiles("CCCC", bond-customizations: ((bond(1, 2), (color: red)),))],
+  [*Thick bond* \ #text(size: 8pt, `(stroke: 2.2pt)`) \
+   #smiles("CCCC", bond-customizations: ((bond(1, 2), (stroke: 2.2pt)),))],
+  [*Faded bond* \ #text(size: 8pt, `(opacity: 30%)`) \
+   #smiles("CCCC", bond-customizations: ((bond(1, 2), (opacity: 30%)),))],
+  [*Combined* \ #text(size: 8pt, `color + stroke together`) \
+   #smiles("CCCC", bond-customizations: (
+     (bond(1, 2), (color: yellow, stroke: 1.8pt)),
+   ))],
+
+  [*Double bond* \ #text(size: 8pt, `both lines recolor`) \
+   #smiles("CC=CC", bond-customizations: ((bond(1, 2), (color: red)),))],
+  [*Ring bond* \ #text(size: 8pt, `(i, j) pair key form`) \
+   #smiles("C1=CC=CC=C1", bond-customizations: (((0, 1), (color: red, stroke: 1.6pt)),))],
+  [*Wedge and hash* \ #text(size: 8pt, `C!wC(!hN)O`) \
+   #smiles("C!wC(!hN)O", bond-customizations: (
+     (bond(0, 1), (color: red)),
+     (bond(1, 2), (color: blue)),
+   ))],
+  [*Several bonds* \ #text(size: 8pt, [breaking bond red, forming blue]) \
+   #smiles("CC(=O)OCC", bond-customizations: (
+     (bond(1, 3), (color: red, opacity: 55%)),
+     (bond(3, 4), (color: blue, stroke: 1.6pt)),
+   ))],
+)
+
+Inside a reaction, string molecules take the same option:
+
+#reaction(
+  mol("CC(=O)OC", bond-customizations: ((bond(1, 3), (color: red)),)),
+  rxn-arrow(above: ce("H2O")),
+  mol("CC(=O)O"),
+  [+],
+  ce("CH3OH"),
+)
+
+= Molecule opacity (`opacity`)
+
+`opacity` fades bonds, labels, charges, and lone pairs together, for ghost or
+de-emphasized species.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*100%* \ #smiles("CC(N)C(=O)O")],
+  [*60%* \ #smiles("CC(N)C(=O)O", opacity: 60%)],
+  [*30%* \ #smiles("CC(N)C(=O)O", opacity: 30%)],
+  [*Float form, 0.15* \ #smiles("CC(N)C(=O)O", opacity: 0.15)],
+
+  [*Monochrome ghost* \ #text(size: 8pt, `color: false`) \
+   #smiles("c1ccccc1O", color: false, opacity: 35%)],
+  [*Lone pairs fade too* \ #text(size: 8pt, `lone-pairs: "dots"`) \
+   #smiles("CO", lone-pairs: "dots", opacity: 40%)],
+  [*Charges fade too* \ #text(size: 8pt, `[NH4+]`) \
+   #smiles("[NH4+]", opacity: 40%)],
+  [*Ghost next to solid* \
+   #reaction(
+     mol("CCO", opacity: 30%),
+     rxn-arrow(),
+     mol("CC=O"),
+   )],
+)
+
+= Inline molecules (`smiles-inline`)
+
+`smiles-inline` scales a structure to a target height and baseline-aligns it
+so it reads inline; the paragraph below keeps its normal line spacing.
+
+#block(width: 100%)[
+  The dehydration of ethanol #smiles-inline("CCO") over alumina gives ethylene
+  #smiles-inline("C=C"), while oxidation gives acetaldehyde
+  #smiles-inline("CC=O") and, further, acetic acid #smiles-inline("CC(=O)O").
+  Aromatic solvents such as toluene #smiles-inline("Cc1ccccc1") are common;
+  pyridine #smiles-inline("c1ccncc1") is a classic base. This filler sentence
+  only exists so that the paragraph wraps over several lines and the line
+  spacing above and below each inline structure can be inspected.
+]
+
+Heights compare as follows: default 1.4em #smiles-inline("c1ccccc1"), compact
+1em #smiles-inline("c1ccccc1", height: 1em), large 2.2em
+#smiles-inline("c1ccccc1", height: 2.2em) (only its own line grows), and a
+lowered baseline #smiles-inline("c1ccccc1", baseline: 0.1em).
+
+Inline molecules accept the usual drawing options: red oxygen off
+#smiles-inline("CC(=O)O", color: false), rotated #smiles-inline("CCO", rotation: 90deg),
+and faded #smiles-inline("CCO", opacity: 40%).
+
+#pagebreak()
+
+= Journal style presets (`style`)
+
+Presets fill in bond length, label size, stroke, font, and monochrome color
+from the journal's published drawing settings. `"default"` applies nothing;
+explicit arguments always win.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr, 1fr),
+  gutter: 1em,
+  align: center + horizon,
+
+  [*default* \ #text(size: 8pt, [30 pt, 11 pt NCM]) \
+   #smiles("CC(N)C(=O)O")],
+  [*acs* \ #text(size: 8pt, [14.4 pt, 10 pt sans]) \
+   #smiles("CC(N)C(=O)O", style: "acs")],
+  [*rsc* \ #text(size: 8pt, [12.2 pt, 7 pt sans]) \
+   #smiles("CC(N)C(=O)O", style: "rsc")],
+  [*nature* \ #text(size: 8pt, [10.8 pt, 6 pt sans]) \
+   #smiles("CC(N)C(=O)O", style: "nature")],
+  [*wiley* \ #text(size: 8pt, [17 pt, 12 pt sans]) \
+   #smiles("CC(N)C(=O)O", style: "wiley")],
+)
+
+Presets compose with everything else and stay overridable:
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*acs + scale 1.5* \ #text(size: 8pt, [whole preset scales]) \
+   #smiles("c1ccccc1O", style: "acs", scale: 1.5)],
+  [*acs + explicit font-size* \ #text(size: 8pt, `font-size: 14pt`) \
+   #smiles("c1ccccc1O", style: "acs", font-size: 14pt)],
+  [*acs + color true* \ #text(size: 8pt, [CPK colors opt in]) \
+   #smiles("c1ccccc1O", style: "acs", color: true)],
+  [*nature + circle + wedges* \ #text(size: 8pt, [options unaffected]) \
+   #smiles("C!wC(!hN)c1ccccc1", style: "nature", aromatic: "circle")],
+)
+
+= CeTZ integration (`smiles-cetz`)
+
+`smiles-cetz` draws a molecule inside an existing CeTZ canvas and registers
+`atom-<i>`, `bond-<i>-<j>`, and `center` anchors, so arbitrary CeTZ drawing
+attaches to real molecular positions. The Watson–Crick A–T base pair below is
+two `smiles-cetz` calls plus plain CeTZ: two dashed hydrogen bonds drawn
+between offset atom-anchor endpoints, distance labels, and glycosidic-bond
+stubs to the sugar backbone.
+
+#align(center, context cetz.canvas(length: 30pt, {
+  import cetz.draw: *
+
+  // Adenine on the left, pairing edge (N6, N1) facing right.
+  smiles-cetz("Nc1ncnc2N(!s{})cnc12", name: "A")
+  // Thymine on the right, pairing edge (N3-H, O4) facing left.
+  smiles-cetz("Cc1cN(!s{})c(=O)[nH]c1=O", name: "T", origin: (4.9, 0.42))
+
+  let hb = (paint: rgb("#3A78C9"), thickness: 1.0pt, dash: "densely-dashed")
+  let off(anchor, by) = (rel: by, to: anchor)
+  line(off("A.atom-11", (0.4, -0.15)), off("T.atom-9", (-0.2, 0.06)), stroke: hb)
+  line(off("A.atom-2", (0.15, 0)), off("T.atom-7", (-0.2, 0)), stroke: hb)
+
+  // Hydrogen-bond distances.
+  content((rel: (0.2, 0.2), to: ("A.atom-11", 50%, "T.atom-9")), text(size: 7.5pt, fill: rgb("#3A78C9"))[2.9 Å])
+  content((rel: (0, 0.28), to: ("A.atom-2", 50%, "T.atom-7")), text(size: 7.5pt, fill: rgb("#3A78C9"))[2.8 Å])
+
+}))
+
+Same anchor-offset pattern in a second CeTZ composition: a polarized
+donor-acceptor contact with a soft colored band behind the dashed line.
+
+#align(center, context cetz.canvas(length: 30pt, {
+  import cetz.draw: *
+
+  smiles-cetz("CC(=O)C", name: "acceptor", origin: (0, 0))
+  smiles-cetz("[H]F", name: "donor", origin: (3.4, -0.05))
+
+  let off(anchor, by) = (rel: by, to: anchor)
+  let o = off("acceptor.atom-2", (0.10, 0.02))
+  let h = off("donor.atom-0", (-0.10, 0.02))
+  line(o, h, stroke: (paint: rgb("#6C63FF").transparentize(78%), thickness: 6pt, cap: "round"))
+  line(o, h, stroke: (paint: rgb("#2D6CDF"), thickness: 0.9pt, dash: "densely-dashed"))
+
+  content(off("acceptor.atom-2", (-0.18, 0.34)), text(size: 8pt, fill: rgb("#1565C0"))[$delta^-$])
+  content(off("donor.atom-0", (0.18, 0.34)), text(size: 8pt, fill: rgb("#B71C1C"))[$delta^+$])
+  content((2.05, 0.78), text(size: 7.5pt, fill: rgb("#5E35B1"))[polar contact])
+}))
+
+A larger composition — the serine-protease catalytic triad — packs four
+`smiles-cetz` molecules into one scene with an active-site pocket highlight, a
+nucleophile highlight disk, dashed charge-relay hydrogen bonds between anchors,
+a distance label, curved electron-pushing arrows (Ser attacks the substrate
+carbonyl; the C=O breaks), lone pairs, and residue labels.
+
+#align(center, context cetz.canvas(length: 30pt, {
+  import cetz.draw: *
+  let off(a, by) = (rel: by, to: a)
+
+  // Active-site pocket highlight behind the triad.
+  on-layer(-1, {
+    rect((-1.1, -1.7), (6.2, 1.6), radius: 0.4, stroke: none, fill: rgb("#FFF3C4"))
+  })
+
+  // The three catalytic residues, left to right: Asp — His — Ser.
+  smiles-cetz("CC(=O)[O-]", name: "asp", origin: (0, 0.4), lone-pairs: "dots")
+  smiles-cetz("c1cnc[nH]1", name: "his", origin: (2.7, -0.1))
+  smiles-cetz("OCC", name: "ser", origin: (5.1, -0.5))
+  // Substrate carbonyl, upper right, under nucleophilic attack.
+  smiles-cetz("CC(=O)NC", name: "sub", origin: (7.6, 1.2))
+
+  // Highlight the serine oxygen: the nucleophile.
+  circle("ser.atom-0", radius: 0.34, stroke: none, fill: rgb("#FFB74D").transparentize(45%))
+
+  // Charge-relay hydrogen bonds.
+  let hb = (paint: rgb("#3A78C9"), thickness: 1.0pt, dash: "densely-dashed")
+  line(off("asp.atom-3", (0.15, 0)), off("his.atom-4", (-0.2, 0)), stroke: hb)
+  line(off("his.atom-2", (0.1, -0.1)), off("ser.atom-0", (-0.28, 0)), stroke: hb)
+  content(off("asp.atom-3", (0.62, 0.42)), text(size: 7pt, fill: rgb("#3A78C9"))[2.8 Å])
+
+  // Ser oxygen attacks the substrate carbonyl carbon (red curly arrow).
+  bezier(
+    off("ser.atom-0", (0.15, 0.32)), off("sub.atom-1", (-0.2, -0.34)),
+    (6.1, 1.25),
+    mark: (end: ">", fill: rgb("#C0392B"), size: 0.16), stroke: 1pt + rgb("#C0392B"),
+  )
+  // C=O pi bond breaks onto oxygen.
+  bezier(
+    off("sub.bond-1-2", (0.2, 0.05)), off("sub.atom-2", (0.12, -0.18)),
+    (8.5, 1.7),
+    mark: (end: ">", fill: rgb("#C0392B"), size: 0.14), stroke: 1pt + rgb("#C0392B"),
+  )
+
+  // Residue labels.
+  content((0, -2.1), text(size: 8pt)[Asp102])
+  content((2.7, -2.1), text(size: 8pt)[His57])
+  content((5.1, -2.1), text(size: 8pt)[Ser195])
+  content((8.0, -0.1), text(size: 8pt, style: "italic")[substrate])
+  content((2.5, 2.25), text(size: 8.5pt, fill: rgb("#8B2942"))[charge-relay system])
+}))
+
+#pagebreak()
+
+= Ring closures after branches
+
+Ring-closure digits written after branch groups still attach to the branch
+point atom. The fused example should keep the five-membered carbonyl ring at
+the tail.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Minimal post-branch closure* \ #text(size: 8pt, `C1=CCCC(=O)1`) \
+   #smiles("C1=CCCC(=O)1", scale: 0.95)],
+  [*Fused tail closure* \ #text(size: 8pt, `...C5=C4CCC(=O)5`) \
+   #smiles("O1C=C[C@H]([C@H]1O2)c3c2cc(OC)c4c3OC(=O)C5=C4CCC(=O)5", scale: 0.58)],
+)
+
+#pagebreak()
+
+= Multiple alkene directional markers
+
+Directional markers can appear on both substituent bonds from the same alkene
+atom when those substituents are placed on opposite sides. Shared directional
+bonds in a conjugated tail should not make the next double bond fail.
+
+#align(center)[
+  #text(size: 7.2pt, `CC1=C(C(=O)C[C@@H]1OC(=O)[C@@H]2[C@H](C2(C)C)/C=C(\C)/C(=O)OC)C/C=C\C=C`) \
+  #smiles(
+    "CC1=C(C(=O)C[C@@H]1OC(=O)[C@@H]2[C@H](C2(C)C)/C=C(\\C)/C(=O)OC)C/C=C\\C=C",
+    scale: 0.62,
+  )
+]
+
+#pagebreak()
+
+= Catalytic cycles (`cycle`)
+
+Species on a ring with arc arrows. `step(into:/out:)` adds reagents; `merge`
+fuses the side arrow with the arc; `arc-gap` tunes how close arrows sit to the
+species; `label-offset`/`into-offset`/`out-offset` nudge pieces like a `mol`
+offset. Wilkinson's hydrogenation (default arrows):
+
+#let cx(b) = box(inset: 2pt, b)
+
+#align(center, cycle(
+  scale: 1.0,
+  mol(cx[RhCl(PPh#sub[3])#sub[3]]),
+  step(label: [−PPh#sub[3], +S]),
+  mol(cx[RhCl(PPh#sub[3])#sub[2]S]),
+  step(label: [oxidative\ addition], into: ce("H2")),
+  mol(cx[RhH#sub[2]Cl(PPh#sub[3])#sub[2]]),
+  step(label: [alkene\ insertion], into: [alkene]),
+  mol(cx[RhH(R)Cl(PPh#sub[3])#sub[2]]),
+  step(label: [reductive\ elimination], out: [alkane]),
+))
+
+The same cycle with `merge: true` on every step and a tight `arc-gap: 0.0`,
+so reagents flow into and out of the main arrows:
+
+#align(center, cycle(
+  scale: 1.0,
+  arc-gap: 0.0,
+  mol(cx[RhCl(PPh#sub[3])#sub[3]]),
+  step(label: [−PPh#sub[3]]),
+  mol(cx[RhCl(PPh#sub[3])#sub[2]S]),
+  step(label: [ox. add.], into: ce("H2"), merge: true),
+  mol(cx[RhH#sub[2]Cl(PPh#sub[3])#sub[2]]),
+  step(label: [insertion], into: [alkene], merge: true, into-offset: (0.4, -0.3)),
+  mol(cx[RhH(R)Cl(PPh#sub[3])#sub[2]]),
+  step(label: [red. elim.], out: [#reaction(mol("CCO"), [+], mol("CCCO"), flow : "up")], merge: true, label-offset: (-0.2, 0)),
+))
+
+A two-species catalytic cycle where `step(out:)` grows a branch (a nested
+`reaction()`) out of the released product:
+
+#align(center, cycle(
+  scale: 1.0,
+  radius: 1.6,
+  mol(cx[E]),
+  step(label: [binding], into: [S]),
+  mol(cx[E·S]),
+  step(
+    label: [catalysis],
+    out: reaction(
+      mol("CC=O", label: [product]),
+      rxn-arrow(above: [\[O\]]),
+      mol("CC(=O)O"),
+    ),
+  ),
+))
+
+#pagebreak()
+
+= Spiro ring systems
+
+Two rings joined at a single shared (spiro) atom each lay out as a regular
+polygon opening away from the shared atom, instead of unravelling into a chain.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*1,6-dioxaspiro[4.4]nonane* \ #text(size: 8pt, `CC[C@H](O1)CC[C@@]12CCCO2`) \
+   #smiles("CC[C@H](O1)CC[C@@]12CCCO2", scale: 0.95)],
+  [*Spiro[4.5] carbocycle* \ #text(size: 8pt, `C1CCC2(CC1)CCCCC2`) \
+   #smiles("C1CCC2(CC1)CCCCC2", scale: 0.95)],
+)
+
+#pagebreak()
+
+= Reaction flow direction (`flow`)
+
+`reaction(flow: ...)` sets the writing direction. `"left"` and `"up"` reflect
+the scheme so a branch that grows from the left or bottom of a cycle reads
+naturally; `rxn-arrow(dir: auto)` follows the flow.
+
+#align(center)[*right (default)*]
+#align(center, reaction(
+  mol("CCO"), rxn-arrow(above: [\[O\]]), mol("CC=O"), rxn-arrow(above: [\[O\]]), mol("CC(=O)O"),
+))
+
+#v(0.4cm)
+#align(center)[*left*]
+#align(center, reaction(
+  flow: "left",
+  mol("CCO"), rxn-arrow(above: [\[O\]]), mol("CC=O"), rxn-arrow(above: [\[O\]]), mol("CC(=O)O"),
+))
+
+#v(0.4cm)
+#align(center)[*left with a reactant sum (`A + B -> C` reads right-to-left)*]
+#align(center, reaction(
+  flow: "left",
+  mol("CC(=O)O"), [+], mol("CCO"), rxn-arrow(above: ce("H+")), mol("CCOC(=O)C"),
+))
+
+#v(0.4cm)
+#align(center)[*up*]
+#align(center, reaction(
+  flow: "up",
+  mol("CCO"), rxn-arrow(), mol("CC=O"), rxn-arrow(), mol("CC(=O)O"),
+))
+
+= Nested reaction, cycle, and branch
+
+A main reaction embeds a `cycle`, whose `step(out:)` grows a sub-`reaction()`
+branch out of a released product; the main reaction then continues to the
+right. Here the branch flows downward into free vertical space.
+
+#align(center, reaction(
+  mol("C=C", label: [alkene]),
+  rxn-arrow(above: [cat.]),
+  cycle(
+    scale: 0.8,
+    radius: 1.7,
+    mol(box(inset: 2pt)[LnM]),
+    step(label: [binding], into: [S], merge: true, label-offset: (0.5, 0)),
+    mol(box(inset: 2pt)[LnM·S]),
+    step(
+      label: [turnover],
+      merge: true,
+      label-offset: (-0.5, 0),
+      out: reaction(
+        flow: "down",
+        mol("CCO", label: [product]),
+        rxn-arrow(above: [\[O\]]),
+        mol("CC(=O)O"),
+      ),
+    ),
+  ),
+  rxn-arrow(above: [workup]),
+  mol("CCCC", label: [alkane]),
+))
+
+#pagebreak()
+
+= Vertical flow and cycle branch anchors
+
+Vertical `flow` stacks ordinary reaction items even when there are no
+`rxn-arrow()` separators:
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*down* \
+   #reaction(flow: "down", mol("CCO"), [+], mol("CC=O"))],
+  [*up* \
+   #reaction(flow: "up", mol("CCO"), [+], mol("CC=O"))],
+)
+
+An outgoing cycle branch attaches at the released product side of the branch,
+so the side arrow lands on the first downstream species rather than the middle
+of the whole nested reaction:
+
+#align(center, cycle(
+  scale: 0.9,
+  radius: 1.7,
+  start: 0deg,
+  mol(box(inset: 2pt)[M–R]),
+  step(
+    label: [release],
+    merge: true,
+    out: reaction(
+      flow: "down",
+      mol("CCO", label: [first]),
+      rxn-arrow(above: [\[O\]]),
+      mol("CC=O"),
+    ),
+  ),
+  mol(box(inset: 2pt)[M]),
+))
+
+#pagebreak()
+
+= Incoming cycle branch anchors
+
+An incoming cycle branch attaches at the downstream side of the branch, so the
+side arrow starts at the last upstream species rather than the middle of the
+whole nested reaction:
+
+#align(center, cycle(
+  scale: 0.9,
+  radius: 1.7,
+  start: 0deg,
+  mol(box(inset: 2pt)[M]),
+  step(
+    label: [entry],
+    merge: true,
+    into: reaction(
+      flow: "up",
+      mol("CC=O", label: [first]),
+      rxn-arrow(above: [red.]),
+      mol("CCO", label: [last]),
+    ),
+  ),
+  mol(box(inset: 2pt)[M-R]),
+))
+
+#pagebreak()
+
+= Cycle label rotation
+
+`step(rotation:)` rotates cycle labels. `"auto"` follows the step's circle angle and
+flips labels on the far side so they remain readable:
+
+#align(center, cycle(
+  scale: 0.95,
+  radius: 2.4,
+  start: 90deg,
+  mol(box(inset: 2pt)[A]),
+  step(label: [auto], rotation: "auto"),
+  mol(box(inset: 2pt)[B]),
+  step(label: [90deg], rotation: 90deg),
+  mol(box(inset: 2pt)[C]),
+  step(label: [auto], rotation: "auto"),
+  mol(box(inset: 2pt)[D]),
+  step(label: [straight], rotation: "straight"),
+))
+
+#pagebreak()
+
+= Wilkinson-style cycle with vertical entry
+
+A precursor is written first in a downward reaction flow; the catalytic cycle
+then starts from the top species and continues clockwise.
+
+
+#align(center)[
+  #reaction(
+    flow : "down",
+    mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)(!w{>PPh3})"), offset: (0.5, 0)),
+    rxn-arrow(above : [#ce("PPh3") solvent (S)]),
+    cycle(
+      radius : 6.0,
+      mol(smiles("{Rh}(!w{S | S})(!h{>PPh3})(!hCl)(!w{>PPh3})")),
+      step(label : [#text(size : 6pt)[oxidative addition]], label-offset : (0.3, 0.5), into : [#ce("H2")], rotation : "auto", merge : true),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!w{H})")),
+      step(into : [#smiles("C=C")], merge : true),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({})({H})({H})")),
+      step(label : [#text(size : 6pt)[migratory insertion]], label-offset: (0, 0.5), rotation : "auto"),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!wCC{H})", rotation : -90deg)),
+      step(label : [#text(size : 6pt)[reductive elimination]], label-offset:  (-0.5, 0.5), out : [#smiles("{H}CC{H}")], merge:true, rotation : "auto")
+    )
+  )
+]
+
+#smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!wCC{H})")
+#smiles("CS")
+
+#pagebreak()
+
+= Arrow axes, stereobond length, and cycle radius
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*horizontal arrow axis* \
+   #reaction(
+     mol([A]),
+     rxn-arrow(above: [very long reagent label above the arrow], below: [x]),
+     mol([B]),
+   )],
+  [*vertical arrow axis* \
+   #reaction(
+     flow: "down",
+     mol([A]),
+     rxn-arrow(above: [right], below: [much longer left-side reagent label]),
+     mol([B]),
+   )],
+)
+
+#grid(
+  columns: (1fr,),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*wedge/hash span* \
+   #smiles("{Rh}(!w{S | S})(!h{>PPh3})(!wCl)(C)", bond-length: 1.2)],
+)
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*cycle radius 1.4* \
+   #cycle(
+     radius: 1.4,
+     scale: 0.65,
+     mol([A]), step(), mol([B]), step(), mol([C]),
+   )],
+  [*cycle radius 2.8* \
+   #cycle(
+     radius: 2.8,
+     scale: 0.65,
+     mol([A]), step(), mol([B]), step(), mol([C]),
+   )],
+)
+
+#pagebreak()
+
+= Rotated mirror axes and forced wedge tips
+
+`mirror: "vertical"` preserves page left/right even when the molecule is
+rotated. Explicit `!w`/`!h` bonds use the written source atom as the thin end.
+
+#let rh-alkyl = "{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!wCC{H})"
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*rotated* \
+   #smiles(rh-alkyl, rotation: -90deg, bond-length: 1.15)],
+  [*rotated + vertical mirror* \
+   #smiles(rh-alkyl, rotation: -90deg, mirror: "vertical", bond-length: 1.15)],
+)
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*source at Rh* \
+   #smiles("{Rh}(!wC)(!hC)(!wCl)(!h{>PPh3})", bond-length: 1.2)],
+  [*source at carbon* \
+   #smiles("C(!w{Rh})(!h{Rh})", bond-length: 1.2)],
+)
+
+#pagebreak()
+
+= Scheme offsets stay page-relative
+
+`mol(offset:)` in a normal scheme does not switch to mechanism layout. Positive
+x moves the item right on the page even when the reaction flow is vertical or
+reflected.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*right flow* \
+   #reaction(
+     mol([A], offset: (0.6, 0)),
+     rxn-arrow(),
+     mol([B]),
+   )],
+  [*down flow* \
+   #reaction(
+     flow: "down",
+     mol([A], offset: (0.6, 0)),
+     rxn-arrow(),
+     mol([B]),
+   )],
+  [*left flow* \
+   #reaction(
+     flow: "left",
+     mol([A], offset: (0.6, 0)),
+     rxn-arrow(),
+     mol([B]),
+   )],
 )

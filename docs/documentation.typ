@@ -5,7 +5,8 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": smiles, ce, rxn-arrow, mol, reaction, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "@preview/cetz:0.5.2"
 
 #let version = "0.5.0"
 #let accent = rgb("#239dad")
@@ -57,9 +58,12 @@
 // ── Example helper: source on the left, live render on the right ─────────────
 
 #let pkg-scope = (
-  smiles: smiles, ce: ce, rxn-arrow: rxn-arrow, mol: mol, reaction: reaction,
+  smiles: smiles, smiles-inline: smiles-inline, smiles-cetz: smiles-cetz,
+  ce: ce, rxn-arrow: rxn-arrow,
+  mol: mol, reaction: reaction, cycle: cycle, step: step,
   atom: atom, bond: bond, lp: lp, species: species, arrow: arrow,
   highlight: highlight, brackets: brackets, mol-weight: mol-weight,
+  cetz: cetz,
 )
 
 #let example(body, side: true) = block(
@@ -216,12 +220,13 @@ The package exports these main symbols:
   ```typ
   #smiles(
     smiles-str,
+    style: "default",
     scale: 1.0,
     bond-length: none,
     font-size: none,
-    font: "New Computer Modern",
+    font: auto,
     bond-stroke: none,
-    color: true,
+    color: auto,
     fg: auto,
     theme: auto,
     rotation: 0deg,
@@ -229,6 +234,8 @@ The package exports these main symbols:
     show-h: (),
     aromatic: "kekule",
     atom-annotations: (),
+    opacity: 100%,
+    bond-customizations: (),
     lone-pairs: none,
     atom-colors: (:),
     show-indices: false,
@@ -244,19 +251,22 @@ The package exports these main symbols:
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Argument*], [*Type*], [*Default*], [*Description*],
   [#c("smiles-str")], [`str`], [(required)], [The SMILES string.],
+  [#c("style")], [`str`], [`"default"`], [Journal style preset (#c("\"acs\""), #c("\"rsc\""), #c("\"nature\""), #c("\"wiley\"")) filling in bond length, label size, stroke, and font. Explicit arguments win; #c("\"default\"") applies nothing.],
   [#c("scale")], [`float`], [`1.0`], [Balanced scale for bond length, label size, and stroke at once.],
   [#c("bond-length")], [`float` / `none`], [`none`], [Bond length factor (`1.0` is 30 pt). Overrides #c("scale") for length.],
   [#c("font-size")], [`length` / `none`], [`none`], [Atom-label font size. Overrides #c("scale") for labels.],
-  [#c("font")], [`str`], [`"New Computer Modern"`], [Font family for atom labels.],
+  [#c("font")], [`auto` / `str` / `array`], [`auto`], [Font family for atom labels; `auto` is "New Computer Modern", or the preset's font when #c("style") is set.],
   [#c("bond-stroke")], [`length` / `none`], [`none`], [Bond stroke width. Overrides #c("scale") for strokes.],
-  [#c("color")], [`bool`], [`true`], [Apply Jmol CPK atom colors.],
+  [#c("color")], [`auto` / `bool`], [`auto`], [Apply Jmol CPK atom colors. `auto` is colored for #c("\"default\"") and monochrome for journal presets.],
   [#c("fg")], [`auto` / `color`], [`auto`], [Foreground for bonds and carbon labels; `auto` inherits the surrounding text color.],
   [#c("theme")], [`auto` / `"light"` / `"dark"`], [`auto`], [CPK palette variant; `auto` picks "dark" when #c("fg") is light.],
   [#c("rotation")], [`angle`], [`0deg`], [Rotate the molecule; labels stay upright.],
-  [#c("mirror")], [`none` / `"horizontal"` / `"vertical"`], [`none`], [Reflect the molecule across an axis; applied before #c("rotation"). Wedges and hashes are exchanged to preserve the depicted configuration.],
+  [#c("mirror")], [`none` / `"horizontal"` / `"vertical"`], [`none`], [Optional horizontal or vertical page-axis reflection.],
   [#c("show-h")], [`"all"` / `int` / `array`], [`()`], [Implicit hydrogens to label beyond the default heteroatom hydrogens. Use #c("\"all\"") for every atom.],
   [#c("aromatic")], [`"kekule"` / `"circle"`], [`"kekule"`], [Depict lowercase-aromatic rings with alternating double bonds or with an inscribed circle.],
   [#c("atom-annotations")], [`array`], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuple entries.],
+  [#c("opacity")], [`ratio` / `float`], [`100%`], [Fade the whole drawing — bonds, labels, charges, lone pairs — e.g. for ghost molecules.],
+  [#c("bond-customizations")], [`array`], [`()`], [Per-bond style overrides as #c("(bond(i, j), (..options..))") pairs; options are #c("color"), #c("stroke"), and #c("opacity").],
   [#c("lone-pairs")], [`none` / `"dots"` / `"lines"`], [`none`], [Draw optional non-bonding electron pairs on skeletal atom labels.],
   [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
 )
@@ -274,6 +284,43 @@ each defaults to #c("none"), meaning it follows #c("scale").]
   #smiles("CC(=O)O")
   ```)
 ]
+
+== #raw("style")
+
+#demo[
+  Journal style presets approximate the corresponding ChemDraw document
+  stylesheets using the journals' published drawing settings — bond length,
+  atom-label size, line width, a Helvetica/Arial font stack, and monochrome
+  atom labels by default:
+
+  #table(
+    columns: (auto, auto, auto, auto), inset: 5.5pt,
+    align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+    fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+    [*Preset*], [*Bond*], [*Line*], [*Labels*],
+    [#c("\"acs\"")], [14.4 pt], [0.6 pt], [10 pt],
+    [#c("\"rsc\"")], [12.2 pt], [0.5 pt], [7 pt],
+    [#c("\"nature\"")], [10.8 pt], [0.6 pt], [6 pt],
+    [#c("\"wiley\"")], [17 pt], [0.7 pt], [12 pt],
+  )
+
+  #example(```typ
+  #smiles("CC(N)C(=O)O") \
+  #smiles("CC(N)C(=O)O", style: "acs") \
+  #smiles("CC(N)C(=O)O", style: "nature") \
+  #smiles("CC(N)C(=O)O", style: "acs", color: true)
+  ```)
+]
+
+A preset only fills in arguments left unset: `style: "acs"` with
+`font-size: 14pt` keeps the ACS bond length under your label size, and
+`scale` multiplies the whole preset. `color: auto` makes journal presets
+monochrome; pass `color: true` for CPK colors or `color: false` for explicit
+black line art. `"default"` applies nothing, so existing documents are
+unaffected. Wiley's line width and label size are derived from its 6 mm
+bond-length guideline, which fixes only a minimum line width; journal-specific
+geometry beyond these four settings (double-bond spacing, hash spacing) keeps
+typed-smiles' defaults.
 
 == #raw("scale")
 
@@ -333,8 +380,9 @@ each defaults to #c("none"), meaning it follows #c("scale").]
 == #raw("color")
 
 #demo[
-  CPK colors are on by default (see @sec-colors). Set #c("color: false") for a
-  monochrome diagram.
+  CPK colors are on by default for #c("style: \"default\"") (see @sec-colors).
+  Journal presets default to monochrome line art. Set #c("color: false") for an
+  explicit monochrome diagram, or #c("color: true") to force CPK colors.
 
   #example(```typ
   #smiles("C[N+](=O)[O-]") \
@@ -368,7 +416,7 @@ each defaults to #c("none"), meaning it follows #c("scale").]
   #c("#let smiles = smiles.with(fg: white, theme: \"dark\")").
 
   #example(```typ
-  #smiles("CC(N)C(=O)O", fg: navy) \
+  #smiles("CC(N)C(=O)O", fg: maroon) \
   #smiles("CC(N)C(=O)O", color: false, fg: maroon)
   ```)
 ]
@@ -390,12 +438,11 @@ each defaults to #c("none"), meaning it follows #c("scale").]
 == #raw("mirror")
 
 #demo[
-  Reflects the molecule across an axis — something no #c("rotation") can do,
-  since a rotated drawing is never its own mirror image. #c("\"horizontal\"")
-  swaps left and right, #c("\"vertical\"") swaps top and bottom; mirroring is
-  applied before #c("rotation"). Useful to face a reacting group toward a
-  reaction arrow. Inside #c("reaction()"), pass it per molecule:
-  #c("mol(\"OC1CCCCC1\", mirror: \"horizontal\")").
+  #c("mirror") reflects a molecule horizontally or vertically in the final
+  drawing. Useful to face a reacting group toward a reaction arrow. Inside
+  #c("reaction()"), pass it per molecule:
+  #c("mol(\"OC1CCCCC1\", mirror: \"horizontal\")"). With #c("rotation") set,
+  #c("mirror: \"vertical\"") preserves left/right and flips top/bottom.
 
   #example(```typ
   #smiles("CC(=O)OC1=CC=CC=C1C(=O)O") \
@@ -406,10 +453,10 @@ each defaults to #c("none"), meaning it follows #c("scale").]
   ```)
 ]
 
-#note[Mirroring exchanges wedges and hashes: a reflected 2D skeleton with
-unchanged wedges would depict the enantiomer, while reflecting and swapping is
-equivalent to turning the molecule over — the depicted configuration at every
-stereocenter is preserved.]
+#note[Single-axis reflection exchanges wedges and hashes: a reflected 2D
+skeleton with unchanged wedges would depict the enantiomer, while reflecting
+and swapping is equivalent to turning the molecule over — the depicted
+configuration at every stereocenter is preserved.]
 
 #demo[
   A stereocenter keeps its configuration when mirrored.
@@ -453,13 +500,63 @@ stereocenter is preserved.]
   #smiles(
     "N[C@@H](C)C(=O)O",
     atom-annotations: (
-      (1, [$alpha$], (-0.4, -0.05)),
+      (1, [$alpha$], (0, -0.05)),
       (2, [$beta$]),
-      (3, [$gamma$], (-0.05, -0.3)),
+      (3, [$gamma$], (-0.4, -0.3)),
     ),
   )
   ```)
 ]
+
+== #raw("opacity")
+
+#demo[
+  #c("opacity") fades every paint the drawing produces — bonds, atom labels,
+  charges, lone pairs, and annotations — so a molecule can be ghosted or
+  de-emphasized, e.g. spectator species in a mechanism or step-by-step slide
+  builds. It accepts a ratio (#c("40%")) or a number between 0 and 1.
+
+  #example(```typ
+  #smiles("CC(N)C(=O)O")
+  #h(1.5em)
+  #smiles("CC(N)C(=O)O", opacity: 55%)
+  #h(1.5em)
+  #smiles("CC(N)C(=O)O", opacity: 0.2)
+  ```)
+]
+
+#note[String molecules inside #c("reaction()") accept the same option:
+#c("mol(\"CCO\", opacity: 30%)").]
+
+== #raw("bond-customizations")
+
+#demo[
+  #c("bond-customizations") restyles individual bonds. Each entry pairs a
+  #c("bond(i, j)") reference (the same atom-index form used by #c("arrow()")
+  and #c("highlight()"); a plain #c("(i, j)") array also works) with an
+  options dictionary:
+
+  - #c("color") — draw the whole bond in one color instead of the bicolor halves,
+  - #c("stroke") — the bond width, like a per-bond #c("bond-stroke"),
+  - #c("opacity") — fade just this bond.
+
+  Overrides apply to every part of the bond: both lines of a double bond, the
+  hash lines of a stereo bond, waves and dashes.
+
+  #example(```typ
+  #smiles(
+    "CCC(=O)OCC",
+    bond-customizations: (
+      (bond(1, 2), (color: yellow, stroke: 2pt)),
+    ),
+  )
+  ```)
+]
+
+#note[Use #c("show-indices: true") while writing the references, exactly as for
+mechanism arrows. Bond geometry (length and angles) is computed by the layout
+engine and is not a per-bond style; use #c("bond-length") to size all bonds
+together.]
 
 == #raw("lone-pairs")
 
@@ -490,6 +587,10 @@ lone pairs.]
 
 Standard SMILES syntax (atoms, bonds, branches, ring closures) is supported. This
 section covers the points specific to typed-smiles.
+
+#note[Ring closures may be written next to branch points. For example,
+#c("C1=CCCC(=O)1") closes the ring on the same atom that carries the
+#ce("C=O") branch.]
 
 == Aromatic rings
 
@@ -673,7 +774,9 @@ adjustment (see @sec-limits).]
 
 #demo[
   Directional bonds #c("/") and #c("\\") around a double bond set its cis/trans
-  geometry. They come in pairs, one on each side of the #c("=").
+  geometry. They come in pairs, one on each side of the #c("="). If an alkene
+  carbon has two marked substituent bonds, the markers must place those
+  substituents on opposite sides.
 
   #example(```typ
   trans: #smiles("F/C=C/F")
@@ -716,7 +819,7 @@ double bonds would read as one long double bond.]
   #example(```typ
   #smiles("C!wN") \
   #smiles("C!hN") \
-  #smiles("{Nu}!wC({LG|red})=O")
+  #smiles("C(!w{Nu|teal})({LG|green})=O")
   ```)
 ]
 
@@ -740,6 +843,7 @@ double bonds would read as one long double bond.]
 #note[#c("!s") and #c("!d") carry no cis/trans meaning and never consume a
 double-bond geometry slot; they can appear next to real #c("/") and #c("\\")
 directional bonds.]
+#note[Tip: Use empty custom labels #c("{}") or #c("!w{}") to draw bonds without a connecting atom.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Colors <sec-colors>
@@ -764,8 +868,8 @@ black; common heteroatoms get their conventional colors.
   Set #c("color: false") for a monochrome diagram.
 
   #example(```typ
-  #smiles("OC1=CC(=CC=C1)C(=O)O") \
-  #smiles("OC1=CC(=CC=C1)C(=O)O", color: false)
+  #smiles("OC1=CC(=NC=C1)C(=S)Cl") \
+  #smiles("OC1=CC(=NC=C1)C(=S)Cl", color: false)
   ```)
 ]
 
@@ -814,7 +918,7 @@ and arbitrary abbreviated groups. Any Typst color value works — #c("rgb()"),
 
   #example(```typ
   // O (element) → teal; {Nu} (label) → navy; {LG} (label) → maroon
-  #smiles("{Nu}!wC({LG|red})=O",
+  #smiles("C(!w{Nu})({LG|red})=O",
     atom-colors: (O: rgb("#00897B"), "{Nu}": rgb("#1565C0"), "{LG}": rgb("#B71C1C")))
   ```)
 ]
@@ -831,8 +935,8 @@ Color is resolved in this order for each atom or label:
 #note[`color: false` is a hard override that sits above all of the above. When
 it is set, every atom and label renders in black regardless of any `atom-colors`
 entries or inline styles. If you want a mostly-monochrome diagram with one or
-two highlighted groups, keep `color: true` (the default) and put everything else
-in `atom-colors`.]
+two highlighted groups, keep or set `color: true` and put everything else in
+`atom-colors`.]
 
 == Label colors (`{label|style}`)
 
@@ -981,6 +1085,97 @@ and isotope-labeled atoms such as #c("[2H]") (a specific nuclide needs a
 nuclide mass, not a standard atomic weight).]
 
 // ═════════════════════════════════════════════════════════════════════════════
+= Inline molecules: #raw("smiles-inline()")
+// ═════════════════════════════════════════════════════════════════════════════
+
+#demo[
+  #c("smiles-inline(smiles-str, height: 1.4em, baseline: auto, ..args)") scales
+  a structure to a target height and baseline-aligns it so it reads inline,
+  like a word in the sentence. Extra named arguments are passed straight to
+  #c("smiles()").
+
+  #example(```typ
+  Dehydrating ethanol #smiles-inline("CCO")
+  over alumina gives ethylene
+  #smiles-inline("C=C"); toluene
+  #smiles-inline("Cc1ccccc1") is a common
+  solvent.
+  ```)
+]
+
+Sizing works in two steps: the drawing is scaled to fit the #c("height")
+(default #c("1.4em"), so ordinary line spacing stays essentially unchanged),
+and the scale is capped so one bond never exceeds most of that height —
+otherwise a flat, mostly horizontal molecule, which measures almost no height,
+would blow up to fill it. Typst grows a line to fit tall inline content, so
+neighboring lines are never overlapped; passing a larger #c("height") only
+makes the molecule's own line taller.
+
+#note[#c("baseline") sets how far the drawing's vertical center sits above the
+text baseline (default centers it on the lowercase body). Atom labels scale
+down with the drawing: at inline sizes, label-heavy molecules read better with
+a larger #c("height") or as a display-mode #c("smiles()").]
+
+// ═════════════════════════════════════════════════════════════════════════════
+= CeTZ integration: #raw("smiles-cetz()")
+// ═════════════════════════════════════════════════════════════════════════════
+
+#demo[
+  #c("smiles-cetz(smiles-str, name:, origin:, fg:, theme:, ..opts)") draws a
+  molecule *inside an existing CeTZ canvas* and registers named anchors on the
+  group, so arbitrary CeTZ drawing attaches to real molecular positions:
+
+  - #c("\"<name>.atom-<i>\"") — every atom center (writing-order indices, as
+    shown by #c("show-indices")),
+  - #c("\"<name>.bond-<i>-<j>\"") — every bond midpoint (with $i < j$),
+  - #c("\"<name>.center\"") — the molecule origin.
+
+  Coordinates are in bond-length units; give the canvas
+  #c("length: 30pt * scale") so sizes match #c("smiles(scale: ...)"), and wrap
+  the canvas in #c("context") (atom-label measurement needs it — plain
+  #c("smiles()") provides it automatically, a raw canvas does not).
+
+  The Watson–Crick A–T base pair below is two #c("smiles-cetz") calls plus
+  plain CeTZ: two dashed hydrogen bonds drawn between atom anchors of the two
+  bases, endpoint nudges so the dashed lines do not start at atom centers,
+  distance labels, and glycosidic-bond stubs to the sugar backbone.
+
+  #example(```typ
+  #align(center, context cetz.canvas(length: 30pt, {
+  import cetz.draw: *
+
+  smiles-cetz("Nc1ncnc2N(!s{})cnc12", name: "A")
+  smiles-cetz("Cc1cN(!s{})c(=O)[nH]c1=O", name: "T", origin: (4.9, 0.42))
+
+  let hb = (paint: rgb("#3A78C9"), thickness: 1.0pt, dash: "densely-dashed")
+  let off(anchor, by) = (rel: by, to: anchor)
+  line(off("A.atom-11", (0.4, -0.15)), off("T.atom-9", (-0.2, 0.06)), stroke: hb)
+  line(off("A.atom-2", (0.15, 0)), off("T.atom-7", (-0.2, 0)), stroke: hb)
+
+  // Hydrogen-bond distances.
+  content((rel: (0.2, 0.2), to: ("A.atom-11", 50%, "T.atom-9")), text(size: 7.5pt, fill: rgb("#3A78C9"))[2.9 Å])
+  content((rel: (0, 0.28), to: ("A.atom-2", 50%, "T.atom-7")), text(size: 7.5pt, fill: rgb("#3A78C9"))[2.8 Å])
+
+  }))
+  ```, side: false)
+]
+
+The remaining #c("..opts") are #c("smiles()") drawing options (#c("color"),
+#c("rotation"), #c("mirror"), #c("show-h"), #c("aromatic"), #c("opacity"),
+#c("bond-customizations"), …). #c("fg") and #c("theme") default to black and
+light because `auto` foreground resolution is not available inside a raw
+canvas — pass them explicitly on dark backgrounds.
+
+Use regular CeTZ relative coordinates to offset any connection endpoint:
+#c("(rel: (0.12, 0.04), to: \"A.atom-0\")"). This is the same idea as
+#c("atom(..., offset:)") in mechanism arrows, but in raw CeTZ syntax.
+
+#note[Turn on #c("show-indices: true") while writing anchor references, exactly
+as for mechanism arrows, to read off the atom indices. Bond-midpoint anchors
+(#c("bond-<i>-<j>")) attach to the middle of a bond — useful for marking a
+reacting or attachment bond.]
+
+// ═════════════════════════════════════════════════════════════════════════════
 = Reaction schemes
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -995,9 +1190,11 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   addressable by curly arrows (see #link(<sec-mech>)[Reaction mechanisms]). String
   molecules accept common drawing options such as #c("font-size"), #c("font"),
   #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-h"), #c("lone-pairs"),
-  #c("atom-colors"), and #c("show-indices"). #c("offset") nudges the molecule in
-  bond-length units and switches the reaction into mechanism mode; use
-  #c("reaction(scale: ...)") to resize a shared mechanism canvas.
+  #c("opacity"), #c("bond-customizations"), #c("atom-colors"), and
+  #c("show-indices"). #c("offset") nudges the molecule in page coordinates, in
+  bond-length units: positive x moves right and positive y moves up regardless
+  of #c("reaction(flow:)"). In mechanism mode, use #c("reaction(scale: ...)")
+  to resize the shared canvas and its offsets.
 
   #example(```typ
   #reaction(mol(smiles("CCO"), label: [ethanol]))
@@ -1006,8 +1203,9 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 
 == #raw("rxn-arrow()")
 
-#c("rxn-arrow(above: none, below: none, dir: \"right\", kind: \"single\")") draws an arrow.
-#c("dir") may be #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").
+#c("rxn-arrow(above: none, below: none, dir: auto, kind: \"single\")") draws an arrow.
+#c("dir") may be #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or
+#c("auto") (the default, following the enclosing #c("reaction(flow:)")).
 #c("kind") may be #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""),
 #c("\"dashed\""), or #c("\"wavy\"").
 #c("above") and #c("below") carry reagents and conditions.
@@ -1021,7 +1219,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   [*Argument*], [*Default*], [*Effect*],
   [#c("above")], [`none`], [Label above a horizontal arrow, or right of a vertical arrow.],
   [#c("below")], [`none`], [Label below a horizontal arrow, or left of a vertical arrow.],
-  [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
+  [#c("dir")], [`auto`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or #c("auto") (follows #c("reaction(flow:)")).],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
 )
@@ -1059,7 +1257,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 == #raw("reaction()")
 
 #demo[
-  `reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, show-indices: false, ..items)`
+  `reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, show-indices: false, flow: "right", ..items)`
   lays out molecules and arrows left to right. An up or down arrow wraps the
   scheme onto a new row.
 
@@ -1094,6 +1292,37 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   )
   ```, side: false)
 ]
+
+=== Flow direction
+
+#demo[
+  #c("flow") sets the writing direction: #c("\"right\"") (default), #c("\"left\""),
+  #c("\"up\""), or #c("\"down\""). #c("\"left\"") and #c("\"up\"") reflect the
+  scheme along the flow axis and flip the arrowheads, so a scheme written in
+  reading order displays right-to-left or bottom-to-top. Ordinary non-arrow
+  items follow the same direction, so #c("flow: \"up\"") and #c("\"down\"")
+  stack molecules, plus signs, and text vertically even when no #c("rxn-arrow()")
+  separators are present. This is the natural choice for a branch that grows out
+  of the left or bottom of a #c("cycle()") — its released product ends up on the
+  side facing the cycle. Arrows created with #c("rxn-arrow(dir: auto)") (the
+  default) follow the flow; an explicit #c("dir") is kept.
+
+  #example(```typ
+  #reaction(flow: "left",
+    mol(smiles("CCO")),
+    rxn-arrow(above: [\[O\]]),
+    mol(smiles("CC=O")),
+    rxn-arrow(above: [\[O\]]),
+    mol(smiles("CC(=O)O")),
+  )
+  ```, side: false)
+]
+
+#note[Because #c("step(out:)") of a #c("cycle()") accepts any content, a nested
+#c("reaction(flow: \"left\")") (or #c("\"down\"")) grows a full sub-reaction out
+of a released molecule that reads naturally away from the ring, while the outer
+reaction continues in its own direction. Flow applies to the scheme layout;
+mechanism mode (curly arrows) is unaffected.]
 
 === Uniform scale
 
@@ -1149,8 +1378,9 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 #c("reaction()") also draws electron-pushing mechanisms: curly arrows that flow
 from a lone pair, bond, or atom into another bond or atom — within one structure
 or across separate species. It switches from grid layout to a single shared canvas
-as soon as any curly #c("arrow()") or #c("highlight()") is present, or any molecule
-carries an #c("offset"). Schemes without these render exactly as before.
+as soon as any curly #c("arrow()") or #c("highlight()") is present.
+#c("mol(offset:)") by itself stays in scheme layout and nudges the species
+inside its grid cell.
 
 == Referencing atoms
 
@@ -1240,9 +1470,9 @@ counted).
 
   #example(```typ
   #reaction(
-    mol("[OH-]", lone-pairs: "dots", offset: (1.5, 1)),
+    mol("[OH-]", lone-pairs: "dots", offset: (0, 1)),
     mol("C(I)(C)C"),
-    arrow(from: lp(0, 0, offset:(-0.3, -0.2)), to: atom(1, 0, offset : (0.1, -0.1)),
+    arrow(from: lp(0, 0, offset:(0.1, -0.2)), to: atom(1, 0, offset : (0.1, -0.1)),
           bend: "right", color : black),
   )
   ```, side: false)
@@ -1260,6 +1490,90 @@ counted).
     [#reaction(smiles("CC(=O)C"), rxn-arrow(), smiles("O=C=O"), scale : 0.7)],
     sup: [‡])
   ```)
+]
+
+// ═════════════════════════════════════════════════════════════════════════════
+= Catalytic cycles: #raw("cycle()")
+// ═════════════════════════════════════════════════════════════════════════════
+
+  #c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, ...)")
+  arranges
+  species on a circle with arc arrows between them — the standard depiction of a
+  catalytic cycle. Items alternate species and step()s, just as #c("reaction()")
+  alternates molecules and arrows, but the sequence closes into a ring (the last
+  step returns to the first species). Species are mol() items or any content;
+  SMILES strings are rendered by #c("smiles()").
+
+  #c("step(label:, into:, out:, bend:, merge:, rotation:, label-offset:, into-offset:, out-offset:)")
+  describes the arc that follows a species: #c("label") names the transformation,
+  #c("into") adds a reagent merging into the arc from outside the ring, and
+  #c("out") a product leaving it. Those side arrows are bookkeeping arrows for
+  material entering or leaving the catalytic manifold, not electron-pushing
+  arrows. #c("merge: true") draws a side arrow tangent to the arc so it visually
+  fuses with the main cycle arrow. #c("rotation") rotates the step label:
+  #c("\"straight\"") keeps it horizontal, #c("\"auto\"") follows the step's
+  circle angle while keeping text upright, and an explicit angle is used as given. The three
+  #c("*-offset") arguments nudge the label and the into/out reagents like a
+  #c("mol") offset.
+
+
+  #example(```typ
+  #align(center)[
+  #reaction(
+    scale : 0.6,
+    flow : "down",
+    mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)(!w{>PPh3})"), offset: (0.5, 0)),
+    rxn-arrow(above : [#ce("PPh3") solvent (S)]),
+    cycle(
+      radius : 6.0,
+      mol(smiles("{Rh}(!w{S | S})(!h{>PPh3})(!hCl)(!w{>PPh3})")),
+      step(label : [#text(size : 8pt)[oxidative addition]], label-offset : (0.3, 0.5), into : [#ce("H2")], rotation : "auto", merge : true),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!w{H})")),
+      step(into : [#smiles("C=C")], merge : true),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({})({H})({H})")),
+      step(label : [#text(size : 8pt)[migratory insertion]], label-offset: (0, 0.5), rotation : "auto"),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!wCC{H})", rotation : -90deg)),
+      step(label : [#text(size : 8pt)[reductive elimination]], label-offset:  (-0.5, 0.5), out : [#smiles("{H}CC{H}")], merge:true, rotation : "auto")
+    )
+  )
+]
+  ```, side: false)
+
+
+Because #c("step(out:)") accepts any content, passing a #c("reaction()") there
+grows a full linear branch out of a released molecule — the released product
+becomes the first species of a downstream sequence. Reagents (both #c("into")
+and #c("out")) are offset by their own measured size, so even a wide nested
+reaction clears the ring. Incoming content is attached on the side facing the
+cycle so the side arrow starts at the last upstream item; outgoing content uses
+the same side so the leaving arrow lands at the first downstream item instead
+of the center of the whole branch.
+
+#note[#c("radius") defaults to #c("auto"), which fits the species without
+overlap; set it explicitly for a tighter or looser ring. #c("start") is the
+angle of the first species (#c("90deg") is the top) and #c("clockwise") the
+travel direction. #c("scale") sets the canvas bond length as in
+#c("reaction()"). #c("arc-gap") tunes how close the arc arrows sit to the
+species (in bond-length units beyond each molecule's radius; smaller or even
+negative brings them closer). #c("reagent-bend") sets the default curvature of
+into/out side arrows; #c("step(bend:)") overrides one step, and #c("bend: 0")
+makes that side arrow nearly radial. A one-species #c("cycle()") draws that
+species alone.]
+
+#demo[
+  With #c("merge: true") the into/out arrows fuse tangentially with the main
+  cycle arrows, and #c("arc-gap") pulls the arrows closer to the species:
+
+  #example(```typ
+  #cycle(
+    scale: 0.9,
+    arc-gap: 0.0,
+    mol(box(inset: 2pt)[E]),
+    step(label: [binding], into: [S], merge: true),
+    mol(box(inset: 2pt)[E·S]),
+    step(label: [turnover], out: [P], merge: true),
+  )
+  ```, side: false)
 ]
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1348,19 +1662,22 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Option*], [*Default*], [*Effect*],
+  [#c("style")], [`"default"`], [Journal preset: #c("\"acs\""), #c("\"rsc\""), #c("\"nature\""), #c("\"wiley\"").],
   [#c("scale")], [`1.0`], [Balanced size of everything.],
   [#c("bond-length")], [`none`], [Bond length only (`1.0` is 30 pt).],
   [#c("font-size")], [`none`], [Atom-label size only.],
   [#c("font")], [`"New Computer Modern"`], [Atom-label font.],
   [#c("bond-stroke")], [`none`], [Bond width only.],
-  [#c("color")], [`true`], [CPK colors on or off.],
+  [#c("color")], [`auto`], [CPK colors for #c("\"default\""); monochrome for journal presets.],
   [#c("fg")], [`auto`], [Foreground for bonds/carbon labels; `auto` inherits the text color.],
   [#c("theme")], [`auto`], [CPK palette variant; `auto` goes dark when #c("fg") is light.],
   [#c("rotation")], [`0deg`], [Rotate, labels stay upright.],
-  [#c("mirror")], [`none`], [Reflect #c("\"horizontal\"") or #c("\"vertical\""); wedges/hashes swap to keep stereo.],
+  [#c("mirror")], [`none`], [Optional #c("\"horizontal\"") or #c("\"vertical\"") reflection.],
   [#c("show-h")], [`()`], [Label selected implicit hydrogens; use #c("\"all\"") for every atom.],
   [#c("aromatic")], [`"kekule"`], [Lowercase-aromatic rings as doubles or #c("\"circle\"").],
   [#c("atom-annotations")], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuples.],
+  [#c("opacity")], [`100%`], [Fade the whole drawing (ghost molecules).],
+  [#c("bond-customizations")], [`()`], [Per-bond #c("color"), #c("stroke"), #c("opacity") keyed by #c("bond(i, j)").],
   [#c("lone-pairs")], [`none`], [Draw lone pairs as #c("\"dots\"") or #c("\"lines\"").],
   [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
   [#c("show-indices")], [`false`], [Stamp atom indices for writing references.],
@@ -1378,6 +1695,7 @@ parameter.
   [#c("gap-v")], [`1.5em`], [Vertical gap between rows.],
   [#c("scale")], [`1.0`], [Uniform scale applied to the whole scheme.],
   [#c("breakable")], [`false`], [Allow the scheme to split across pages.],
+  [#c("flow")], [`"right"`], [Writing direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"") (left/up reflect the scheme).],
   [#c("show-indices")], [`false`], [Default atom-index overlay for string SMILES molecules in this reaction.],
 )
 
@@ -1390,7 +1708,7 @@ parameter.
   [*Option*], [*Default*], [*Effect*],
   [#c("above")], [`none`], [Condition label above a horizontal arrow, or right of a vertical arrow.],
   [#c("below")], [`none`], [Condition label below a horizontal arrow, or left of a vertical arrow.],
-  [#c("dir")], [`"right"`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"").],
+  [#c("dir")], [`auto`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or #c("auto") (follows #c("reaction(flow:)")).],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
 )
@@ -1403,6 +1721,8 @@ parameter.
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
   [#c("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float"); errors on wildcards, abbreviations, and isotopes.],
+  [#c("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],
+  [#c("smiles-cetz(smiles, name:, origin:, fg:, theme:, ..opts)")], [Molecule as CeTZ elements with #c("atom-<i>") / #c("bond-<i>-<j>") / #c("center") anchors.],
 )
 
 == Mechanism helpers
@@ -1412,7 +1732,9 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
-  [#c("mol(spec, label:, offset:, ..opts)")], [Reaction item; #c("spec") as a string is rendered with addressable atoms.],
+  [#c("mol(spec, label:, offset:, ..opts)")], [Reaction item; #c("spec") as a string is rendered with addressable atoms; #c("offset") nudges in page coordinates.],
+  [#c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
+  [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
   [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
   [#c("arrow(from:, to:, label:, color:, bend:, angle:, half:)")], [Curly electron-pushing arrow.],
   [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:)")], [Shade one atom/bond reference or an array of references.],

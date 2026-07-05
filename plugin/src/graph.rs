@@ -81,6 +81,7 @@ pub struct BondSpec {
     pub order: BondOrder,
     pub stereo: BondStereo,
     pub direction: BondDirection,
+    pub forced_stereo: bool,
 }
 
 impl BondSpec {
@@ -89,6 +90,7 @@ impl BondSpec {
             order: BondOrder::Single,
             stereo: BondStereo::None,
             direction: BondDirection::None,
+            forced_stereo: false,
         }
     }
 }
@@ -151,6 +153,7 @@ pub struct Bond {
     pub order: BondOrder,
     pub stereo: BondStereo,
     pub direction: BondDirection,
+    pub forced_stereo: bool,
     /// True for ring bonds that were aromatic in the input before
     /// kekulization assigned them a single or double order.
     pub aromatic: bool,
@@ -176,8 +179,15 @@ impl MoleculeGraph {
         aromatic_atom_markers: Vec<bool>,
     ) -> Result<Self, String> {
         // smiles_parser::chain takes &[u8] and returns IResult<&[u8], Chain>
-        let (_, chain_ast) = parse_chain(smiles.as_bytes())
+        let (remaining, chain_ast) = parse_chain(smiles.as_bytes())
             .map_err(|e| format!("SMILES parse failed for {:?}: {e:?}", smiles))?;
+        if !remaining.is_empty() {
+            let tail = std::str::from_utf8(remaining).unwrap_or("<invalid UTF-8>");
+            return Err(format!(
+                "SMILES parse stopped before trailing input {:?} in {:?}",
+                tail, smiles
+            ));
+        }
 
         let mut builder = GraphBuilder {
             forced_direction_markers: VecDeque::from(forced_direction_markers),
@@ -260,6 +270,7 @@ impl GraphBuilder {
             order: spec.order,
             stereo: spec.stereo,
             direction: spec.direction,
+            forced_stereo: spec.forced_stereo,
             aromatic: false,
         });
         self.bond_implicit.push(implicit);
@@ -390,16 +401,17 @@ impl GraphBuilder {
         } else {
             ForcedBondKind::Plain
         };
-        let (stereo, direction) = match kind {
-            ForcedBondKind::Plain => (BondStereo::None, sparser_bond_to_direction(b)),
-            ForcedBondKind::Wedge => (sparser_bond_to_forced_stereo(b), BondDirection::None),
-            ForcedBondKind::Wavy => (BondStereo::Wavy, BondDirection::None),
-            ForcedBondKind::Dashed => (BondStereo::Dashed, BondDirection::None),
+        let (stereo, direction, forced_stereo) = match kind {
+            ForcedBondKind::Plain => (BondStereo::None, sparser_bond_to_direction(b), false),
+            ForcedBondKind::Wedge => (sparser_bond_to_forced_stereo(b), BondDirection::None, true),
+            ForcedBondKind::Wavy => (BondStereo::Wavy, BondDirection::None, false),
+            ForcedBondKind::Dashed => (BondStereo::Dashed, BondDirection::None, false),
         };
         BondSpec {
             order: sparser_bond_to_order(b),
             stereo,
             direction,
+            forced_stereo,
         }
     }
 }
