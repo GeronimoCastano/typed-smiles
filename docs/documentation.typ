@@ -173,13 +173,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.5.0": *
+#import "@preview/typed-smiles:0.6.0": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.5.0": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.6.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports these main symbols:
@@ -1592,7 +1592,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.5.0": *
+#import "@preview/typed-smiles:0.6.0": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
