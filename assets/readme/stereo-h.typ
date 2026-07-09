@@ -21,6 +21,6 @@
   [#smiles("C!hN", bond-length: 1.6)],
   [#smiles("C!sN", bond-length: 1.6)],
   [#smiles("C!dN", bond-length: 1.6)],
-  [#smiles("N[C@@H](C)C(=O)O", bond-length: 0.9, scale: 0.7)],
-  [#smiles("F/C=C/F", bond-length: 1.25, scale: 0.7)],
+  [#smiles("N[C@@H](C)C(=O)O", bond-length: 0.65, scale: 0.7)],
+  [#smiles("F/C=C/F", bond-length: 0.85, scale: 0.7)],
 )
