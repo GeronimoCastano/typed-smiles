@@ -681,21 +681,6 @@ Current limitations:
   stereo wedges.
 - Bridged bicyclics may overlap; template matching is not implemented.
 
-## Building
-
-```sh
-cargo test --manifest-path plugin/Cargo.toml   # Rust tests
-./build.sh                                      # build WASM plugin
-typst compile --root . tests/test.typ tests/test.pdf       # visual test
-typst compile --root . docs/documentation.typ docs/documentation.pdf  # user guide
-```
-
-## Architecture
-
-```text
-SMILES string → Rust WASM plugin → JSON layout → CeTZ drawing in Typst
-```
-
 ## License
 
 MIT
