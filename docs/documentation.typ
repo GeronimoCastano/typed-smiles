@@ -8,7 +8,7 @@
 #import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 #import "@preview/cetz:0.5.2"
 
-#let version = "0.5.0"
+#let version = "0.6.1"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -173,13 +173,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.6.0": *
+#import "@preview/typed-smiles:0.6.1": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.6.0": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.6.1": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports these main symbols:
@@ -1592,7 +1592,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.6.0": *
+#import "@preview/typed-smiles:0.6.1": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
