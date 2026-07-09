@@ -30,10 +30,10 @@
     spacing: 0.4cm,
     strong[Hydroxide attack],
     reaction(
-      mol("[OH-]", lone-pairs: "dots", offset: (1.5, 1)),
+      mol("[OH-]", lone-pairs: "dots", offset: (0, 1)),
       mol("C(I)(C)C"),
       arrow(
-        from: lp(0, 0, offset: (-0.3, -0.2)),
+        from: lp(0, 0, offset: (0.1, -0.2)),
         to: atom(1, 0, offset: (0.1, -0.1)),
         bend: "right",
         color: black,
