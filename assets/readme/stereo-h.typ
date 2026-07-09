@@ -17,10 +17,10 @@
   [*Tetrahedral @@*],
   [*trans alkene*],
 
-  [#smiles("C!wN", bond-length: 1.6)],
-  [#smiles("C!hN", bond-length: 1.6)],
-  [#smiles("C!sN", bond-length: 1.6)],
-  [#smiles("C!dN", bond-length: 1.6)],
-  [#smiles("N[C@@H](C)C(=O)O", bond-length: 0.65, scale: 0.7)],
-  [#smiles("F/C=C/F", bond-length: 0.85, scale: 0.7)],
+  [#smiles("C!wN")],
+  [#smiles("C!hN")],
+  [#smiles("C!sN")],
+  [#smiles("C!dN")],
+  [#smiles("N[C@@H](C)C(=O)O", scale: 0.7)],
+  [#smiles("F/C=C/F", scale: 0.7)],
 )
