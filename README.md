@@ -514,8 +514,8 @@ a dashed bond for hydrogen bonds, partial bonds, and coordination.
   [#smiles("C!hN")],
   [#smiles("C!sN")],
   [#smiles("C!dN")],
-  [#smiles("N[C@@H](C)C(=O)O")],
-  [#smiles("F/C=C/F")],
+  [#smiles("N[C@@H](C)C(=O)O", scale: 0.7)],
+  [#smiles("F/C=C/F", scale: 0.7)],
 )
 ```
 
