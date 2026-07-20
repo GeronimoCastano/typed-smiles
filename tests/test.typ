@@ -3097,3 +3097,70 @@ reflected.
      mol([B]),
    )],
 )
+
+#pagebreak()
+
+= Custom-label scripts and bracketed offsets
+
+`_(...)` and `^(...)` script custom labels. A subscript and superscript after
+the same glyph share that glyph, so the plus in `NH_4^+` belongs to H, not 4.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*Phosphine subscript* \
+   #smiles("{>PPh_(3)}C=O")],
+  [*Subscript and charge* \
+   #smiles("{NH_4^+}") \
+   #ce("NH4+")],
+  [*Grouped scripts* \
+   #smiles("{SO_(4)^(2-)}") \
+   #ce("SO4^2-")],
+)
+
+#pagebreak()
+
+= Custom-label script alignment with #raw("ce()")
+
+Scripted custom labels use the same script size, spacing, and vertical
+attachment as chemical formulas.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 2em,
+  row-gutter: 1em,
+  align: center + horizon,
+  [*Custom label*], [*Chemical formula*],
+  [#smiles("{NH_4^+}", font-size: 18pt)], [#ce("NH4+", font-size: 18pt)],
+  [#smiles("{SO_(4)^(2-)}", font-size: 18pt)], [#ce("SO4^2-", font-size: 18pt)],
+)
+
+#pagebreak()
+
+= Reaction-arrow scale
+
+`rxn-arrow(scale:)` uniformly resizes the shaft, arrowhead, spacing, and
+condition labels in horizontal and vertical schemes.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*Scale 0.7* \
+   #reaction(mol([A]), rxn-arrow(scale: 0.7, above: [cat.]), mol([B]))],
+  [*Scale 1.0* \
+   #reaction(mol([A]), rxn-arrow(above: [cat.]), mol([B]))],
+  [*Scale 1.5* \
+   #reaction(mol([A]), rxn-arrow(scale: 1.5, above: [cat.]), mol([B]))],
+)
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 2em,
+  align: center + horizon,
+  [*Vertical scale 0.7* \
+   #reaction(flow: "down", mol([A]), rxn-arrow(scale: 0.7, above: [cat.]), mol([B]))],
+  [*Vertical scale 1.5* \
+   #reaction(flow: "down", mol([A]), rxn-arrow(scale: 1.5, above: [cat.]), mol([B]))],
+)

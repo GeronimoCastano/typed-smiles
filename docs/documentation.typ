@@ -8,7 +8,7 @@
 #import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 #import "@preview/cetz:0.5.2"
 
-#let version = "0.6.1"
+#let version = "0.7.0"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -173,13 +173,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.6.1": *
+#import "@preview/typed-smiles:0.7.0": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.6.1": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.7.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports these main symbols:
@@ -1025,6 +1025,22 @@ two highlighted groups, keep or set `color: true` and put everything else in
   ```)
 ]
 
+== Scripted labels
+
+#demo[
+  Use #c("_(...)"), #c("^(...)"), or their one-character forms #c("_4")
+  and #c("^+") for explicit subscripts and superscripts in a label. When both
+  follow one glyph, they are paired with that glyph: #c("{NH_4^+}") places the
+  plus above H rather than above 4. Script size, spacing, and vertical placement
+  match #c("ce()") notation. Parenthesize multi-character scripts.
+
+  #example(```typ
+  #smiles("{>PPh_(3)}C=O") \
+  #smiles("{NH_4^+}") \
+  #smiles("{SO_(4)^(2-)}")
+  ```)
+]
+
 // ═════════════════════════════════════════════════════════════════════════════
 = Chemical formulas: #raw("ce()")
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1194,7 +1210,9 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   #c("show-indices"). #c("offset") nudges the molecule in page coordinates, in
   bond-length units: positive x moves right and positive y moves up regardless
   of #c("reaction(flow:)"). In mechanism mode, use #c("reaction(scale: ...)")
-  to resize the shared canvas and its offsets.
+  to resize the shared canvas and its offsets. In ordinary schemes, an offset
+  also changes the reaction's layout bounds, so #c("brackets()") encloses the
+  shifted edge.
 
   #example(```typ
   #reaction(mol(smiles("CCO"), label: [ethanol]))
@@ -1203,12 +1221,13 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 
 == #raw("rxn-arrow()")
 
-#c("rxn-arrow(above: none, below: none, dir: auto, kind: \"single\")") draws an arrow.
+#c("rxn-arrow(above: none, below: none, dir: auto, kind: \"single\", scale: 1.0)") draws an arrow.
 #c("dir") may be #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or
 #c("auto") (the default, following the enclosing #c("reaction(flow:)")).
 #c("kind") may be #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""),
 #c("\"dashed\""), or #c("\"wavy\"").
 #c("above") and #c("below") carry reagents and conditions.
+#c("scale") uniformly resizes the complete arrow, including its condition labels.
 #c("color") defaults to #c("auto"), inheriting the surrounding text color
 (so arrows recolor on dark slides).
 
@@ -1221,8 +1240,22 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   [#c("below")], [`none`], [Label below a horizontal arrow, or left of a vertical arrow.],
   [#c("dir")], [`auto`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or #c("auto") (follows #c("reaction(flow:)")).],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
+  [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
 )
+
+#demo[
+  Scale an individual arrow without changing the rest of its reaction. The
+  shaft, arrowhead, spacing, and condition labels resize together.
+
+  #example(```typ
+  #reaction(
+    ce("A"),
+    rxn-arrow(scale: 1.4, above: [cat.]),
+    ce("B"),
+  )
+  ```, side: false)
+]
 
 #demo[
   Equilibrium arrows use paired half-heads. The filled variant uses filled
@@ -1592,7 +1625,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.6.1": *
+#import "@preview/typed-smiles:0.7.0": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
@@ -1710,6 +1743,7 @@ parameter.
   [#c("below")], [`none`], [Condition label below a horizontal arrow, or left of a vertical arrow.],
   [#c("dir")], [`auto`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or #c("auto") (follows #c("reaction(flow:)")).],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
+  [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
 )
 

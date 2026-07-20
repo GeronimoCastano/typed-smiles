@@ -15,7 +15,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.6.1": *
+#import "@preview/typed-smiles:0.7.0": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -30,7 +30,7 @@ Aromatic rings can be written either in lowercase aromatic notation
 on parse and both render identically.
 
 ```typst
-#import "@preview/typed-smiles:0.6.1": smiles
+#import "@preview/typed-smiles:0.7.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -126,6 +126,10 @@ explicit hydrogens, and `{label}` / `{label|style}` for custom group labels.
 Use `>` inside a custom label to choose the attachment glyph, e.g. `{>PPh3}`.
 For the cleanest result, rotate the molecule so the bond approaches the chosen
 glyph roughly perpendicular to the written label.
+Use `_(...)` and `^(...)` for explicit label subscripts and superscripts:
+`{PPh_(3)}`, `{NH_4^+}`, and `{SO_(4)^(2-)}`. When both follow one glyph,
+they attach to that glyph, so `{NH_4^+}` renders the charge on H rather than 4,
+with script sizing and placement matching `ce()` notation.
 `font` sets the atom-label typeface.
 
 ```typst
@@ -298,7 +302,7 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.6.1": ce
+#import "@preview/typed-smiles:0.7.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -323,7 +327,7 @@ explicit hydrogens. Dot-separated fragments (salts, hydrates) are summed
 together.
 
 ```typst
-#import "@preview/typed-smiles:0.6.1": mol-weight
+#import "@preview/typed-smiles:0.7.0": mol-weight
 
 Ethanol: #calc.round(mol-weight("CCO"), digits: 2) g/mol // 46.07
 Caffeine: #calc.round(mol-weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C"), digits: 2) g/mol // 194.19
@@ -342,7 +346,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.6.1": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.7.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -471,7 +475,7 @@ or an angle), and `label-offset:`/`into-offset:`/`out-offset:` nudge pieces like
 a `mol` offset.
 
 ```typst
-#import "@preview/typed-smiles:0.6.1": cycle, step, mol, ce
+#import "@preview/typed-smiles:0.7.0": cycle, step, mol, ce
 
 #let cplx(body) = box(inset: 2pt, body)
 
@@ -555,6 +559,7 @@ SMILES string extensions:
 |---|---|
 | `{label}` | Literal upright label at an atom position |
 | `{>label}` | Label anchored at the glyph after `>`; the marker is not shown |
+| `{label_(sub)^(sup)}` | Explicit label subscript and superscript; either group may be one character without parentheses |
 | `{label\|N}` | Label and bonds colored like element N |
 | `{label\|red}` | Label colored with a named color (17 names supported) |
 | `{label\|#RRGGBB}` | Label colored with a hex code |
@@ -585,7 +590,7 @@ grows a branch that reads away from the ring, while the outer reaction keeps
 its own direction — so a main reaction can embed a cycle whose branch runs its
 own sub-reaction, then continue.
 
-### `#rxn-arrow(above, below, dir, kind)`
+### `#rxn-arrow(above, below, dir, kind, scale)`
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -593,7 +598,11 @@ own sub-reaction, then continue.
 | `below` | `none` | Label below a horizontal arrow (or left of vertical) |
 | `dir` | `auto` | `"right"`, `"left"`, `"down"`, `"up"`, or `auto` (follows `reaction(flow:)`) |
 | `kind` | `"single"` | `"single"`, `"equilibrium"`, `"equilibrium-filled"`, `"dashed"`, or `"wavy"` |
+| `scale` | `1.0` | Uniform arrow scale, including condition labels |
 | `color` | `auto` | Arrow color; `auto` inherits the surrounding text color |
+
+`scale` resizes the complete arrow component proportionally, including the
+shaft, arrowhead, spacing, and `above`/`below` labels.
 
 ### `#mol(spec, label: none, offset: (0,0), …opts)`
 
@@ -604,6 +613,8 @@ positive y moves up regardless of `reaction(flow:)`. String molecules accept
 common drawing options such as `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-h`,
 `lone-pairs`, `opacity`, `bond-customizations`, `atom-colors`, and
 `show-indices`; use `reaction(scale: ...)` to resize a shared mechanism canvas.
+In ordinary schemes, the offset also updates the reaction's layout bounds, so
+wrappers such as `brackets()` follow a shifted edge.
 
 ### `#cycle(radius: auto, start: 90deg, clockwise: true, scale: 1.0, reagent-bend: 0.12, arc-gap: 0.15, …items)`
 

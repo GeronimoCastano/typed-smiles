@@ -344,6 +344,65 @@
   label-width(prefix) + label-width(glyph) / 2 - label-width(label) / 2
 }
 
+// Formats the lightweight script notation accepted in abbreviation labels.
+// A marker applies to the preceding glyph; writing both forms after that glyph
+// keeps its superscript and subscript paired (NH_4^+, rather than 4^+).
+#let _abbrev-label(label, atom-label, subscript-size, superscript-size) = {
+  let out = []
+  let i = 0
+  while i < label.len() {
+    let base = label.at(i)
+    if base == "\\" and i + 1 < label.len() {
+      out += atom-label(label.at(i + 1))
+      i += 2
+      continue
+    }
+
+    let subscript = none
+    let superscript = none
+    let next = i + 1
+    while next < label.len() and (label.at(next) == "_" or label.at(next) == "^") {
+      let marker = label.at(next)
+      let start = next + 1
+      if start >= label.len() {
+        break
+      }
+      let (script, end) = if label.at(start) == "(" {
+        let close = start + 1
+        while close < label.len() and label.at(close) != ")" { close += 1 }
+        if close >= label.len() {
+          (none, next)
+        } else {
+          (label.slice(start + 1, close), close + 1)
+        }
+      } else {
+        (label.at(start), start + 1)
+      }
+      if script == none { break }
+      if marker == "_" { subscript = script } else { superscript = script }
+      next = end
+    }
+
+    let base-content = atom-label(base)
+    if superscript != none or subscript != none {
+      let scripts = (:)
+      if superscript != none {
+        let body = superscript.replace("-", "\u{2212}")
+        scripts.tr = $#atom-label(body, size: superscript-size)$
+      }
+      if subscript != none {
+        let body = subscript.replace("-", "\u{2212}")
+        scripts.br = $#atom-label(body, size: subscript-size)$
+      }
+      out += math.attach(math.limits($#base-content$), ..scripts)
+    } else {
+      out += base-content
+    }
+    i = if next > i + 1 { next } else { i + 1 }
+  }
+  out
+}
+
 // Draws a molecule's bonds, atom labels, and lone pairs into the current CeTZ
 // canvas, centered at the local origin. The caller sets the canvas unit to
 // `_canvas-scale(scale, bond-length)` and may translate before calling. Atom and
@@ -549,7 +608,12 @@
         and atom.charge == 0
         and atom.at("isotope", default: 0) == 0
       ) {
-        let m = measure(atom-label(atom.at("abbrev", default: "")))
+        let m = measure(_abbrev-label(
+          atom.at("abbrev", default: ""),
+          atom-label,
+          subscript-size,
+          superscript-size,
+        ))
         let hw = m.width / canvas-scale / 2
         let hh = m.height / canvas-scale / 2
         let extent = hw * calc.abs(ux) + hh * calc.abs(uy) + 0.07
@@ -1157,8 +1221,13 @@
           let draw-h-above = false
           let h-above-content = []
           let h-above-marker = none
-          let label-content = if abbrev != "" {
-            atom-label(abbrev, fill: fill)
+        let label-content = if abbrev != "" {
+          _abbrev-label(
+            abbrev,
+            (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
+            subscript-size,
+            superscript-size,
+          )
           } else {
             let reverse-inline = if h-text == [] or deg != 1 {
               false
@@ -1286,7 +1355,12 @@
                 abbrev,
                 atom.at("abbrev_anchor", default: 0),
                 atom.at("abbrev_anchor_len", default: 0),
-                text => content-width(atom-label(text, fill: fill)),
+                text => content-width(_abbrev-label(
+                  text,
+                  (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
+                  subscript-size,
+                  superscript-size,
+                )),
               )
             } else {
               px
@@ -1746,9 +1820,12 @@
         let cs = sp.at("canvas-scale", default: 30pt)
         let fs = sp.at("actual-font-size", default: 11pt)
         let font = sp.at("font", default: "New Computer Modern")
-        let label = text(size: fs, font: font, style: "normal", weight: "regular", abbrev)
+        let atom-label = (body, size: fs) => text(
+          size: size, font: font, style: "normal", weight: "regular", body,
+        )
+        let label = _abbrev-label(abbrev, atom-label, fs, fs)
         let w = measure(label).width / cs
-        let label-width = body => measure(text(size: fs, font: font, style: "normal", weight: "regular", body)).width / cs
+        let label-width = body => measure(_abbrev-label(body, atom-label, fs, fs)).width / cs
         let center-x = p.at(0) - _label-anchor-offset(
           abbrev,
           atom.at("abbrev_anchor", default: 0),
@@ -2101,24 +2178,38 @@
 /// - kind (str): Arrow style — "single" (default), "equilibrium",
 ///   "equilibrium-filled", "dashed" (hypothetical/formal step), or "wavy"
 ///   (e.g. a distorted or non-elementary transformation).
+/// - scale (float): Uniform scale applied to the arrow, including condition
+///   labels. Default: 1.0.
 /// - color (auto / color): Arrow color. `auto` inherits the surrounding text
 ///   color, matching dark slide themes. Default: auto.
 /// -> dictionary  (consumed by #reaction)
-#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", color: auto) = (
+#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", scale: 1.0, color: auto) = (
   __rxn_arrow__: true,
   above: above,
   below: below,
   dir: dir,
   kind: kind,
+  scale: scale,
   color: color,
 )
 
+// Uniformly scales an arrow component while preserving its layout dimensions.
+#let _scale-rxn-arrow(body, factor) = {
+  if factor <= 0 { panic("rxn-arrow scale must be positive") }
+  if factor == 1.0 {
+    body
+  } else {
+    _typst-scale(x: factor * 100%, y: factor * 100%, reflow: true, body)
+  }
+}
+
 // Render a horizontal reaction arrow.
-#let _horiz-arrow(above, below, dir, kind, clr) = context {
+#let _horiz-arrow(above, below, dir, kind, clr, arrow-scale: 1.0) = context {
   let clr = if clr == auto {
     if type(text.fill) == color { text.fill } else { black }
   } else { clr }
-  let (sx, ex) = if dir == "left" { (52, 0) } else { (0, 52) }
+  let span = 52
+  let (sx, ex) = if dir == "left" { (span, 0) } else { (0, span) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
     if kind == "single" {
@@ -2172,7 +2263,7 @@
       panic("rxn-arrow kind must be \"single\", \"equilibrium\", \"equilibrium-filled\", \"dashed\", or \"wavy\"")
     }
   })
-  if above == none and below == none {
+  let body = if above == none and below == none {
     align(center + horizon, arrow-canvas)
   } else {
     let above-label = if above != none { text(size: 8pt, above) } else { [] }
@@ -2189,14 +2280,16 @@
       box(width: row-w, height: label-h, align(center + top, below-label)),
     ))
   }
+  _scale-rxn-arrow(body, arrow-scale)
 }
 
 // Render a vertical reaction arrow. `above` is shown to the right, `below` to the left.
-#let _vert-arrow(above, below, dir, kind, clr) = context {
+#let _vert-arrow(above, below, dir, kind, clr, arrow-scale: 1.0) = context {
   let clr = if clr == auto {
     if type(text.fill) == color { text.fill } else { black }
   } else { clr }
-  let (from-y, to-y) = if dir == "up" { (0, 52) } else { (52, 0) }
+  let span = 52
+  let (from-y, to-y) = if dir == "up" { (0, span) } else { (span, 0) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
     if kind == "single" {
@@ -2248,7 +2341,7 @@
       panic("rxn-arrow kind must be \"single\", \"equilibrium\", \"equilibrium-filled\", \"dashed\", or \"wavy\"")
     }
   })
-  if above == none and below == none {
+  let body = if above == none and below == none {
     align(center + horizon, arrow-canvas)
   } else {
     let right-label = if above != none { text(size: 8pt, above) } else { [] }
@@ -2265,6 +2358,7 @@
       box(width: side-w, align(left + horizon, right-label)),
     )
   }
+  _scale-rxn-arrow(body, arrow-scale)
 }
 
 /// A reaction-scheme item: a molecule or any content, with an optional label and
@@ -2289,7 +2383,7 @@
 )
 
 // Render a mol() item to standalone content (scheme/grid path).
-#let _render-mol(m, show-indices-default: false, offset-unit: 30pt) = {
+#let _render-mol(m, show-indices-default: false, offset-unit: 30pt) = context {
   let opts = m.opts
   if type(m.spec) == str and not ("show-indices" in opts) {
     opts.insert("show-indices", show-indices-default)
@@ -2299,7 +2393,16 @@
   if m.offset == (0, 0) {
     rendered
   } else {
-    move(dx: m.offset.at(0) * offset-unit, dy: -m.offset.at(1) * offset-unit, rendered)
+    let dx = m.offset.at(0) * offset-unit
+    let dy = -m.offset.at(1) * offset-unit
+    let size = measure(rendered)
+    // Keep the visual nudge while shrinking or expanding its layout box by the
+    // same amount. A surrounding layout consequently tracks the moved edge.
+    box(
+      width: calc.max(0pt, size.width + dx),
+      height: calc.max(0pt, size.height + dy),
+      move(dx: dx, dy: dy, rendered),
+    )
   }
 }
 
@@ -2441,8 +2544,11 @@
           let d = item.at("dir", default: "right")
           let k = item.at("kind", default: "single")
           flat-cells.push(
-            if d == "right" or d == "left" { _horiz-arrow(item.above, item.below, d, k, item.at("color", default: auto)) }
-            else                           { _vert-arrow(item.above, item.below, d, k, item.at("color", default: auto)) }
+            if d == "right" or d == "left" {
+              _horiz-arrow(item.above, item.below, d, k, item.at("color", default: auto), arrow-scale: item.at("scale", default: 1.0))
+            } else {
+              _vert-arrow(item.above, item.below, d, k, item.at("color", default: auto), arrow-scale: item.at("scale", default: 1.0))
+            }
           )
         }
       }
@@ -2483,9 +2589,9 @@
           annotations.push(it)
         } else if is-rxn-arrow(it) {
           let body = if it.dir == "right" or it.dir == "left" {
-            _horiz-arrow(it.above, it.below, it.dir, it.kind, it.at("color", default: auto))
+            _horiz-arrow(it.above, it.below, it.dir, it.kind, it.at("color", default: auto), arrow-scale: it.at("scale", default: 1.0))
           } else {
-            _vert-arrow(it.above, it.below, it.dir, it.kind, it.at("color", default: auto))
+            _vert-arrow(it.above, it.below, it.dir, it.kind, it.at("color", default: auto), arrow-scale: it.at("scale", default: 1.0))
           }
           let w = measure(body).width / canvas-scale
           flow.push((body: body, origin: (cursor + w / 2, 0)))
