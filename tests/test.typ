@@ -3164,3 +3164,137 @@ condition labels in horizontal and vertical schemes.
   [*Vertical scale 1.5* \
    #reaction(flow: "down", mol([A]), rxn-arrow(scale: 1.5, above: [cat.]), mol([B]))],
 )
+
+
+#reaction(
+  mol("CCO", scale: 0.8),
+  rxn-arrow(),
+  mol("CC=O", scale: 1.4),
+)
+
+
+#align(center)[
+  #reaction(
+    show-indices: true,
+    mol("BrCC(=O)O{H}", mirror : "vertical", lone-pairs : "dots"),
+    rxn-arrow(),
+    mol(ce("H+"), offset : (-2, 0.3)),
+    arrow(from : atom(0, 3, offset : (0.1, 0.2)), to : species(1), color : black),
+    mol("BrCC(O)O{H}", mirror : "vertical"),
+    rxn-arrow(),
+    mol("OCC", scale : 0.2),
+  )
+]
+#pagebreak()
+
+= Molecules in reaction-arrow labels
+
+`rxn-arrow(above:/below:)` accepts `mol()` items. In scheme mode the molecule
+renders inside the label slot (with its own per-molecule options).
+
+#align(center)[
+  #reaction(
+    mol("C=C"),
+    rxn-arrow(above: mol("BrBr", scale: 0.7), below: [CCl#sub[4]]),
+    mol("BrC(Br)C"),
+  )
+]
+
+= Mechanism per-molecule scale
+
+In mechanism mode `mol(scale:)` multiplies the shared canvas scale for its own
+species; curly arrows and highlights land on the scaled coordinates.
+
+#align(center)[
+  #reaction(
+    show-indices:true,
+    mol("CC(=O)O", scale: 0.6, label: [small]),
+    mol("CC(=O)O", label: [normal]),
+    mol("CC(=O)O", scale: 1.4, label: [large]),
+    highlight(atom(0, 3)),
+    highlight((bond(2, 1, 2), bond(2, 1, 3), bond(2, 1, 0)), include-atoms: true, fill : rgb("#d89d9d")),
+    arrow(from: atom(0, 3), to: atom(2, 1), color: blue),
+  )
+]
+
+= Referenceable molecules above reaction arrows
+
+In mechanism mode a `mol()` in an arrow slot becomes a species of its own,
+counted in written order (above before below). Curly arrows can connect it to
+any other species.
+
+#align(center)[
+  #reaction(
+    mol("C=C"),
+    rxn-arrow(above: mol("BrBr", scale: 0.8), below: [CCl#sub[4]]),
+    mol("BrC(Br)C"),
+    arrow(from: bond(0, 0, 1), to: atom(1, 0), color: red),
+    arrow(from: atom(1, 0), to: atom(1, 1), color: red, bend: "right"),
+  )
+]
+
+Vertical arrows lift `above` to the right and `below` to the left.
+
+#align(center)[
+  #reaction(
+    mol("C=C"),
+    rxn-arrow(dir: "down", above: mol("O", scale: 0.8), below: mol("N", scale: 0.8)),
+    mol("CC"),
+    highlight(atom(1, 0)),
+    highlight(atom(2, 0)),
+  )
+]
+
+#pagebreak()
+
+= Curly arrow heads and styles
+
+`arrow(heads:)` draws a head at the end (default), at both ends, or none;
+`arrow(style:)` picks a solid, dashed, or wavy shaft. All combine with `bend`.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*heads: "end"* \
+   #smiles("CC(=O)O", arrow(from: atom(3), to: atom(2), color: blue))],
+  [*heads: "both"* \
+   #smiles("CC(=O)O", arrow(from: atom(3), to: atom(2), heads: "both", color: blue))],
+  [*heads: "none"* \
+   #smiles("CC(=O)O", arrow(from: atom(3), to: atom(2), heads: "none", color: blue))],
+)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*style: "dashed"* \
+   #smiles("CC(=O)O", arrow(from: atom(3), to: atom(2), style: "dashed"))],
+  [*style: "wavy"* \
+   #smiles("CC(=O)O", arrow(from: atom(3), to: atom(2), style: "wavy"))],
+  [*wavy, bend: "right"* \
+   #smiles("CC(=O)O", arrow(from: atom(3), to: atom(2), style: "wavy", bend: "right"))],
+)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*wavy, bend: none* \
+   #smiles("OCCCCO", arrow(from: atom(0), to: atom(5), bend: none, style: "wavy"))],
+  [*dashed, heads: "both"* \
+   #smiles("OCCCCO", arrow(from: atom(0), to: atom(5), heads: "both", style: "dashed"))],
+  [*wavy, both fishhooks* \
+   #smiles("OCCCCO", arrow(from: atom(0), to: atom(5), heads: "both", style: "wavy", half: true))],
+)
+
+Across species, with a bend:
+
+#align(center)[
+  #reaction(
+    mol("C=CC=C"),
+    mol("C=CC=C", scale: 0.8),
+    arrow(from: atom(0, 0), to: atom(1, 3), heads: "none", style: "dashed", color: blue),
+    arrow(from: atom(0, 3), to: atom(1, 0), style: "wavy", bend: "right", label: [hv]),
+  )
+]

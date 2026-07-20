@@ -1204,15 +1204,17 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   is either any content (#c("smiles(...)"), #c("ce(...)"), text) or a SMILES *string*.
   Passing a string lets #c("reaction") render the molecule itself so its atoms become
   addressable by curly arrows (see #link(<sec-mech>)[Reaction mechanisms]). String
-  molecules accept common drawing options such as #c("font-size"), #c("font"),
-  #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-h"), #c("lone-pairs"),
-  #c("opacity"), #c("bond-customizations"), #c("atom-colors"), and
-  #c("show-indices"). #c("offset") nudges the molecule in page coordinates, in
+  molecules accept common drawing options such as #c("scale"), #c("font-size"),
+  #c("font"), #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-h"),
+  #c("lone-pairs"), #c("opacity"), #c("bond-customizations"), #c("atom-colors"),
+  and #c("show-indices"). #c("offset") nudges the molecule in page coordinates, in
   bond-length units: positive x moves right and positive y moves up regardless
-  of #c("reaction(flow:)"). In mechanism mode, use #c("reaction(scale: ...)")
-  to resize the shared canvas and its offsets. In ordinary schemes, an offset
-  also changes the reaction's layout bounds, so #c("brackets()") encloses the
-  shifted edge.
+  of #c("reaction(flow:)"). In mechanism mode, #c("reaction(scale: ...)") sets
+  the shared canvas scale (and its offsets), and each #c("mol(scale: ...)")
+  multiplies it for that molecule alone. A #c("mol()") item can also be placed in
+  a #c("rxn-arrow(above:/below:)") slot to draw a molecule over or under the
+  arrow. In ordinary schemes, an offset also changes the reaction's layout
+  bounds, so #c("brackets()") encloses the shifted edge.
 
   #example(```typ
   #reaction(mol(smiles("CCO"), label: [ethanol]))
@@ -1226,7 +1228,10 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 #c("auto") (the default, following the enclosing #c("reaction(flow:)")).
 #c("kind") may be #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""),
 #c("\"dashed\""), or #c("\"wavy\"").
-#c("above") and #c("below") carry reagents and conditions.
+#c("above") and #c("below") carry reagents and conditions — any content, or a
+#c("mol()") item to draw a molecule in the label slot (in mechanism mode a
+#c("mol()") there also becomes a referenceable species; see
+#link(<sec-mech>)[Reaction mechanisms]).
 #c("scale") uniformly resizes the complete arrow, including its condition labels.
 #c("color") defaults to #c("auto"), inheriting the surrounding text color
 (so arrows recolor on dark slides).
@@ -1236,8 +1241,8 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Argument*], [*Default*], [*Effect*],
-  [#c("above")], [`none`], [Label above a horizontal arrow, or right of a vertical arrow.],
-  [#c("below")], [`none`], [Label below a horizontal arrow, or left of a vertical arrow.],
+  [#c("above")], [`none`], [Label above a horizontal arrow, or right of a vertical arrow. Content or a #c("mol()") item.],
+  [#c("below")], [`none`], [Label below a horizontal arrow, or left of a vertical arrow. Content or a #c("mol()") item.],
   [#c("dir")], [`auto`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or #c("auto") (follows #c("reaction(flow:)")).],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
   [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
@@ -1253,6 +1258,19 @@ Three helpers compose molecules, formulas, and arrows into schemes.
     ce("A"),
     rxn-arrow(scale: 1.4, above: [cat.]),
     ce("B"),
+  )
+  ```, side: false)
+]
+
+#demo[
+  An arrow label slot also accepts a #c("mol()") item, drawing a molecule above
+  or below the arrow with its own per-molecule options.
+
+  #example(```typ
+  #reaction(
+    mol("C=C"),
+    rxn-arrow(above: mol("BrBr", scale: 0.7), below: [CCl#sub[4]]),
+    mol("BrC(Br)C"),
   )
   ```, side: false)
 ]
@@ -1420,8 +1438,10 @@ inside its grid cell.
 Atoms are addressed by their *writing-order index* (0-based), so the SMILES string is
 never modified. Inside #c("smiles()") use single-index references; inside
 #c("reaction()") prefix them with the species index #c("s") — the position of the
-#c("mol()")/content item in written order (#c("rxn-arrow")s and annotations are not
-counted).
+#c("mol()")/content item in written order. #c("mol()") items inside
+#c("rxn-arrow(above:/below:)") slots are counted too, at the arrow's position in
+the sequence (#c("above") before #c("below")); the arrows themselves, plain
+arrow-label content, and annotations are not counted.
 
 #table(
   columns: (auto, 1fr), inset: 6.5pt,
@@ -1451,10 +1471,13 @@ counted).
 == #raw("arrow()") and #raw("highlight()")
 
 #demo[
-  #c("arrow(from:, to:, label: none, color: red, bend: \"left\", angle: 35deg, half: false)")
+  #c("arrow(from:, to:, label: none, color: red, bend: \"left\", angle: 15deg, half: false, heads: \"end\", style: \"solid\")")
   draws a curly arrow between two references. #c("bend") is #c("\"left\""),
   #c("\"right\""), or #c("none"); #c("angle") sets how strongly it bows;
-  #c("half: true") draws a fishhook (single-electron) head. #c("highlight(ref, fill:)")
+  #c("half: true") draws fishhook (single-electron) heads. #c("heads") selects
+  which ends carry an arrowhead — #c("\"end\"") (default), #c("\"both\""), or
+  #c("\"none\"") — and #c("style") the shaft: #c("\"solid\"") (default),
+  #c("\"dashed\""), or #c("\"wavy\""); both combine freely with #c("bend"). #c("highlight(ref, fill:)")
   shades an atom (disk) or bond (capsule) behind the structure. Pass an array of
   references to shade several atoms or bonds with one call. Bond highlights are
   trimmed away from atom centers by default; set #c("include-atoms: true") to also
@@ -1495,6 +1518,21 @@ counted).
   ```)
 ]
 
+#demo[
+  #c("heads") and #c("style") tune the arrow shape — for instance a
+  double-headed dashed arrow for an interaction, or a wavy arrow for a
+  photochemical or homolytic step.
+
+  #example(```typ
+  #smiles("CC(=O)O",
+    arrow(from: atom(3), to: atom(2), heads: "both", color: blue))
+  #smiles("CC(=O)O",
+    arrow(from: atom(3), to: atom(2), style: "dashed"))
+  #smiles("OCCCCO",
+    arrow(from: atom(0), to: atom(5), style: "wavy", heads: "both", half: true))
+  ```)
+]
+
 == A mechanism across species
 
 #demo[
@@ -1507,6 +1545,41 @@ counted).
     mol("C(I)(C)C"),
     arrow(from: lp(0, 0, offset:(0.1, -0.2)), to: atom(1, 0, offset : (0.1, -0.1)),
           bend: "right", color : black),
+  )
+  ```, side: false)
+]
+
+== Per-molecule scale in mechanisms
+
+#demo[
+  In mechanism mode #c("reaction(scale:)") sets the shared canvas scale and each
+  #c("mol(scale:)") multiplies it for its own species. Curly arrows and
+  highlights land on the scaled coordinates.
+
+  #example(```typ
+  #reaction(
+    mol("CC(=O)O", scale: 0.7, label: [minor]),
+    mol("CC(=O)O", scale: 1.2, label: [major]),
+    highlight(atom(0, 3)),
+    arrow(from: atom(0, 3), to: atom(1, 1), color: blue),
+  )
+  ```, side: false)
+]
+
+== Referencing molecules above an arrow
+
+#demo[
+  A #c("mol()") placed in a #c("rxn-arrow(above:/below:)") slot is lifted onto
+  the shared canvas as a species of its own, so its atoms take part in the
+  mechanism like any other species.
+
+  #example(```typ
+  #reaction(
+    mol("C=C"),
+    rxn-arrow(above: mol("BrBr", scale: 0.8), below: [CCl#sub[4]]),
+    mol("BrC(Br)C"),
+    arrow(from: bond(0, 0, 1), to: atom(1, 0), color: red),
+    arrow(from: atom(1, 0), to: atom(1, 1), color: red, bend: "right"),
   )
   ```, side: false)
 ]
@@ -1739,8 +1812,8 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Option*], [*Default*], [*Effect*],
-  [#c("above")], [`none`], [Condition label above a horizontal arrow, or right of a vertical arrow.],
-  [#c("below")], [`none`], [Condition label below a horizontal arrow, or left of a vertical arrow.],
+  [#c("above")], [`none`], [Condition label (content or #c("mol()")) above a horizontal arrow, or right of a vertical arrow.],
+  [#c("below")], [`none`], [Condition label (content or #c("mol()")) below a horizontal arrow, or left of a vertical arrow.],
   [#c("dir")], [`auto`], [Arrow direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or #c("auto") (follows #c("reaction(flow:)")).],
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
   [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
@@ -1766,11 +1839,11 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
-  [#c("mol(spec, label:, offset:, ..opts)")], [Reaction item; #c("spec") as a string is rendered with addressable atoms; #c("offset") nudges in page coordinates.],
+  [#c("mol(spec, label:, offset:, ..opts)")], [Reaction item; #c("spec") as a string is rendered with addressable atoms; #c("offset") nudges in page coordinates; per-molecule #c("scale") also works in mechanism mode.],
   [#c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
   [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
   [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
-  [#c("arrow(from:, to:, label:, color:, bend:, angle:, half:)")], [Curly electron-pushing arrow.],
+  [#c("arrow(from:, to:, label:, color:, bend:, angle:, half:, heads:, style:)")], [Curly electron-pushing arrow; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
   [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:)")], [Shade one atom/bond reference or an array of references.],
   [#c("brackets(body, sup:, sub:)")], [Square brackets with optional corner marks.],
 )
