@@ -58,15 +58,24 @@ impl BondStereo {
     }
 }
 
-/// Origin of a `/` or `\` bond token after preprocessing. `Plain` tokens are
-/// genuine SMILES directional bonds; the others come from typed-smiles drawing
-/// extensions and carry a forced rendering style instead of cis/trans meaning.
+/// Meaning of a `/` or `\` placeholder after preprocessing. `Directional`
+/// tokens are genuine SMILES directional bonds; the others come from
+/// typed-smiles drawing extensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ForcedBondKind {
+pub enum BondMarkerStyle {
+    Directional,
     Plain,
-    Wedge,
+    WedgeUp,
+    WedgeDown,
     Wavy,
     Dashed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BondMarker {
+    pub style: BondMarkerStyle,
+    pub order: BondOrder,
+    pub curl: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +91,7 @@ pub struct BondSpec {
     pub stereo: BondStereo,
     pub direction: BondDirection,
     pub forced_stereo: bool,
+    pub curl: bool,
 }
 
 impl BondSpec {
@@ -91,6 +101,7 @@ impl BondSpec {
             stereo: BondStereo::None,
             direction: BondDirection::None,
             forced_stereo: false,
+            curl: false,
         }
     }
 }
@@ -154,6 +165,8 @@ pub struct Bond {
     pub stereo: BondStereo,
     pub direction: BondDirection,
     pub forced_stereo: bool,
+    /// Repeat the preceding chain turn instead of alternating the zigzag.
+    pub curl: bool,
     /// True for ring bonds that were aromatic in the input before
     /// kekulization assigned them a single or double order.
     pub aromatic: bool,
@@ -170,12 +183,14 @@ pub struct MoleculeGraph {
     pub neighbor_bonds: Vec<Vec<usize>>,
     /// Whether each atom has a preceding ("from") atom to its left in the SMILES.
     pub has_preceding: Vec<bool>,
+    /// Preceding atom in SMILES writing order, when one exists.
+    pub preceding_atom: Vec<Option<usize>>,
 }
 
 impl MoleculeGraph {
     pub fn from_smiles(
         smiles: &str,
-        forced_direction_markers: Vec<ForcedBondKind>,
+        forced_direction_markers: Vec<BondMarker>,
         aromatic_atom_markers: Vec<bool>,
     ) -> Result<Self, String> {
         // smiles_parser::chain takes &[u8] and returns IResult<&[u8], Chain>
@@ -215,6 +230,7 @@ impl MoleculeGraph {
             adj: builder.adj,
             neighbor_bonds,
             has_preceding: builder.has_preceding,
+            preceding_atom: builder.preceding_atom,
         };
         crate::kekulize::kekulize(&mut mol, &builder.bond_implicit)?;
         Ok(mol)
@@ -237,12 +253,13 @@ struct GraphBuilder {
     neighbor_slots: Vec<Vec<i64>>,
     /// has_preceding[i] = atom `i` had a "from" atom to its left.
     has_preceding: Vec<bool>,
+    preceding_atom: Vec<Option<usize>>,
     /// ring_number → (atom_idx, bond_spec_or_none, slot_index_in_opener)
     open_rings: HashMap<u8, (usize, Option<BondSpec>, usize)>,
     /// One entry for every `/` or `\` bond token seen by smiles-parser,
     /// recording whether it is genuine SMILES or a typed-smiles drawing
     /// extension (`!w`/`!h`/`!s`/`!d`) and which forced style it carries.
-    forced_direction_markers: VecDeque<ForcedBondKind>,
+    forced_direction_markers: VecDeque<BondMarker>,
     /// One flag per unbracketed organic-subset atom token, in writing order.
     /// `true` means the atom was written lowercase (aromatic) and uppercased
     /// during preprocessing. Bracket atoms carry their own aromatic flag.
@@ -259,6 +276,7 @@ impl GraphBuilder {
         self.adj.push(Vec::new());
         self.neighbor_slots.push(Vec::new());
         self.has_preceding.push(false);
+        self.preceding_atom.push(None);
         idx
     }
 
@@ -271,6 +289,7 @@ impl GraphBuilder {
             stereo: spec.stereo,
             direction: spec.direction,
             forced_stereo: spec.forced_stereo,
+            curl: spec.curl,
             aromatic: false,
         });
         self.bond_implicit.push(implicit);
@@ -334,6 +353,7 @@ impl GraphBuilder {
         // incoming bond is the first neighbor slot for `cur`.
         if let Some(prev) = prev_atom {
             self.has_preceding[cur] = true;
+            self.preceding_atom[cur] = Some(prev);
             let b_idx = self.bonds.len();
             let implicit = incoming.is_none();
             self.add_bond(prev, cur, incoming.unwrap_or_else(BondSpec::single), implicit);
@@ -394,24 +414,39 @@ impl GraphBuilder {
     }
 
     fn sparser_to_bond_spec(&mut self, b: &SBond) -> BondSpec {
-        let kind = if matches!(b, SBond::Up | SBond::Down) {
+        let marker = if matches!(b, SBond::Up | SBond::Down) {
             self.forced_direction_markers
                 .pop_front()
-                .unwrap_or(ForcedBondKind::Plain)
+                .unwrap_or(BondMarker {
+                    style: BondMarkerStyle::Directional,
+                    order: BondOrder::Single,
+                    curl: false,
+                })
         } else {
-            ForcedBondKind::Plain
+            return BondSpec {
+                order: sparser_bond_to_order(b),
+                stereo: BondStereo::None,
+                direction: sparser_bond_to_direction(b),
+                forced_stereo: false,
+                curl: false,
+            };
         };
-        let (stereo, direction, forced_stereo) = match kind {
-            ForcedBondKind::Plain => (BondStereo::None, sparser_bond_to_direction(b), false),
-            ForcedBondKind::Wedge => (sparser_bond_to_forced_stereo(b), BondDirection::None, true),
-            ForcedBondKind::Wavy => (BondStereo::Wavy, BondDirection::None, false),
-            ForcedBondKind::Dashed => (BondStereo::Dashed, BondDirection::None, false),
+        let (stereo, direction, forced_stereo) = match marker.style {
+            BondMarkerStyle::Directional => {
+                (BondStereo::None, sparser_bond_to_direction(b), false)
+            }
+            BondMarkerStyle::Plain => (BondStereo::None, BondDirection::None, false),
+            BondMarkerStyle::WedgeUp => (BondStereo::WedgeUp, BondDirection::None, true),
+            BondMarkerStyle::WedgeDown => (BondStereo::WedgeDown, BondDirection::None, true),
+            BondMarkerStyle::Wavy => (BondStereo::Wavy, BondDirection::None, false),
+            BondMarkerStyle::Dashed => (BondStereo::Dashed, BondDirection::None, false),
         };
         BondSpec {
-            order: sparser_bond_to_order(b),
+            order: marker.order,
             stereo,
             direction,
             forced_stereo,
+            curl: marker.curl,
         }
     }
 }
@@ -505,13 +540,5 @@ fn sparser_bond_to_direction(b: &SBond) -> BondDirection {
         SBond::Up => BondDirection::Up,
         SBond::Down => BondDirection::Down,
         _ => BondDirection::None,
-    }
-}
-
-fn sparser_bond_to_forced_stereo(b: &SBond) -> BondStereo {
-    match b {
-        SBond::Up => BondStereo::WedgeUp,
-        SBond::Down => BondStereo::WedgeDown,
-        _ => BondStereo::None,
     }
 }

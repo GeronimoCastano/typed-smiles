@@ -316,6 +316,7 @@ fn place_molecule(mol: &MoleculeGraph) -> Result<Vec<Vec2>, String> {
         &mut placed,
     );
 
+    apply_curl_layout(mol, &mut coords)?;
     apply_cis_trans_layout(mol, &mut coords)?;
 
     // ── 5. Center the molecule ────────────────────────────────────────────
@@ -398,7 +399,85 @@ fn fragment_subgraph(mol: &MoleculeGraph, component: &[usize]) -> MoleculeGraph 
             .map(|&g| mol.neighbor_bonds[g].iter().map(|&b| local_bond[b]).collect())
             .collect(),
         has_preceding: component.iter().map(|&g| mol.has_preceding[g]).collect(),
+        preceding_atom: component
+            .iter()
+            .map(|&g| mol.preceding_atom[g].map(|p| local_atom[p]))
+            .collect(),
     }
+}
+
+/// Applies `!c` constraints after the automatic acyclic layout. For a written
+/// path A-B-C!cD, every arm forward of C is reflected across the B-C axis when
+/// needed so C-D repeats the A-B-C turn. Moving all forward arms together keeps
+/// branch slots distinct at substituted centers.
+fn apply_curl_layout(mol: &MoleculeGraph, coords: &mut [Vec2]) -> Result<(), String> {
+    let curl_bonds: Vec<usize> = mol
+        .bonds
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, bond)| bond.curl.then_some(idx))
+        .collect();
+
+    let mut curl_per_pivot = vec![0usize; mol.n_atoms()];
+    for &bond_idx in &curl_bonds {
+        curl_per_pivot[mol.bonds[bond_idx].from] += 1;
+    }
+    if let Some(pivot) = curl_per_pivot.iter().position(|&count| count > 1) {
+        return Err(format!(
+            "multiple !c bonds leave atom {pivot}; only one curl constraint is allowed per atom"
+        ));
+    }
+
+    let rings = find_rings(mol);
+    let ring_bonds = ring_bond_set(mol, &rings);
+
+    for bond_idx in curl_bonds {
+        let bond = &mol.bonds[bond_idx];
+        let c = bond.from;
+        let d = bond.to;
+        let b = mol.preceding_atom[c].ok_or_else(|| {
+            format!("!c on bond {c}-{d} needs two preceding chain bonds")
+        })?;
+        let a = mol.preceding_atom[b].ok_or_else(|| {
+            format!("!c on bond {c}-{d} needs two preceding chain bonds")
+        })?;
+        let incoming_bond = bond_between(mol, b, c)
+            .ok_or_else(|| format!("missing incoming bond {b}-{c} for !c"))?;
+        if ring_bonds.contains(&bond_idx) || ring_bonds.contains(&incoming_bond) {
+            return Err("!c is not supported on a ring bond or directly after one".into());
+        }
+
+        let prev_x = coords[b].x - coords[a].x;
+        let prev_y = coords[b].y - coords[a].y;
+        let in_x = coords[c].x - coords[b].x;
+        let in_y = coords[c].y - coords[b].y;
+        let out_x = coords[d].x - coords[c].x;
+        let out_y = coords[d].y - coords[c].y;
+        let previous_turn = prev_x * in_y - prev_y * in_x;
+        let next_turn = in_x * out_y - in_y * out_x;
+        if previous_turn.abs() < 1e-8 {
+            return Err(format!(
+                "!c on bond {c}-{d} has no preceding zigzag turn to repeat"
+            ));
+        }
+        if next_turn.abs() < 1e-8 {
+            return Err(format!("!c on bond {c}-{d} cannot curl a linear continuation"));
+        }
+        if previous_turn * next_turn > 0.0 {
+            continue;
+        }
+
+        // Removing the incoming B-C edge defines the complete forward side of
+        // C, including sibling branches such as a PPh3 substituent.
+        let moving = collect_subtree(mol, c, b, b);
+        let axis_a = coords[b];
+        let axis_b = coords[c];
+        for atom in moving {
+            coords[atom] = reflect_point_across_line(coords[atom], axis_a, axis_b);
+        }
+    }
+
+    Ok(())
 }
 
 pub(crate) fn implicit_h_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {

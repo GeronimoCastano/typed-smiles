@@ -522,7 +522,12 @@ a `mol` offset.
 `[C@H]` / `[C@@H]` mark tetrahedral centers; `/` and `\` describe cis/trans
 geometry. `!w` forces a solid wedge, `!h` a hashed wedge, `!s` a wavy
 (squiggly) bond for unspecified stereochemistry or attachment points, and `!d`
-a dashed bond for hydrogen bonds, partial bonds, and coordination.
+a dashed bond for hydrogen bonds, partial bonds, and coordination. `!c` repeats
+the preceding skeletal turn instead of alternating the zigzag, curling an
+acyclic chain while preserving its ideal 120° bond angle. It combines with the
+style extensions and bond orders, for example `!c!w` or `!c=`.
+
+![Automatic zigzag and an inward chain curl using !c](assets/readme/curl.png)
 
 ```typst
 #table(
@@ -587,6 +592,9 @@ SMILES string extensions:
 | `!h` | Force a hashed wedge on the next single bond |
 | `!s` | Force a wavy (squiggly) bond on the next single bond |
 | `!d` | Force a dashed bond on the next single bond |
+| `!c` | Repeat the preceding turn instead of alternating the zigzag |
+| `!c!w`, `!c!h`, `!c!s`, `!c!d` | Curl while applying a single-bond drawing style |
+| `!c=`, `!c#` | Curl into a double or triple bond |
 
 ### `#reaction(gap-h, gap-v, scale, breakable, show-indices, flow, …items)`
 
@@ -610,7 +618,7 @@ grows a branch that reads away from the ring, while the outer reaction keeps
 its own direction — so a main reaction can embed a cycle whose branch runs its
 own sub-reaction, then continue.
 
-### `#rxn-arrow(above, below, dir, kind, scale)`
+### `#rxn-arrow(above, below, dir, kind, scale, color, stroke)`
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -620,9 +628,11 @@ own sub-reaction, then continue.
 | `kind` | `"single"` | `"single"`, `"equilibrium"`, `"equilibrium-filled"`, `"dashed"`, or `"wavy"` |
 | `scale` | `1.0` | Uniform arrow scale, including condition labels |
 | `color` | `auto` | Arrow color; `auto` inherits the surrounding text color |
+| `stroke` | `auto` | Shaft width before scaling; `auto` matches the default 0.9pt molecule bond |
 
 `scale` resizes the complete arrow component proportionally, including the
-shaft, arrowhead, spacing, and `above`/`below` labels.
+shaft width, arrowhead, spacing, and `above`/`below` labels. Explicit `stroke`
+values scale too.
 
 ### `#mol(spec, label: none, offset: (0,0), …opts)`
 
@@ -659,7 +669,7 @@ an explicit angle such as `rotation: 45deg` is also accepted.
 | `bond(i, j)` / `bond(s, i, j)` | Bond-midpoint reference |
 | `lp(i)` / `lp(s, i)` | Lone-pair reference (`pair: n` to select) |
 | `species(k)` | Bounding-box edge of a whole item |
-| `arrow(from:, to:, label:, color:, bend:, angle:, half:, heads:, style:)` | Curly electron arrow; `heads: "end"/"both"/"none"`, `style: "solid"/"dashed"/"wavy"` |
+| `arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, style:)` | Curly electron arrow; `stroke: auto` matches molecule bonds and scales with the drawing; `heads: "end"/"both"/"none"`, `style: "solid"/"dashed"/"wavy"` |
 | `highlight(ref, fill:, stroke:, radius:)` | Shade an atom (disk) or bond (capsule) |
 | `brackets(body, sup:, sub:)` | Square brackets with optional corner marks |
 

@@ -738,8 +738,8 @@ OpenSMILES example #c("C1.C1"), ethane) still forms its bond.]
 = Stereochemistry <sec-stereo>
 // ═════════════════════════════════════════════════════════════════════════════
 
-typed-smiles supports both standard SMILES stereo notations, plus a manual
-override for drawing wedges directly.
+typed-smiles supports both standard SMILES stereo notations, plus drawing
+extensions for bond styles and local acyclic-chain layout.
 
 == Tetrahedral centers: #raw("@") and #raw("@@")
 
@@ -844,6 +844,37 @@ double bonds would read as one long double bond.]
 double-bond geometry slot; they can appear next to real #c("/") and #c("\\")
 directional bonds.]
 #note[Tip: Use empty custom labels #c("{}") or #c("!w{}") to draw bonds without a connecting atom.]
+
+== Curling an acyclic chain: #raw("!c")
+
+#demo[
+  A normal skeletal chain alternates its left and right turns. #c("!c") repeats
+  the preceding turn for the next bond, curling the forward chain and any
+  sibling branches as a unit while preserving ideal 120° bond angles. It is a
+  drawing extension only: the molecule's connectivity and stereochemistry do
+  not change.
+
+  #example(```typ
+  #smiles("CC(C)=CCCC(C)=CC([O-])C({>PPh_3^+ | P})C(=O)OCC", scale: 0.68) \
+  #smiles("CC(C)=CCCC(C)=CC([O-])C({>PPh_3^+ | P})!cC(=O)OCC", scale: 0.68)
+  ```, side: false)
+]
+
+#demo[
+  #c("!c") is a layout modifier and composes with drawing styles or an explicit
+  bond order. The canonical order is curl, style, then bond order.
+
+  #example(```typ
+  #smiles("CCCC!cC") \
+  #smiles("CCCC!c!wN") \
+  #smiles("CCCC!c!dN") \
+  #smiles("CCCC!c=C")
+  ```, side: false)
+]
+
+#note[#c("!c") needs two preceding chain bonds so there is an established turn
+to repeat. It is not supported on a ring bond or directly after one. Only one
+#c("!c") constraint may leave a given atom.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Colors <sec-colors>
@@ -1223,7 +1254,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 
 == #raw("rxn-arrow()")
 
-#c("rxn-arrow(above: none, below: none, dir: auto, kind: \"single\", scale: 1.0)") draws an arrow.
+#c("rxn-arrow(above: none, below: none, dir: auto, kind: \"single\", scale: 1.0, color: auto, stroke: auto)") draws an arrow.
 #c("dir") may be #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or
 #c("auto") (the default, following the enclosing #c("reaction(flow:)")).
 #c("kind") may be #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""),
@@ -1234,7 +1265,8 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 #link(<sec-mech>)[Reaction mechanisms]).
 #c("scale") uniformly resizes the complete arrow, including its condition labels.
 #c("color") defaults to #c("auto"), inheriting the surrounding text color
-(so arrows recolor on dark slides).
+(so arrows recolor on dark slides). #c("stroke") sets the shaft width before
+scaling; #c("auto") matches the default 0.9pt SMILES bond stroke.
 
 #table(
   columns: (auto, auto, 1fr), inset: 6.5pt,
@@ -1247,16 +1279,18 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
   [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
+  [#c("stroke")], [`auto`], [Shaft width before scaling; #c("auto") matches the default molecule bond stroke.],
 )
 
 #demo[
   Scale an individual arrow without changing the rest of its reaction. The
-  shaft, arrowhead, spacing, and condition labels resize together.
+  shaft width, arrowhead, spacing, and condition labels resize together. An
+  explicit #c("stroke") value is scaled by the same factor.
 
   #example(```typ
   #reaction(
     ce("A"),
-    rxn-arrow(scale: 1.4, above: [cat.]),
+    rxn-arrow(scale: 1.4, stroke: 1.2pt, above: [cat.]),
     ce("B"),
   )
   ```, side: false)
@@ -1471,7 +1505,7 @@ arrow-label content, and annotations are not counted.
 == #raw("arrow()") and #raw("highlight()")
 
 #demo[
-  #c("arrow(from:, to:, label: none, color: red, bend: \"left\", angle: 15deg, half: false, heads: \"end\", style: \"solid\")")
+  #c("arrow(from:, to:, label: none, color: red, stroke: auto, bend: \"left\", angle: 15deg, half: false, heads: \"end\", style: \"solid\")")
   draws a curly arrow between two references. #c("bend") is #c("\"left\""),
   #c("\"right\""), or #c("none"); #c("angle") sets how strongly it bows;
   #c("half: true") draws fishhook (single-electron) heads. #c("heads") selects
@@ -1484,6 +1518,11 @@ arrow-label content, and annotations are not counted.
   shade the endpoint atoms of each highlighted bond. Abbreviated group labels such
   as #c("{PPh3}") are highlighted as measured label-width capsules rather than
   atom-sized disks.
+
+  #c("stroke") sets the unscaled shaft width. Its #c("auto") default matches
+  the molecule's effective bond stroke, including an explicit
+  #c("bond-stroke"). Explicit arrow strokes scale with #c("smiles(scale:)") or
+  #c("reaction(scale:)").
 
   #example(```typ
   #smiles(
@@ -1754,6 +1793,7 @@ parameter.
   [#c("@TB") #c("@OH") #c("@AL")], [Extended stereo: accepted, drawn without wedges.],
   [#c("$")], [Quadruple bond (four parallel lines).],
   [#c("/") #c("\\")], [Double-bond cis/trans geometry.],
+  [#c("!c")], [Repeat the preceding acyclic-chain turn instead of alternating the zigzag.],
   [#c("!w") / #c("!h")], [Manual solid / hashed wedge (typed-smiles extension).],
   [#c("!s") / #c("!d")], [Wavy / dashed bond (typed-smiles extension).],
   [#c("{label}")], [Abbreviated group pseudo-atom.],
@@ -1818,6 +1858,7 @@ parameter.
   [#c("kind")], [`"single"`], [Arrow style: #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""), #c("\"dashed\""), or #c("\"wavy\"").],
   [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
+  [#c("stroke")], [`auto`], [Shaft width before scaling; #c("auto") matches a default 0.9pt molecule bond.],
 )
 
 == Data helpers
@@ -1843,7 +1884,7 @@ parameter.
   [#c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
   [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
   [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
-  [#c("arrow(from:, to:, label:, color:, bend:, angle:, half:, heads:, style:)")], [Curly electron-pushing arrow; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
+  [#c("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, style:)")], [Curly electron-pushing arrow; #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
   [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:)")], [Shade one atom/bond reference or an array of references.],
   [#c("brackets(body, sup:, sub:)")], [Square brackets with optional corner marks.],
 )

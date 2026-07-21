@@ -6,7 +6,7 @@ mod render;
 
 pub use render::LayoutOutput;
 
-use graph::{ForcedBondKind, MoleculeGraph};
+use graph::{BondMarker, BondMarkerStyle, BondOrder, MoleculeGraph};
 use layout::compute_layout;
 use ptable::Element;
 
@@ -30,9 +30,8 @@ pub(crate) struct Preprocessed {
     /// Labels in the order they appeared, one per {label} token.
     pub abbrev_labels: Vec<AbbrevLabel>,
     /// One entry for each `/` or `\` token in `smiles`, recording whether it
-    /// is plain SMILES or which `!w`/`!h`/`!s`/`!d` drawing extension it
-    /// carries.
-    pub forced_direction_markers: Vec<ForcedBondKind>,
+    /// is plain SMILES or which typed-smiles bond/layout extension it carries.
+    pub forced_direction_markers: Vec<BondMarker>,
     /// One flag per unbracketed organic-subset atom token in `smiles`, in
     /// writing order. `true` means the atom was written lowercase (aromatic).
     pub aromatic_atom_markers: Vec<bool>,
@@ -75,31 +74,59 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
             abbrev_labels.push(parse_abbrev_label(&raw_label)?);
             smiles.push_str("[*]");
         } else if ch == '!' {
-            match chars.peek().copied() {
-                Some('w') => {
-                    chars.next();
-                    smiles.push('/');
-                    forced_direction_markers.push(ForcedBondKind::Wedge);
+            let first = chars.next().ok_or_else(|| "incomplete `!` drawing extension".to_string())?;
+            let mut curl = false;
+            let mut style = BondMarkerStyle::Plain;
+            match first {
+                'c' => {
+                    curl = true;
+                    if chars.peek() == Some(&'!') {
+                        chars.next();
+                        style = match chars.next() {
+                            Some('w') => BondMarkerStyle::WedgeUp,
+                            Some('h') => BondMarkerStyle::WedgeDown,
+                            Some('s') => BondMarkerStyle::Wavy,
+                            Some('d') => BondMarkerStyle::Dashed,
+                            Some(other) => return Err(format!("unknown drawing extension `!{other}` after `!c`")),
+                            None => return Err("incomplete drawing extension after `!c`".to_string()),
+                        };
+                    }
                 }
-                Some('h') => {
-                    chars.next();
-                    smiles.push('\\');
-                    forced_direction_markers.push(ForcedBondKind::Wedge);
-                }
-                Some('s') => {
-                    chars.next();
-                    smiles.push('/');
-                    forced_direction_markers.push(ForcedBondKind::Wavy);
-                }
-                Some('d') => {
-                    chars.next();
-                    smiles.push('/');
-                    forced_direction_markers.push(ForcedBondKind::Dashed);
-                }
-                _ => {
-                    smiles.push(ch);
-                }
+                'w' => style = BondMarkerStyle::WedgeUp,
+                'h' => style = BondMarkerStyle::WedgeDown,
+                's' => style = BondMarkerStyle::Wavy,
+                'd' => style = BondMarkerStyle::Dashed,
+                other => return Err(format!("unknown drawing extension `!{other}`")),
             }
+
+            let order = match chars.peek().copied() {
+                Some('-') => {
+                    chars.next();
+                    BondOrder::Single
+                }
+                Some('=') => {
+                    chars.next();
+                    BondOrder::Double
+                }
+                Some('#') => {
+                    chars.next();
+                    BondOrder::Triple
+                }
+                Some('$') => {
+                    chars.next();
+                    BondOrder::Quadruple
+                }
+                Some(':') => {
+                    chars.next();
+                    BondOrder::Aromatic
+                }
+                _ => BondOrder::Single,
+            };
+            if style != BondMarkerStyle::Plain && order != BondOrder::Single {
+                return Err("wedge, hash, wavy, and dashed drawing extensions require a single bond".to_string());
+            }
+            smiles.push('/');
+            forced_direction_markers.push(BondMarker { style, order, curl });
         } else if ch == '>' {
             return Err(
                 "`>` is only valid inside an abbreviation label like `{>PPh3}`".to_string(),
@@ -107,7 +134,11 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
         } else {
             match ch {
                 '[' => in_bracket = true,
-                '/' | '\\' => forced_direction_markers.push(ForcedBondKind::Plain),
+                '/' | '\\' => forced_direction_markers.push(BondMarker {
+                    style: BondMarkerStyle::Directional,
+                    order: BondOrder::Single,
+                    curl: false,
+                }),
                 // Aromatic organic-subset atoms: uppercase for the parser,
                 // remember the aromatic designation.
                 'b' | 'c' | 'n' | 'o' | 'p' | 's' => {
@@ -1294,11 +1325,46 @@ mod tests {
     #[test]
     fn preprocess_forced_wedge_markers() {
         let p = preprocess_smiles("C!wN!hO").expect("preprocess failed");
-        assert_eq!(p.smiles, "C/N\\O");
+        assert_eq!(p.smiles, "C/N/O");
         assert_eq!(
             p.forced_direction_markers,
-            vec![ForcedBondKind::Wedge, ForcedBondKind::Wedge]
+            vec![
+                BondMarker {
+                    style: BondMarkerStyle::WedgeUp,
+                    order: BondOrder::Single,
+                    curl: false,
+                },
+                BondMarker {
+                    style: BondMarkerStyle::WedgeDown,
+                    order: BondOrder::Single,
+                    curl: false,
+                },
+            ]
         );
+    }
+
+    #[test]
+    fn preprocess_curl_markers_and_combinations() {
+        let p = preprocess_smiles("CCC!cC").expect("plain curl failed");
+        assert_eq!(p.smiles, "CCC/C");
+        assert_eq!(
+            p.forced_direction_markers,
+            vec![BondMarker {
+                style: BondMarkerStyle::Plain,
+                order: BondOrder::Single,
+                curl: true,
+            }]
+        );
+
+        let p = preprocess_smiles("CCC!c!wC").expect("curl wedge failed");
+        assert_eq!(p.smiles, "CCC/C");
+        assert_eq!(p.forced_direction_markers[0].style, BondMarkerStyle::WedgeUp);
+        assert!(p.forced_direction_markers[0].curl);
+
+        let p = preprocess_smiles("CCC!c=C").expect("curl double failed");
+        assert_eq!(p.smiles, "CCC/C");
+        assert_eq!(p.forced_direction_markers[0].order, BondOrder::Double);
+        assert!(p.forced_direction_markers[0].curl);
     }
 
     #[test]
@@ -1638,6 +1704,80 @@ mod tests {
         } else {
             -1
         }
+    }
+
+    fn turn_cross(
+        a: crate::render::Vec2,
+        b: crate::render::Vec2,
+        c: crate::render::Vec2,
+    ) -> f64 {
+        (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+    }
+
+    #[test]
+    fn curl_repeats_the_previous_chain_turn() {
+        let normal = layout_native("CCCC").expect("normal chain failed");
+        let curled = layout_native("CCC!cC").expect("curled chain failed");
+
+        let normal_first = turn_cross(normal.atoms[0].pos, normal.atoms[1].pos, normal.atoms[2].pos);
+        let normal_second = turn_cross(normal.atoms[1].pos, normal.atoms[2].pos, normal.atoms[3].pos);
+        assert!(normal_first * normal_second < 0.0);
+
+        let curl_first = turn_cross(curled.atoms[0].pos, curled.atoms[1].pos, curled.atoms[2].pos);
+        let curl_second = turn_cross(curled.atoms[1].pos, curled.atoms[2].pos, curled.atoms[3].pos);
+        assert!(curl_first * curl_second > 0.0);
+    }
+
+    #[test]
+    fn curl_swaps_forward_branch_slots_without_overlap() {
+        let out = layout_native("CCC({PPh3})!cC(=O)OCC").expect("branched curl failed");
+        let first = turn_cross(out.atoms[0].pos, out.atoms[1].pos, out.atoms[2].pos);
+        let second = turn_cross(out.atoms[1].pos, out.atoms[2].pos, out.atoms[4].pos);
+        assert!(first * second > 0.0);
+        assert!(min_atom_distance(&out) >= 0.5);
+    }
+
+    #[test]
+    fn consecutive_curls_repeat_each_new_turn() {
+        let out = layout_native("CCCC!cC!cC").expect("consecutive curls failed");
+        let turns = (0..3)
+            .map(|i| turn_cross(out.atoms[i + 1].pos, out.atoms[i + 2].pos, out.atoms[i + 3].pos))
+            .collect::<Vec<_>>();
+        assert!(turns.iter().all(|turn| turns[0] * turn > 0.0));
+        assert!(min_atom_distance(&out) >= 0.5);
+    }
+
+    #[test]
+    fn crowded_substituted_curls_keep_atoms_separated() {
+        let molecules = [
+            "CCC(C(N)C)!cC(OC(F)C)!cCC",
+            "CCC({PPh3})!cC([O-])!cC(=O)OCC",
+            "CCC(CC(C)C)!cC(OC)C(NC)CC",
+        ];
+
+        for smiles in molecules {
+            let out = layout_native(smiles).unwrap_or_else(|err| panic!("{smiles}: {err}"));
+            let min = min_atom_distance(&out);
+            assert!(min >= 0.5, "{smiles}: min atom distance {min:.3}");
+        }
+    }
+
+    #[test]
+    fn curl_combines_with_wedge_and_double_bonds() {
+        let wedge = layout_native("CCC!c!wN").expect("curled wedge failed");
+        assert_eq!(wedge.bonds[2].stereo, "wedge_up");
+
+        let double = layout_native("CCC!c=C").expect("curled double failed");
+        assert_eq!(double.bonds[2].order, 2);
+        let first = turn_cross(double.atoms[0].pos, double.atoms[1].pos, double.atoms[2].pos);
+        let second = turn_cross(double.atoms[1].pos, double.atoms[2].pos, double.atoms[3].pos);
+        assert!(first * second > 0.0);
+    }
+
+    #[test]
+    fn curl_requires_an_established_turn() {
+        let err = layout_native("CC!cC").expect_err("early curl should fail");
+        assert!(err.contains("two preceding chain bonds"));
     }
 
     // ── Molecular weight ──────────────────────────────────────────────────────

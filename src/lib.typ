@@ -1739,6 +1739,8 @@
 /// - to (dictionary): destination reference.
 /// - label (content): optional label drawn at the curve apex.
 /// - color (color): arrow color. Default: red.
+/// - stroke (auto / length): Shaft width before scaling. `auto` matches the
+///   molecule's bond stroke. Default: auto.
 /// - bend (str): "left", "right", or none (straight). Which way the curve bows.
 /// - angle (angle): how strongly the curve bows. Default: 15deg.
 /// - half (bool): draw half (fishhook) arrowheads for single-electron flow;
@@ -1747,12 +1749,13 @@
 ///   "none".
 /// - style (str): shaft style — "solid" (default), "dashed", or "wavy".
 /// -> dictionary  (consumed by smiles()/reaction())
-#let arrow(from: none, to: none, label: none, color: red, bend: "left", angle: 15deg, half: false, heads: "end", style: "solid") = (
+#let arrow(from: none, to: none, label: none, color: red, stroke: auto, bend: "left", angle: 15deg, half: false, heads: "end", style: "solid") = (
   __arrow__: true,
   from: from,
   to: to,
   label: label,
   color: color,
+  stroke: stroke,
   bend: bend,
   angle: angle,
   half: half,
@@ -1899,11 +1902,16 @@
   let mk = if heads == "none" { none }
            else if heads == "both" { (..mark-opts, start: ">", end: ">") }
            else { (..mark-opts, end: ">") }
+  let arrow-thickness = if a.at("stroke", default: auto) == auto {
+    cfg.arrow-thickness
+  } else {
+    a.stroke * cfg.arrow-scale
+  }
   let strk = if style == "dashed" {
-    (paint: a.color, thickness: cfg.arrow-thickness,
+    (paint: a.color, thickness: arrow-thickness,
      dash: (array: (3pt * cfg.arrow-scale, 2.2pt * cfg.arrow-scale), phase: 0pt))
   } else {
-    (paint: a.color, thickness: cfg.arrow-thickness)
+    (paint: a.color, thickness: arrow-thickness)
   }
 
   if style == "wavy" {
@@ -1973,12 +1981,12 @@
 }
 
 // Annotation styling derived from the shared canvas scale and font size.
-#let _annotation-cfg(canvas-scale, font-size, scale) = (
+#let _annotation-cfg(canvas-scale, font-size, scale, bond-stroke: none) = (
   lp-offset: calc.max(0.1, font-size / canvas-scale * 0.6),
   atom-radius: calc.max(0.12, font-size / canvas-scale * 0.5),
   bond-thickness: canvas-scale * 0.42,
   bond-trim: calc.max(0.42, font-size / canvas-scale * 0.75),
-  arrow-thickness: calc.max(0.7pt, 1.0pt * scale),
+  arrow-thickness: if bond-stroke == none { 0.9pt * scale } else { bond-stroke },
   arrow-scale: scale,
   label-size: font-size * 0.92,
   inset: 0.16,
@@ -2097,7 +2105,7 @@
     font: font,
     show-h: show-h,
   ),)
-  let cfg = _annotation-cfg(canvas-scale, actual-font-size, scale)
+  let cfg = _annotation-cfg(canvas-scale, actual-font-size, scale, bond-stroke: bond-stroke)
   let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
 
   cetz.canvas(length: canvas-scale, {
@@ -2264,8 +2272,10 @@
 ///   labels. Default: 1.0.
 /// - color (auto / color): Arrow color. `auto` inherits the surrounding text
 ///   color, matching dark slide themes. Default: auto.
+/// - stroke (auto / length): Shaft width before `scale` is applied. `auto`
+///   matches the default SMILES bond stroke (0.9pt). Default: auto.
 /// -> dictionary  (consumed by #reaction)
-#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", scale: 1.0, color: auto) = (
+#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", scale: 1.0, color: auto, stroke: auto) = (
   __rxn_arrow__: true,
   above: above,
   below: below,
@@ -2273,6 +2283,7 @@
   kind: kind,
   scale: scale,
   color: color,
+  stroke: stroke,
 )
 
 /// A reaction-scheme item: a molecule or any content, with an optional label and
@@ -2343,21 +2354,22 @@
 }
 
 // Render a horizontal reaction arrow.
-#let _horiz-arrow(above, below, dir, kind, clr, arrow-scale: 1.0) = context {
+#let _horiz-arrow(above, below, dir, kind, clr, stroke, arrow-scale: 1.0) = context {
   let clr = if clr == auto {
     if type(text.fill) == color { text.fill } else { black }
   } else { clr }
+  let stroke-width = if stroke == auto { 0.9pt } else { stroke }
   let span = 52
   let (sx, ex) = if dir == "left" { (span, 0) } else { (0, span) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
     if kind == "single" {
-      line((sx, 0), (ex, 0), mark: (end: ">", fill: clr, size: 5), stroke: 0.8pt + clr)
+      line((sx, 0), (ex, 0), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
     } else if kind == "dashed" {
       line(
         (sx, 0), (ex, 0),
         mark: (end: ">", fill: clr, size: 5),
-        stroke: (paint: clr, thickness: 0.8pt, dash: (array: (3pt, 2.2pt), phase: 0pt)),
+        stroke: (paint: clr, thickness: stroke-width, dash: (array: (3pt, 2.2pt), phase: 0pt)),
       )
     } else if kind == "wavy" {
       // Sine wave over most of the shaft, then a short straight lead-out so
@@ -2370,33 +2382,33 @@
         let t = i / n-seg
         (sx + (wave-end - sx) * t, calc.sin(t * 3.0 * 2.0 * calc.pi) * 2.4)
       })
-      line(..pts, stroke: (paint: clr, thickness: 0.8pt, cap: "round", join: "round"))
-      line((wave-end, 0), (ex, 0), mark: (end: ">", fill: clr, size: 5), stroke: 0.8pt + clr)
+      line(..pts, stroke: (paint: clr, thickness: stroke-width, cap: "round", join: "round"))
+      line((wave-end, 0), (ex, 0), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
     } else if kind == "equilibrium" or kind == "equilibrium-filled" {
       let sign = if ex > sx { 1 } else { -1 }
       let head-len = 7
       let head-rise = 3.5
       if kind == "equilibrium-filled" {
         let top-base = ex - sign * head-len
-        line((sx, 2.2), (ex, 2.2), stroke: 0.8pt + clr)
+        line((sx, 2.2), (ex, 2.2), stroke: stroke-width + clr)
         line(
           (ex, 2.2), (top-base, 2.2), (top-base, 2.2 + head-rise),
           close: true, fill: clr, stroke: none,
         )
       } else {
-        line((sx, 2.2), (ex, 2.2), stroke: 0.8pt + clr)
-        line((ex, 2.2), (ex - sign * head-len, 2.2 + head-rise), stroke: 0.8pt + clr)
+        line((sx, 2.2), (ex, 2.2), stroke: stroke-width + clr)
+        line((ex, 2.2), (ex - sign * head-len, 2.2 + head-rise), stroke: stroke-width + clr)
       }
       if kind == "equilibrium-filled" {
         let bottom-base = sx + sign * head-len
-        line((ex, -2.2), (sx, -2.2), stroke: 0.8pt + clr)
+        line((ex, -2.2), (sx, -2.2), stroke: stroke-width + clr)
         line(
           (sx, -2.2), (bottom-base, -2.2), (bottom-base, -2.2 - head-rise),
           close: true, fill: clr, stroke: none,
         )
       } else {
-        line((ex, -2.2), (sx, -2.2), stroke: 0.8pt + clr)
-        line((sx, -2.2), (sx + sign * head-len, -2.2 - head-rise), stroke: 0.8pt + clr)
+        line((ex, -2.2), (sx, -2.2), stroke: stroke-width + clr)
+        line((sx, -2.2), (sx + sign * head-len, -2.2 - head-rise), stroke: stroke-width + clr)
       }
     } else {
       panic("rxn-arrow kind must be \"single\", \"equilibrium\", \"equilibrium-filled\", \"dashed\", or \"wavy\"")
@@ -2423,21 +2435,22 @@
 }
 
 // Render a vertical reaction arrow. `above` is shown to the right, `below` to the left.
-#let _vert-arrow(above, below, dir, kind, clr, arrow-scale: 1.0) = context {
+#let _vert-arrow(above, below, dir, kind, clr, stroke, arrow-scale: 1.0) = context {
   let clr = if clr == auto {
     if type(text.fill) == color { text.fill } else { black }
   } else { clr }
+  let stroke-width = if stroke == auto { 0.9pt } else { stroke }
   let span = 52
   let (from-y, to-y) = if dir == "up" { (0, span) } else { (span, 0) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
     if kind == "single" {
-      line((0, from-y), (0, to-y), mark: (end: ">", fill: clr, size: 5), stroke: 0.8pt + clr)
+      line((0, from-y), (0, to-y), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
     } else if kind == "dashed" {
       line(
         (0, from-y), (0, to-y),
         mark: (end: ">", fill: clr, size: 5),
-        stroke: (paint: clr, thickness: 0.8pt, dash: (array: (3pt, 2.2pt), phase: 0pt)),
+        stroke: (paint: clr, thickness: stroke-width, dash: (array: (3pt, 2.2pt), phase: 0pt)),
       )
     } else if kind == "wavy" {
       let sign = if to-y > from-y { 1 } else { -1 }
@@ -2448,33 +2461,33 @@
         let t = i / n-seg
         (calc.sin(t * 3.0 * 2.0 * calc.pi) * 2.4, from-y + (wave-end - from-y) * t)
       })
-      line(..pts, stroke: (paint: clr, thickness: 0.8pt, cap: "round", join: "round"))
-      line((0, wave-end), (0, to-y), mark: (end: ">", fill: clr, size: 5), stroke: 0.8pt + clr)
+      line(..pts, stroke: (paint: clr, thickness: stroke-width, cap: "round", join: "round"))
+      line((0, wave-end), (0, to-y), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
     } else if kind == "equilibrium" or kind == "equilibrium-filled" {
       let sign = if to-y > from-y { 1 } else { -1 }
       let head-len = 7
       let head-rise = 3.5
       if kind == "equilibrium-filled" {
         let left-base = to-y - sign * head-len
-        line((-2.2, from-y), (-2.2, to-y), stroke: 0.8pt + clr)
+        line((-2.2, from-y), (-2.2, to-y), stroke: stroke-width + clr)
         line(
           (-2.2, to-y), (-2.2, left-base), (-2.2 - head-rise, left-base),
           close: true, fill: clr, stroke: none,
         )
       } else {
-        line((-2.2, from-y), (-2.2, to-y), stroke: 0.8pt + clr)
-        line((-2.2, to-y), (-2.2 - head-rise, to-y - sign * head-len), stroke: 0.8pt + clr)
+        line((-2.2, from-y), (-2.2, to-y), stroke: stroke-width + clr)
+        line((-2.2, to-y), (-2.2 - head-rise, to-y - sign * head-len), stroke: stroke-width + clr)
       }
       if kind == "equilibrium-filled" {
         let right-base = from-y + sign * head-len
-        line((2.2, to-y), (2.2, from-y), stroke: 0.8pt + clr)
+        line((2.2, to-y), (2.2, from-y), stroke: stroke-width + clr)
         line(
           (2.2, from-y), (2.2, right-base), (2.2 + head-rise, right-base),
           close: true, fill: clr, stroke: none,
         )
       } else {
-        line((2.2, to-y), (2.2, from-y), stroke: 0.8pt + clr)
-        line((2.2, from-y), (2.2 + head-rise, from-y + sign * head-len), stroke: 0.8pt + clr)
+        line((2.2, to-y), (2.2, from-y), stroke: stroke-width + clr)
+        line((2.2, from-y), (2.2 + head-rise, from-y + sign * head-len), stroke: stroke-width + clr)
       }
     } else {
       panic("rxn-arrow kind must be \"single\", \"equilibrium\", \"equilibrium-filled\", \"dashed\", or \"wavy\"")
@@ -2642,9 +2655,9 @@
           let k = item.at("kind", default: "single")
           flat-cells.push(
             if d == "right" or d == "left" {
-              _horiz-arrow(item.above, item.below, d, k, item.at("color", default: auto), arrow-scale: item.at("scale", default: 1.0))
+              _horiz-arrow(item.above, item.below, d, k, item.at("color", default: auto), item.at("stroke", default: auto), arrow-scale: item.at("scale", default: 1.0))
             } else {
-              _vert-arrow(item.above, item.below, d, k, item.at("color", default: auto), arrow-scale: item.at("scale", default: 1.0))
+              _vert-arrow(item.above, item.below, d, k, item.at("color", default: auto), item.at("stroke", default: auto), arrow-scale: item.at("scale", default: 1.0))
             }
           )
         }
@@ -2736,9 +2749,9 @@
           let below = if lift-below == none { it.below } else { none }
           let horizontal = it.dir == "right" or it.dir == "left"
           let body = if horizontal {
-            _horiz-arrow(above, below, it.dir, it.kind, it.at("color", default: auto), arrow-scale: it.at("scale", default: 1.0))
+            _horiz-arrow(above, below, it.dir, it.kind, it.at("color", default: auto), it.at("stroke", default: auto), arrow-scale: it.at("scale", default: 1.0))
           } else {
-            _vert-arrow(above, below, it.dir, it.kind, it.at("color", default: auto), arrow-scale: it.at("scale", default: 1.0))
+            _vert-arrow(above, below, it.dir, it.kind, it.at("color", default: auto), it.at("stroke", default: auto), arrow-scale: it.at("scale", default: 1.0))
           }
           let aw = measure(body).width / canvas-scale
           let ah = measure(body).height / canvas-scale

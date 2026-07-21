@@ -3298,3 +3298,98 @@ Across species, with a bend:
     arrow(from: atom(0, 3), to: atom(1, 0), style: "wavy", bend: "right", label: [hv]),
   )
 ]
+
+#pagebreak()
+
+= Curl layout extension (`!c`)
+
+`!c` repeats the preceding turn instead of alternating the zigzag. Forward
+branches move together, and the modifier combines with bond styles and orders.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*Automatic zigzag* \
+   #smiles("CC(C)=CCCC(C)=CC([O-])C({>PPh_3^+ | P})C(=O)OCC", scale: 0.72)],
+  [*Curled ester tail* \
+   #smiles("CC(C)=CCCC(C)=CC([O-])C({>PPh_3^+ | P})!cC(=O)OCC", scale: 0.72)],
+)
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1em,
+  align: center + horizon,
+  [*Plain* \
+   #smiles("CCCC!cC")],
+  [*Wedge* \
+   #smiles("CCCC!c!wN")],
+  [*Dashed* \
+   #smiles("CCCC!c!dN")],
+  [*Double* \
+   #smiles("CCCC!c=C")],
+)
+
+#pagebreak()
+
+= Reaction and mechanism arrow strokes
+
+#v(0.7em)
+
+`rxn-arrow(stroke:)` and `arrow(stroke:)` set the shaft width. Defaults match
+molecule bonds, and default or explicit widths scale with their arrow/drawing.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*rxn scale 0.6* \
+   #reaction(mol([A]), rxn-arrow(scale: 0.6), mol([B]))],
+  [*rxn scale 1.0* \
+   #reaction(mol([A]), rxn-arrow(), mol([B]))],
+  [*rxn scale 1.5, stroke 1.4pt* \
+   #reaction(mol([A]), rxn-arrow(scale: 1.5, stroke: 1.4pt), mol([B]))],
+)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*arrow scale 0.6* \
+   #smiles("CC(=O)O", scale: 0.6,
+     arrow(from: atom(3), to: atom(2), color: blue))],
+  [*arrow scale 1.0* \
+   #smiles("CC(=O)O",
+     arrow(from: atom(3), to: atom(2), color: blue))],
+  [*arrow scale 1.5, stroke 1.4pt* \
+   #smiles("CC(=O)O", scale: 1.5,
+     arrow(from: atom(3), to: atom(2), color: blue, stroke: 1.4pt))],
+)
+
+#pagebreak()
+
+= Crowded and repeated curl layouts
+
+These cases exercise consecutive curls and substituted centers whose complete
+forward side must move together without placing atoms or labels on top of one
+another.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.8em,
+  align: center + horizon,
+  [*Two consecutive curls* \
+   #smiles("CCCC!cC!cC", scale: 0.9)],
+  [*Nested branches on both curl centers* \
+   #smiles("CCC(C(N)C)!cC(OC(F)C)!cCC", scale: 0.8)],
+)
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.8em,
+  align: center + horizon,
+  [*Charged and abbreviated substituents* \
+   #smiles("CCC({PPh3})!cC([O-])!cC(=O)OCC", scale: 0.8)],
+  [*Nested substituent chains* \
+   #smiles("CCC(CC(C)C)!cC(OC)C(NC)CC", scale: 0.75)],
+)
