@@ -896,9 +896,11 @@
           let deg-f = atom-degree(bond.from)
           let deg-t = atom-degree(bond.to)
           let has-hidden-simple-continuation = (deg-f == 2 and not af-has-label) or (deg-t == 2 and not at-has-label)
-          let has-real-junction = deg-f > 2 or deg-t > 2
 
-          if has-hidden-simple-continuation and not has-real-junction {
+          if has-hidden-simple-continuation {
+            // A chain continuation establishes the skeletal bond axis. Keep
+            // that line connected to both vertices and draw the second line
+            // inset and shortened at each substituted carbon.
             split-line(q1x, q1y, q2x, q2y, c1, c2)
 
             let side = if deg-f == 2 and not af-has-label {
@@ -910,10 +912,12 @@
             let simple-double-gap = double-gap * 1.12
             let ox = -uy * simple-double-gap * side
             let oy =  ux * simple-double-gap * side
-            let lx1 = q1x + ux * (if deg-f == 2 and not af-has-label { trim } else { 0.0 }) + ox
-            let ly1 = q1y + uy * (if deg-f == 2 and not af-has-label { trim } else { 0.0 }) + oy
-            let lx2 = q2x - ux * (if deg-t == 2 and not at-has-label { trim } else { 0.0 }) + ox
-            let ly2 = q2y - uy * (if deg-t == 2 and not at-has-label { trim } else { 0.0 }) + oy
+            let trim-f = if deg-f > 1 and not af-has-label { trim } else { 0.0 }
+            let trim-t = if deg-t > 1 and not at-has-label { trim } else { 0.0 }
+            let lx1 = q1x + ux * trim-f + ox
+            let ly1 = q1y + uy * trim-f + oy
+            let lx2 = q2x - ux * trim-t + ox
+            let ly2 = q2y - uy * trim-t + oy
             split-line(lx1, ly1, lx2, ly2, c1, c2)
           } else {
             // At real junctions (3+ bonds) extend slightly to close corner gap.

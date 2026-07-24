@@ -8,7 +8,7 @@
 #import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 #import "@preview/cetz:0.5.2"
 
-#let version = "0.8.0"
+#let version = "0.9.1"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -149,10 +149,8 @@
 
 #demo[
   typed-smiles renders SMILES strings as 2D skeletal molecular diagrams inside
-  Typst documents. A bundled WebAssembly plugin parses the SMILES, computes atom
-  coordinates, implicit hydrogens, and stereochemistry, and the Typst layer draws
-  the bonds, atom labels, colors, charges, hydrogens, wedges, and reaction
-  helpers.
+  Typst documents. Use it for molecule drawings, atom labels, charges,
+  hydrogens, stereochemical bonds, formulas, and reaction schemes.
 
   This guide documents every function, argument, and package-specific syntax
   extension. Each feature comes with a runnable example: the source is on the
@@ -173,13 +171,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.8.0": *
+#import "@preview/typed-smiles:0.9.1": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.8.0": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.9.1": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports these main symbols:
@@ -453,10 +451,8 @@ typed-smiles' defaults.
   ```)
 ]
 
-#note[Single-axis reflection exchanges wedges and hashes: a reflected 2D
-skeleton with unchanged wedges would depict the enantiomer, while reflecting
-and swapping is equivalent to turning the molecule over — the depicted
-configuration at every stereocenter is preserved.]
+#note[Mirroring preserves the depicted configuration at every stereocenter.
+Wedges and hashes change orientation as needed.]
 
 #demo[
   A stereocenter keeps its configuration when mirrored.
@@ -554,9 +550,8 @@ configuration at every stereocenter is preserved.]
 ]
 
 #note[Use #c("show-indices: true") while writing the references, exactly as for
-mechanism arrows. Bond geometry (length and angles) is computed by the layout
-engine and is not a per-bond style; use #c("bond-length") to size all bonds
-together.]
+mechanism arrows. #c("bond-customizations") does not change bond length or
+angles; use #c("bond-length") to size all bonds together.]
 
 == #raw("lone-pairs")
 
@@ -599,8 +594,7 @@ section covers the points specific to typed-smiles.
 #demo[
   Aromatic rings can be written in either OpenSMILES form: lowercase aromatic
   atoms (#c("c1ccccc1")) or Kekulé notation with explicit alternating double
-  bonds (#c("C1=CC=CC=C1")). Aromatic input is kekulized on parse, so both
-  render identically.
+  bonds (#c("C1=CC=CC=C1")). Both forms produce the same skeletal depiction.
 
   #example(```typ
   #smiles("c1ccccc1") \
@@ -634,13 +628,11 @@ section covers the points specific to typed-smiles.
   ```)
 ]
 
-#note[Kekulization does not renumber anything: atom indices follow SMILES
-writing order for aromatic input exactly as for Kekulé input, so
-#c("show-indices"), #c("highlight(...)"), and #c("arrow(...)") references work
-unchanged, including on ring bonds whose double bond only appears after
-kekulization. A ring that cannot be kekulized (for example pyrrole written
-#c("c1ccnc1"), without the #c("[nH]") hydrogen) or an aromatic atom outside a
-ring is reported as an error.]
+#note[Atom indices follow SMILES writing order for both aromatic and Kekulé
+input, so the same #c("show-indices"), #c("highlight(...)"), and #c("arrow(...)")
+references apply to either form. Write aromatic hydrogens explicitly, as in
+#c("[nH]"); invalid aromatic rings or aromatic atoms outside a ring produce an
+error.]
 
 == Charges
 
@@ -747,8 +739,7 @@ extensions for bond styles and local acyclic-chain layout.
 
 #demo[
   A bracket atom carrying #c("@") or #c("@@") becomes a wedge (toward the viewer)
-  or hashed bond (away), computed from the 2D layout so the depiction matches the
-  SMILES in the conventional orientation.
+  or hashed bond (away) in the conventional SMILES orientation.
 
   #example(```typ
   #smiles("N[C@@H](C)C(=O)O") \
@@ -757,8 +748,9 @@ extensions for bond styles and local acyclic-chain layout.
 ]
 
 #demo[
-  The renderer wedges an exocyclic substituent (such as #ce("OH") or #ce("CH3"))
-  where one exists, and an explicit hydrogen otherwise. Fused systems work too.
+  Write the stereocenter with #c("@") or #c("@@"). An exocyclic substituent such
+  as #ce("OH") or #ce("CH3") carries the wedge when present; otherwise the
+  explicit hydrogen does.
 
   #example(```typ
   #smiles(
@@ -768,9 +760,8 @@ extensions for bond styles and local acyclic-chain layout.
   ```)
 ]
 
-#note[The geometry is drawn correctly, but R/S descriptors are not computed. Ring
-stereochemistry between adjacent centers and bridged bicyclics may need a manual
-adjustment (see @sec-limits).]
+#note[R/S descriptors are not available. Ring stereochemistry between adjacent
+centers and bridged bicyclics may need a manual adjustment (see @sec-limits).]
 
 == Double bonds: #raw("/") and #raw("\\")
 
@@ -806,10 +797,6 @@ adjustment (see @sec-limits).]
 (#c("@OH1")–#c("@OH30")), and allenal (#c("@AL1"), #c("@AL2")) centers are
 accepted and drawn with correct connectivity, but without stereo decoration —
 their 3D arrangement is not translated into wedges.]
-
-#note[Cumulated double bonds always label the central sp carbon (#ce("O=C=O"),
-ketenes, allenes): the neighbors are collinear, so without the #c("C") the two
-double bonds would read as one long double bond.]
 
 == Manual wedges: #raw("!w") and #raw("!h")
 
@@ -1792,7 +1779,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.8.0": *
+#import "@preview/typed-smiles:0.9.1": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
@@ -1816,18 +1803,13 @@ parameter.
 = Limitations <sec-limits>
 // ═════════════════════════════════════════════════════════════════════════════
 
-- Directional bonds (#c("/"), #c("\\")) draw the correct cis/trans geometry, but
-  E/Z descriptors are not computed.
-- R/S and E/Z descriptors are not calculated.
+- R/S and E/Z descriptors are not available; #c("@")/#c("@@") and directional
+  bonds control the depiction only.
 - Trigonal-bipyramidal (#c("@TB")), octahedral (#c("@OH")), and allenal
   (#c("@AL")) centers are accepted but drawn without stereo wedges.
 - Ring stereochemistry between adjacent centers and bridged bicyclics can overlap
   or need a manual adjustment (try #c("rotation"), or the manual #c("!w") and
-  #c("!h") wedges). Ordinary substituent branches resolve crowding automatically —
-  a blocking branch flips to the other side of its attachment bond (e.g. the
-  ortho acetyl and carboxyl groups of aspirin), or the colliding bond flips
-  its zigzag turn — always keeping ideal bond angles, so plain branches do
-  not overlap.
+  #c("!h") wedges).
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Quick reference
@@ -1840,7 +1822,7 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Syntax*], [*Meaning*],
-  [#c("c") #c("n") #c("o") …], [Aromatic atom (lowercase); kekulized on parse.],
+  [#c("c") #c("n") #c("o") …], [Lowercase aromatic atom notation.],
   [#c(".")], [Disconnected fragment (no bond): salts, hydrates.],
   [#c("[...]")], [Bracket atom (any element, charges, explicit H).],
   [#c("@") / #c("@@")], [Tetrahedral anticlockwise / clockwise.],

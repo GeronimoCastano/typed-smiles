@@ -3580,3 +3580,33 @@ pair rather than a single blob.
   [#smiles("[O-]C=O", lone-pairs: "dots", scale: 1.4)],
   [#smiles("{>Cl|Cl|lp=4}C", lone-pairs: "dots", scale: 1.4)],
 )
+#pagebreak()
+
+= Branched acyclic double bonds
+
+When one alkene carbon continues a skeletal chain, the double bond keeps that
+full bond axis and uses a shortened inset line even if the opposite carbon is a
+three-bond junction.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+  [*Halogen branch* \
+   #text(size: 8pt, `CC(Cl)=CC`) \
+   #smiles("CC(Cl)=CC", scale: 1.3)],
+  [*Carbon branch* \
+   #text(size: 8pt, `CC(C)=CC`) \
+   #smiles("CC(C)=CC", scale: 1.3)],
+  [*Reversed writing order* \
+   #text(size: 8pt, `CC=C(C)C`) \
+   #smiles("CC=C(C)C", scale: 1.3)],
+)
+
+#v(1em)
+
+#align(center)[
+  *Repeated junctions* \
+  #text(size: 8pt, `CC(C)=CC(C)=CC(=O)OCC`) \
+  #smiles("CC(C)=CC(C)=CC(=O)OCC", scale: 1.1)
+]
