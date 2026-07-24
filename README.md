@@ -15,7 +15,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.8.0": *
+#import "@preview/typed-smiles:0.9.0": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -30,7 +30,7 @@ Aromatic rings can be written either in lowercase aromatic notation
 on parse and both render identically.
 
 ```typst
-#import "@preview/typed-smiles:0.8.0": smiles
+#import "@preview/typed-smiles:0.9.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -187,6 +187,16 @@ non-bonding electron pairs on common organic heteroatoms and charged atoms.
 
 ![Lone pair examples](assets/readme/lone-pairs.png)
 
+A `{label}` hides its internal bonds, so lone pairs are never inferred from its
+text. Declare them explicitly with an inline `lp=N` modifier (1–4), placed after
+the optional style field. The pairs are kept clear of the rest of the label and
+the bonds, and follow the anchor glyph under rotation.
+
+```typst
+#smiles("{>PPh_3|P|lp=1}C=O", lone-pairs: "dots")
+#smiles("{>Cl|Cl|lp=3}C", lone-pairs: "dots")
+```
+
 ## Colors
 
 Atoms are colored with the Jmol CPK palette. Use `atom-colors` to override
@@ -302,7 +312,7 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.8.0": ce
+#import "@preview/typed-smiles:0.9.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -327,7 +337,7 @@ explicit hydrogens. Dot-separated fragments (salts, hydrates) are summed
 together.
 
 ```typst
-#import "@preview/typed-smiles:0.8.0": mol-weight
+#import "@preview/typed-smiles:0.9.0": mol-weight
 
 Ethanol: #calc.round(mol-weight("CCO"), digits: 2) g/mol // 46.07
 Caffeine: #calc.round(mol-weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C"), digits: 2) g/mol // 194.19
@@ -346,7 +356,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.8.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.9.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -457,10 +467,12 @@ canvas — plain schemes are unaffected.
 
 References: `atom(s, i)`, `bond(s, i, j)`, `lp(s, i)` (the species index `s` is
 optional inside a single `smiles()`), and `species(k)` for a whole `ce()`/content
-item. Every reference takes an optional `offset: (dx, dy)`. Curly arrows accept
+item. A `lp()` also resolves lone pairs declared on a `{label}` via `lp=N`. Every
+reference takes an optional `offset: (dx, dy)`. Curly arrows accept
 `heads: "end"/"both"/"none"` and `style: "solid"/"dashed"/"wavy"`, all working
 with `bend` — e.g. a double-headed dashed interaction arrow or a wavy
-photochemical one.
+photochemical one. They default to a black shaft with a small, thin triangle tip;
+`head-length` and `head-width` resize the tip when a bolder head is wanted.
 
 ![Electron-pushing mechanism examples](assets/readme/mechanisms.png)
 
@@ -495,7 +507,7 @@ or an angle), and `label-offset:`/`into-offset:`/`out-offset:` nudge pieces like
 a `mol` offset.
 
 ```typst
-#import "@preview/typed-smiles:0.8.0": cycle, step, mol, ce
+#import "@preview/typed-smiles:0.9.0": cycle, step, mol, ce
 
 #let cplx(body) = box(inset: 2pt, body)
 

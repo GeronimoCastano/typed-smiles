@@ -11,5 +11,8 @@ src/*.pdf
 AGENTS.md
 CLAUDE.md
 
+# Local release workflow and machine-specific paths
+PACKAGING.md
+
 # macOS metadata
 .DS_Store

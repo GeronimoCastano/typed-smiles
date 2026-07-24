@@ -43,6 +43,9 @@ pub(crate) struct AbbrevLabel {
     pub style: String,
     pub anchor: usize,
     pub anchor_len: usize,
+    /// Explicit non-bonding electron-pair count from an inline `lp=N` modifier.
+    /// `None` means the label declared no lone pairs.
+    pub lone_pairs: Option<u8>,
 }
 
 pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
@@ -328,11 +331,66 @@ fn ring_bond_token_end(input: &str, start: usize, allow_directional: bool) -> Op
     None
 }
 
+/// Parses one `{...}` abbreviation body into its displayed text, optional
+/// attachment marker, optional style, and optional lone-pair count.
+///
+/// The body is split on `|` into fields:
+///   - the first field is the displayed label, optionally carrying one `>`
+///     attachment marker before the anchor glyph;
+///   - an optional plain style field (a color or element token);
+///   - an optional named `lp=N` modifier giving an explicit lone-pair count.
+///
+/// The plain style field, when present, must precede any named modifier. A
+/// second field that begins with `lp=` therefore means the label has no style.
 fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
-    let (raw_text, style) = raw_label
-        .split_once('|')
-        .map(|(text, style)| (text, style.trim().to_string()))
-        .unwrap_or((raw_label, String::new()));
+    let mut fields = raw_label.split('|');
+    let raw_text = fields.next().unwrap_or("");
+
+    let mut style = String::new();
+    let mut style_set = false;
+    let mut lone_pairs: Option<u8> = None;
+    let mut seen_named = false;
+    for field in fields {
+        let trimmed = field.trim();
+        if let Some((key, value)) = trimmed.split_once('=') {
+            let key = key.trim();
+            let value = value.trim();
+            match key {
+                "lp" => {
+                    if lone_pairs.is_some() {
+                        return Err(
+                            "abbreviation label has more than one `lp=` modifier".to_string(),
+                        );
+                    }
+                    let n: u8 = value.parse().map_err(|_| {
+                        format!("abbreviation `lp=` needs an integer from 1 to 4, got `{value}`")
+                    })?;
+                    if !(1..=4).contains(&n) {
+                        return Err(format!(
+                            "abbreviation `lp=` must be from 1 to 4, got {n}"
+                        ));
+                    }
+                    lone_pairs = Some(n);
+                }
+                other => {
+                    return Err(format!("unknown abbreviation modifier `{other}=`"));
+                }
+            }
+            seen_named = true;
+        } else {
+            if seen_named {
+                return Err(
+                    "abbreviation style must come before named modifiers like `lp=`".to_string(),
+                );
+            }
+            if style_set {
+                return Err("abbreviation label has more than one style field".to_string());
+            }
+            style = trimmed.to_string();
+            style_set = true;
+        }
+    }
+
     let marker_count = raw_text.chars().filter(|&ch| ch == '>').count();
     if marker_count > 1 {
         return Err(
@@ -380,6 +438,7 @@ fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
         style,
         anchor,
         anchor_len,
+        lone_pairs,
     })
 }
 
@@ -394,6 +453,7 @@ fn assign_abbrevs(mol: &mut MoleculeGraph, labels: &[AbbrevLabel]) {
                 atom.abbrev_style = label.style.clone();
                 atom.abbrev_anchor = label.anchor;
                 atom.abbrev_anchor_len = label.anchor_len;
+                atom.abbrev_lone_pairs = label.lone_pairs.unwrap_or(0);
             }
         }
     }
@@ -1434,6 +1494,93 @@ mod tests {
         assert_eq!(out.atoms[0].abbrev, "PPh3");
         assert_eq!(out.atoms[0].abbrev_anchor, 0);
         assert_eq!(out.atoms[0].abbrev_anchor_len, 1);
+    }
+
+    // ── Abbreviation lone-pair modifier (`lp=N`) ─────────────────────────────
+
+    #[test]
+    fn abbrev_lp_parses_all_counts() {
+        for n in 1u8..=4 {
+            let raw = format!("Cl|Cl|lp={n}");
+            let label = parse_abbrev_label(&raw).expect("lp parse failed");
+            assert_eq!(label.text, "Cl");
+            assert_eq!(label.style, "Cl");
+            assert_eq!(label.lone_pairs, Some(n));
+        }
+    }
+
+    #[test]
+    fn abbrev_lp_without_style() {
+        let label = parse_abbrev_label("OR|lp=2").expect("lp without style failed");
+        assert_eq!(label.text, "OR");
+        assert_eq!(label.style, "");
+        assert_eq!(label.lone_pairs, Some(2));
+    }
+
+    #[test]
+    fn abbrev_lp_with_anchor_marker() {
+        let label = parse_abbrev_label(">PPh_3|P|lp=1").expect("anchored lp failed");
+        assert_eq!(label.text, "PPh_3");
+        assert_eq!(label.anchor, 0);
+        assert_eq!(label.anchor_len, 1);
+        assert_eq!(label.style, "P");
+        assert_eq!(label.lone_pairs, Some(1));
+    }
+
+    #[test]
+    fn abbrev_lp_with_anchor_no_style() {
+        let label = parse_abbrev_label(">OR|lp=2").expect("anchored lp no style failed");
+        assert_eq!(label.text, "OR");
+        assert_eq!(label.anchor_len, 1);
+        assert_eq!(label.style, "");
+        assert_eq!(label.lone_pairs, Some(2));
+    }
+
+    #[test]
+    fn abbrev_existing_syntax_preserved() {
+        assert_eq!(parse_abbrev_label("PPh3").unwrap().lone_pairs, None);
+        assert_eq!(parse_abbrev_label("PPh3|P").unwrap().style, "P");
+        assert_eq!(parse_abbrev_label("PPh3|P").unwrap().lone_pairs, None);
+        let anchored = parse_abbrev_label(">PPh3").unwrap();
+        assert_eq!(anchored.anchor_len, 1);
+        assert_eq!(anchored.lone_pairs, None);
+        let anchored_styled = parse_abbrev_label(">PPh3|red").unwrap();
+        assert_eq!(anchored_styled.style, "red");
+        assert_eq!(anchored_styled.lone_pairs, None);
+    }
+
+    #[test]
+    fn abbrev_lp_rejects_out_of_range_and_malformed() {
+        assert!(parse_abbrev_label("Cl|Cl|lp=0").is_err());
+        assert!(parse_abbrev_label("Cl|Cl|lp=5").is_err());
+        assert!(parse_abbrev_label("Cl|Cl|lp=-1").is_err());
+        assert!(parse_abbrev_label("Cl|Cl|lp=2.5").is_err());
+        assert!(parse_abbrev_label("Cl|Cl|lp=two").is_err());
+        assert!(parse_abbrev_label("Cl|Cl|lp=").is_err());
+        // Duplicate lp modifiers.
+        assert!(parse_abbrev_label("Cl|Cl|lp=1|lp=2").is_err());
+        // Unknown named modifier.
+        assert!(parse_abbrev_label("Cl|Cl|foo=1").is_err());
+        // Style after a named modifier.
+        assert!(parse_abbrev_label("Cl|lp=1|Cl").is_err());
+    }
+
+    #[test]
+    fn abbrev_lp_count_reaches_layout_output() {
+        let out = layout_native("{>Cl|Cl|lp=3}C").expect("lp layout failed");
+        assert_eq!(out.atoms[0].abbrev, "Cl");
+        assert_eq!(out.atoms[0].lone_pairs, 3);
+        // A fallback direction record is emitted per declared pair so lp()
+        // references stay resolvable.
+        assert_eq!(out.atoms[0].lone_pair_dirs.len(), 3);
+    }
+
+    #[test]
+    fn abbrev_without_lp_has_no_pairs() {
+        let out = layout_native("{PPh3}C=O").expect("no-lp layout failed");
+        assert_eq!(out.atoms[0].abbrev, "PPh3");
+        assert_eq!(out.atoms[0].lone_pairs, 0);
+        assert_eq!(out.atoms[0].lone_pair_dirs.len(), 0);
     }
 
     #[test]

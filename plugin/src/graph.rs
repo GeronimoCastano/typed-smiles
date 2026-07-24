@@ -155,6 +155,9 @@ pub struct Atom {
     pub abbrev_style: String,
     pub abbrev_anchor: usize,
     pub abbrev_anchor_len: usize,
+    /// Explicit lone-pair count from an abbreviation `lp=N` modifier. Zero when
+    /// none was declared; abbreviations never infer lone pairs from their text.
+    pub abbrev_lone_pairs: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -467,6 +470,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             abbrev_style: String::new(),
             abbrev_anchor: 0,
             abbrev_anchor_len: 0,
+            abbrev_lone_pairs: 0,
         },
         SAtom::Bracket(b) => bracket_to_atom(b),
         SAtom::Unknown => Atom {
@@ -481,6 +485,7 @@ fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
             abbrev_style: String::new(),
             abbrev_anchor: 0,
             abbrev_anchor_len: 0,
+            abbrev_lone_pairs: 0,
         },
     }
 }
@@ -506,6 +511,7 @@ fn bracket_to_atom(b: &BracketAtom) -> Atom {
         abbrev_style: String::new(),
         abbrev_anchor: 0,
         abbrev_anchor_len: 0,
+        abbrev_lone_pairs: 0,
     }
 }
 

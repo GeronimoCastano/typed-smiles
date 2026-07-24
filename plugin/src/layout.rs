@@ -522,8 +522,10 @@ fn valence_electrons(symbol: &str) -> Option<i16> {
 
 fn lone_pair_count(mol: &MoleculeGraph, atom_idx: usize) -> u8 {
     let atom = &mol.atoms[atom_idx];
-    if atom.abbrev != "" {
-        return 0;
+    // Abbreviations hide their internal bonds, so lone pairs are never inferred
+    // from the label text; they come only from an explicit `lp=N` modifier.
+    if !atom.abbrev.is_empty() {
+        return atom.abbrev_lone_pairs;
     }
 
     let Some(valence_electrons) = valence_electrons(&atom.symbol) else {

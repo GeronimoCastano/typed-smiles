@@ -403,6 +403,82 @@
   out
 }
 
+// Screen-space lone-pair placements for a custom abbreviation label.
+//
+// The lone pairs belong to the attachment glyph (or the whole label when no `>`
+// marker is present), but the entire rendered label is treated as an obstacle so
+// pairs are never drawn through the remaining text. Bonds are obstacles too.
+// Pairs are placed on the clearest cardinal sides, pushed just outside the label
+// box on that side. This is the single source of truth for both the drawn dots
+// and the `lp()` reference endpoints: the drawing pass and `_resolve` both call
+// it, so an electron-pushing arrow lands exactly on the pair it targets.
+//
+// Returns an array of `(dir, offset)`: a screen-space unit direction from the
+// anchor-glyph center and a radial distance in (unscaled) bond-length units.
+// Measurements are taken with `fs`/`cs`, so the caller must pass a font size and
+// canvas scale that share the molecule's own (mol-scale-free) units.
+#let _abbrev-lp-dirs(abbrev, anchor, anchor-len, count, bond-dirs, cs, fs, font, margin) = {
+  let mk-label(body, size: fs) = text(
+    size: size, font: font, style: "normal", weight: "regular", body,
+  )
+  let lbl-width(body) = measure(_abbrev-label(body, mk-label, fs, fs)).width / cs
+  let full = measure(_abbrev-label(abbrev, mk-label, fs, fs))
+  let w = full.width / cs
+  let half-h = full.height / cs / 2
+  // Signed distance from the label center to the anchor-glyph center (positive
+  // when the glyph sits right of center), so the box edges follow the glyph.
+  let ao = _label-anchor-offset(abbrev, anchor, anchor-len, lbl-width)
+  let box-right = w / 2 - ao
+  let box-left = w / 2 + ao
+  let (glyph-hw, glyph-hh) = if anchor-len > 0 {
+    let gm = measure(_abbrev-label(abbrev.slice(anchor, anchor + anchor-len), mk-label, fs, fs))
+    (gm.width / cs / 2, gm.height / cs / 2)
+  } else {
+    (w / 2, half-h)
+  }
+
+  // Each cardinal side carries how far the label protrudes past the glyph on
+  // that side (`ext`, the penalty for drawing over text) and how far out a pair
+  // must sit to clear the box edge (`off`).
+  let cardinals = (
+    (dir: (x: 0.0, y: 1.0),  ext: half-h - glyph-hh,   off: half-h + margin),
+    (dir: (x: 0.0, y: -1.0), ext: half-h - glyph-hh,   off: half-h + margin),
+    (dir: (x: -1.0, y: 0.0), ext: box-left - glyph-hw, off: box-left + margin),
+    (dir: (x: 1.0, y: 0.0),  ext: box-right - glyph-hw, off: box-right + margin),
+  )
+
+  let chosen = ()
+  for _ in range(calc.min(count, 4)) {
+    let best = none
+    let best-i = none
+    let best-score = none
+    for ci in range(cardinals.len()) {
+      if chosen.any(s => s.i == ci) { continue }
+      let c = cardinals.at(ci)
+      let score = calc.max(0.0, c.ext) * 4.0
+      for b in bond-dirs {
+        let dot = c.dir.x * b.x + c.dir.y * b.y
+        if dot > 0.85 { score += 100.0 }
+        else if dot > 0.45 { score += 8.0 }
+        else if dot > 0.10 { score += 1.0 }
+      }
+      // Reward placing a pair opposite one already chosen, so two pairs land on
+      // well-separated sides rather than crowding together.
+      for s in chosen {
+        let sc = cardinals.at(s.i)
+        if c.dir.x * sc.dir.x + c.dir.y * sc.dir.y < -0.5 { score -= 2.0 }
+      }
+      if best-score == none or score < best-score {
+        best = c
+        best-i = ci
+        best-score = score
+      }
+    }
+    if best != none { chosen.push((i: best-i, dir: best.dir, off: best.off)) }
+  }
+  chosen.map(c => (dir: c.dir, offset: c.off))
+}
+
 // Draws a molecule's bonds, atom labels, and lone pairs into the current CeTZ
 // canvas, centered at the local origin. The caller sets the canvas unit to
 // `_canvas-scale(scale, bond-length)` and may translate before calling. Atom and
@@ -468,8 +544,10 @@
   let lone-pair-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.6)
   let lone-pair-terminal-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.5)
   let lone-pair-dot-r = calc.max(0.018, stroke-units * 0.75)
-  let lone-pair-dot-gap = calc.max(0.050, lone-pair-dot-r * 2)
+  let lone-pair-dot-gap = calc.max(0.064, lone-pair-dot-r * 2.6)
   let lone-pair-line-half = calc.max(0.055, stroke-units * 2.4)
+  // Clearance between a custom-label lone pair and the edge of the label box.
+  let abbrev-lp-margin = calc.max(0.08, actual-font-size / canvas-scale * 0.34)
 
   let atom-clr = if color {
     (sym) => fade({
@@ -1027,8 +1105,32 @@
         let px = rx(atom.pos.x, atom.pos.y)
         let py = ry(atom.pos.x, atom.pos.y)
         let fill = display-clr(atom)
+        let abbrev = atom.at("abbrev", default: "")
+
+        if abbrev != "" {
+          // Custom labels place pairs in screen space, avoiding the label box
+          // and the bonds. The same helper feeds lp() references.
+          let bond-dirs = atom-neighbor-indices(i)
+            .map(ni => neighbor-screen-dir(i, ni))
+            .filter(d => d != none)
+          let placements = _abbrev-lp-dirs(
+            abbrev,
+            atom.at("abbrev_anchor", default: 0),
+            atom.at("abbrev_anchor_len", default: 0),
+            count,
+            bond-dirs,
+            canvas-scale,
+            actual-font-size,
+            font,
+            abbrev-lp-margin,
+          )
+          for pl in placements {
+            render-pairs((x: px, y: py), (pl.dir,), fill, pl.offset)
+          }
+          continue
+        }
+
         let has-inline-h = (
-          atom.at("abbrev", default: "") == "" and
           not _is-carbon(atom) and
           visible-h-count(i) > 0
         )
@@ -1678,14 +1780,58 @@
     let sp = species.at(ref.species)
     let ms = sp.at("mol-scale", default: 1.0)
     let a = sp.layout.atoms.at(ref.atom)
-    let dirs = a.at("lone_pair_dirs", default: ())
     let base = _atom-pos(sp, ref.atom)
-    if dirs.len() == 0 {
-      nudge(base)
+    let abbrev = a.at("abbrev", default: "")
+    if abbrev != "" {
+      // Custom labels compute pair positions in screen space; mirror the
+      // drawing pass exactly by calling the shared helper with the same
+      // (mol-scale-free) units, then apply mol-scale once at the end.
+      let cs = sp.at("canvas-scale", default: 30pt)
+      let fs = sp.at("actual-font-size", default: 11pt) / ms
+      let font = sp.at("font", default: "New Computer Modern")
+      let ax = a.pos.x
+      let ay = a.pos.y
+      let (arx, ary) = _rot(ax, ay, sp.rotation)
+      let bond-dirs = ()
+      for b in sp.layout.bonds {
+        if b.at("virtual_bond", default: false) { continue }
+        let other = if b.from == ref.atom { b.to } else if b.to == ref.atom { b.from } else { none }
+        if other != none {
+          let na = sp.layout.atoms.at(other)
+          let (nx, ny) = _rot(na.pos.x, na.pos.y, sp.rotation)
+          let vx = nx - arx
+          let vy = ny - ary
+          let l = calc.sqrt(vx * vx + vy * vy)
+          if l > 0.001 { bond-dirs.push((x: vx / l, y: vy / l)) }
+        }
+      }
+      let margin = calc.max(0.08, fs / cs * 0.34)
+      let placements = _abbrev-lp-dirs(
+        abbrev,
+        a.at("abbrev_anchor", default: 0),
+        a.at("abbrev_anchor_len", default: 0),
+        a.at("lone_pairs", default: 1),
+        bond-dirs,
+        cs,
+        fs,
+        font,
+        margin,
+      )
+      if placements.len() == 0 {
+        nudge(base)
+      } else {
+        let pl = placements.at(calc.min(ref.pair, placements.len() - 1))
+        nudge((base.at(0) + pl.dir.x * pl.offset * ms, base.at(1) + pl.dir.y * pl.offset * ms))
+      }
     } else {
-      let d = dirs.at(calc.min(ref.pair, dirs.len() - 1))
-      let (dx, dy) = _rot(d.x, d.y, sp.rotation)
-      nudge((base.at(0) + dx * lp-offset * ms, base.at(1) + dy * lp-offset * ms))
+      let dirs = a.at("lone_pair_dirs", default: ())
+      if dirs.len() == 0 {
+        nudge(base)
+      } else {
+        let d = dirs.at(calc.min(ref.pair, dirs.len() - 1))
+        let (dx, dy) = _rot(d.x, d.y, sp.rotation)
+        nudge((base.at(0) + dx * lp-offset * ms, base.at(1) + dy * lp-offset * ms))
+      }
     }
   } else if kind == "species" {
     // Bounding-box center of an opaque item; edge selection happens at draw time.
@@ -1738,7 +1884,7 @@
 /// - from (dictionary): source reference — `lp()`, `bond()`, `atom()`, `species()`.
 /// - to (dictionary): destination reference.
 /// - label (content): optional label drawn at the curve apex.
-/// - color (color): arrow color. Default: red.
+/// - color (color): arrow color. Default: black.
 /// - stroke (auto / length): Shaft width before scaling. `auto` matches the
 ///   molecule's bond stroke. Default: auto.
 /// - bend (str): "left", "right", or none (straight). Which way the curve bows.
@@ -1747,9 +1893,13 @@
 ///   applies to every head selected by `heads`.
 /// - heads (str): which ends carry an arrowhead — "end" (default), "both", or
 ///   "none".
+/// - head-length (float): triangle-tip length along the shaft, in bond-length
+///   units (before `scale`). Applies to every drawn head. Default: 0.11.
+/// - head-width (float): triangle-tip base width, in bond-length units (before
+///   `scale`). Applies to every drawn head. Default: 0.07.
 /// - style (str): shaft style — "solid" (default), "dashed", or "wavy".
 /// -> dictionary  (consumed by smiles()/reaction())
-#let arrow(from: none, to: none, label: none, color: red, stroke: auto, bend: "left", angle: 15deg, half: false, heads: "end", style: "solid") = (
+#let arrow(from: none, to: none, label: none, color: black, stroke: auto, bend: "left", angle: 15deg, half: false, heads: "end", head-length: 0.11, head-width: 0.07, style: "solid") = (
   __arrow__: true,
   from: from,
   to: to,
@@ -1760,6 +1910,8 @@
   angle: angle,
   half: half,
   heads: heads,
+  head-length: head-length,
+  head-width: head-width,
   style: style,
 )
 
@@ -1790,12 +1942,17 @@
   let p = _resolve(ref, specs, cfg.lp-offset)
   if ref.__ref__ != "species" { return p }
   let sp = specs.at(ref.index)
-  let (w, h) = sp.size
+  // Intersect the ray from the origin toward the target with the molecule's
+  // actual, possibly asymmetric bounds rather than a symmetric half-box.
+  let b = sp.at("bounds", default: (
+    left: sp.size.at(0) / 2, right: sp.size.at(0) / 2,
+    bottom: sp.size.at(1) / 2, top: sp.size.at(1) / 2,
+  ))
   let dx = toward.at(0) - p.at(0)
   let dy = toward.at(1) - p.at(1)
   if dx == 0 and dy == 0 { return p }
-  let tx = if dx != 0 { (w / 2) / calc.abs(dx) } else { 1e9 }
-  let ty = if dy != 0 { (h / 2) / calc.abs(dy) } else { 1e9 }
+  let tx = if dx > 0 { b.right / dx } else if dx < 0 { b.left / (-dx) } else { 1e9 }
+  let ty = if dy > 0 { b.top / dy } else if dy < 0 { b.bottom / (-dy) } else { 1e9 }
   let t = calc.min(tx, ty)
   (p.at(0) + dx * t, p.at(1) + dy * t)
 }
@@ -1898,7 +2055,13 @@
   let mag = (len / 2) * calc.tan(a.angle) * sign
   let apex = (mx + nx * mag, my + ny * mag)
 
-  let mark-opts = (fill: a.color, scale: cfg.arrow-scale, harpoon: a.half)
+  let mark-opts = (
+    fill: a.color,
+    scale: cfg.arrow-scale,
+    harpoon: a.half,
+    length: a.at("head-length", default: 0.11),
+    width: a.at("head-width", default: 0.07),
+  )
   let mk = if heads == "none" { none }
            else if heads == "both" { (..mark-opts, start: ">", end: ">") }
            else { (..mark-opts, end: ">") }
@@ -2531,6 +2694,40 @@
 ///    slots (above before below, at the arrow's position in the sequence).
 ///    Plain arrow-label content and annotations are not counted.
 ///
+// Screen-space bounds of a placed molecule relative to its origin, as
+// `(left, right, bottom, top)` magnitudes in canvas units. Rotation makes a tall
+// molecule wide, so width and height cannot simply be swapped; the extents come
+// from the rotated atom coordinates. The overall size is taken from a real
+// rotated measurement (`measured-w`/`measured-h`, already scaled), and the label
+// padding beyond the skeleton is shared evenly around the origin. Because layout
+// coordinates are centroid-centered, the origin is generally off the box center,
+// so the returned extents are asymmetric.
+#let _mol-bounds(lay, rotation, ms, measured-w, measured-h) = {
+  let atoms = lay.atoms.filter(a => not a.at("virtual_h", default: false))
+  if atoms.len() == 0 {
+    return (
+      left: measured-w / 2, right: measured-w / 2,
+      bottom: measured-h / 2, top: measured-h / 2,
+    )
+  }
+  let cos-a = calc.cos(rotation)
+  let sin-a = calc.sin(rotation)
+  let xs = atoms.map(a => (a.pos.x * cos-a - a.pos.y * sin-a) * ms)
+  let ys = atoms.map(a => (a.pos.x * sin-a + a.pos.y * cos-a) * ms)
+  let amin-x = xs.fold(xs.first(), calc.min)
+  let amax-x = xs.fold(xs.first(), calc.max)
+  let amin-y = ys.fold(ys.first(), calc.min)
+  let amax-y = ys.fold(ys.first(), calc.max)
+  let pad-x = calc.max(0.0, measured-w - (amax-x - amin-x)) / 2
+  let pad-y = calc.max(0.0, measured-h - (amax-y - amin-y)) / 2
+  (
+    left: -amin-x + pad-x,
+    right: amax-x + pad-x,
+    bottom: -amin-y + pad-y,
+    top: amax-y + pad-y,
+  )
+}
+
 /// - gap-h (length): Horizontal gap between grid items (scheme mode). Default: 1.5em.
 /// - gap-v (length): Vertical gap between grid items (scheme mode). Default: 1.5em.
 /// - scale (float): Uniform scale. In mechanism mode it sets the shared canvas
@@ -2707,13 +2904,30 @@
             rotation: m.opts.at("rotation", default: 0deg),
           )
           let mol-fs = m.opts.at("font-size", default: none)
+          let rotation = m.opts.at("rotation", default: 0deg)
+          // Measure the rotated/mirrored/scaled molecule the same way the grid
+          // path does, so wide-after-rotation species get accurate extents.
+          // Combine that total with the exact rotated-atom asymmetry so the
+          // bounds are stored relative to the molecular origin, not its box
+          // center (layout coordinates are centroid-centered).
+          let mopts = m.opts
+          mopts.insert("scale", the-scale * mol-scale)
+          let meas = measure(smiles(m.spec, ..mopts))
+          let bounds = _mol-bounds(
+            lay,
+            rotation,
+            mol-scale,
+            meas.width / canvas-scale,
+            meas.height / canvas-scale,
+          )
           (
             kind: "mol-smiles",
             layout: lay,
             mol-scale: mol-scale,
-            rotation: m.opts.at("rotation", default: 0deg),
+            rotation: rotation,
             origin: (m.offset.at(0), m.offset.at(1)),
-            size: (lay.bbox_width * mol-scale, lay.bbox_height * mol-scale),
+            bounds: bounds,
+            size: (bounds.left + bounds.right, bounds.top + bounds.bottom),
             label: m.label,
             opts: m.opts,
             canvas-scale: canvas-scale,
@@ -2723,12 +2937,15 @@
           )
         } else {
           let meas = measure(m.spec)
+          let w = meas.width / canvas-scale
+          let h = meas.height / canvas-scale
           (
             kind: "content",
             body: m.spec,
             rotation: 0deg,
             origin: (m.offset.at(0), m.offset.at(1)),
-            size: (meas.width / canvas-scale, meas.height / canvas-scale),
+            bounds: (left: w / 2, right: w / 2, bottom: h / 2, top: h / 2),
+            size: (w, h),
             label: m.label,
           )
         }
@@ -2765,11 +2982,15 @@
             )
             let cx = cursor + slot-w / 2
             flow.push((body: body, origin: (cx, 0)))
+            // Center each lifted box horizontally on the arrow; its bottom/top
+            // edge clears the arrow by `lift-pad`, using the rotated extents.
             if lift-above != none {
-              specs.push(place-spec(lift-above, cx, ah / 2 + lift-pad + lift-above.size.at(1) / 2))
+              let ox = cx + (lift-above.bounds.left - lift-above.bounds.right) / 2
+              specs.push(place-spec(lift-above, ox, ah / 2 + lift-pad + lift-above.bounds.bottom))
             }
             if lift-below != none {
-              specs.push(place-spec(lift-below, cx, -(ah / 2 + lift-pad + lift-below.size.at(1) / 2)))
+              let ox = cx + (lift-below.bounds.left - lift-below.bounds.right) / 2
+              specs.push(place-spec(lift-below, ox, -(ah / 2 + lift-pad + lift-below.bounds.top)))
             }
             cursor += slot-w + gap
           } else {
@@ -2779,10 +3000,10 @@
             let cx = cursor + left-w + aw / 2
             flow.push((body: body, origin: (cx, 0)))
             if lift-above != none {
-              specs.push(place-spec(lift-above, cx + aw / 2 + lift-pad + lift-above.size.at(0) / 2, 0))
+              specs.push(place-spec(lift-above, cx + aw / 2 + lift-pad + lift-above.bounds.left, 0))
             }
             if lift-below != none {
-              specs.push(place-spec(lift-below, cx - aw / 2 - lift-pad - lift-below.size.at(0) / 2, 0))
+              specs.push(place-spec(lift-below, cx - aw / 2 - lift-pad - lift-below.bounds.right, 0))
             }
             cursor += left-w + aw + right-w + gap
           }
@@ -2793,8 +3014,10 @@
             (__mol__: true, spec: it, label: none, offset: (0, 0), opts: (:))
           }
           let sp = make-spec(m)
-          specs.push(place-spec(sp, cursor + sp.size.at(0) / 2, 0))
-          cursor += sp.size.at(0) + gap
+          // Place the origin so the molecule's actual left edge lands at the
+          // cursor, then advance by its full rotated width plus the gap.
+          specs.push(place-spec(sp, cursor + sp.bounds.left, 0))
+          cursor += sp.bounds.left + sp.bounds.right + gap
         }
       }
 
@@ -2853,7 +3076,7 @@
         for sp in specs {
           if sp.label != none {
             content(
-              (sp.origin.at(0), sp.origin.at(1) - sp.size.at(1) / 2 - 0.34),
+              (sp.origin.at(0), sp.origin.at(1) - sp.bounds.bottom - 0.34),
               sp.label,
               anchor: "north",
             )

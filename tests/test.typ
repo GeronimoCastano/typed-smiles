@@ -3299,6 +3299,18 @@ Across species, with a bend:
   )
 ]
 
+
+
+
+#align(center)[
+  #reaction(
+    show-indices: true,
+    mol("CCOC(=O)C={>PPh_3 | P}"),
+    arrow(from : atom(0, 4), to : atom(0, 0)),
+    scale : 0.2
+  )
+]
+
 #pagebreak()
 
 = Curl layout extension (`!c`)
@@ -3392,4 +3404,179 @@ another.
    #smiles("CCC({PPh3})!cC([O-])!cC(=O)OCC", scale: 0.8)],
   [*Nested substituent chains* \
    #smiles("CCC(CC(C)C)!cC(OC)C(NC)CC", scale: 0.75)],
+)
+
+
+
+
+#reaction(mol("CCO", rotate : 60deg))
+
+#pagebreak()
+
+= Lone pairs on custom abbreviation labels
+
+The inline `lp=N` modifier (N from 1 to 4) declares explicit non-bonding pairs
+on a `{label}`. Placement avoids the rest of the label and the bonds, and is
+deterministic under rotation. The `lone-pairs:` argument still chooses dots or
+lines.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.6em,
+  align: center + horizon,
+  [*1 pair* \ #text(size: 8pt, `{>PPh_3|P|lp=1}`) \
+   #smiles("{>PPh_3|P|lp=1}C=O", lone-pairs: "dots")],
+  [*2 pairs* \ #text(size: 8pt, `{>OR|O|lp=2}`) \
+   #smiles("{>OR|O|lp=2}CC", lone-pairs: "dots")],
+  [*3 pairs* \ #text(size: 8pt, `{>Cl|Cl|lp=3}`) \
+   #smiles("{>Cl|Cl|lp=3}C", lone-pairs: "dots")],
+  [*4 pairs* \ #text(size: 8pt, `{>Cl|Cl|lp=4}`) \
+   #smiles("{>Cl|Cl|lp=4}C", lone-pairs: "dots")],
+)
+
+#v(1em)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.6em,
+  align: center + horizon,
+  [*Unanchored (group-level)* \ #text(size: 8pt, `{NR_2|lp=1}`) \
+   #smiles("{NR_2|lp=1}CC", lone-pairs: "dots")],
+  [*Lines style* \ #text(size: 8pt, `{>OR|O|lp=2}`) \
+   #smiles("{>OR|O|lp=2}CC", lone-pairs: "lines")],
+  [*Charged label* \ #text(size: 8pt, `{>Cl^-|Cl|lp=4}`) \
+   #smiles("{>Cl^-|Cl|lp=4}", lone-pairs: "dots")],
+)
+
+#v(1em)
+
+Rotated custom labels keep the label upright while pairs follow the anchor
+glyph, and long labels push pairs clear of the remaining text.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.6em,
+  align: center + horizon,
+  [*Rotated 60°* \
+   #smiles("{>PPh_3|P|lp=1}C=O", lone-pairs: "dots", rotation: 60deg)],
+  [*Rotated 120°* \
+   #smiles("{>Cl|Cl|lp=3}CC", lone-pairs: "dots", rotation: 120deg)],
+  [*Long label, 2 pairs* \
+   #smiles("{>OSiMe_3|O|lp=2}CCCC", lone-pairs: "dots")],
+)
+
+#v(1em)
+
+A mechanism arrow can start at a custom-label `lp()` reference; the drawn dot
+and the arrow tail share one geometry helper, so they coincide.
+
+#reaction(
+  mol("{>OR|O|lp=2}CCC=O", lone-pairs: "dots"),
+  rxn-arrow(),
+  mol("[H+].CC=O"),
+  arrow(from: lp(0, 0), to: atom(1, 0), bend: "right"),
+)
+
+#pagebreak()
+
+= Rotated molecule bounds in mechanism mode
+
+In mechanism mode, species are spaced using screen-space bounds computed after
+rotation, mirroring, per-molecule scale, and labels — so a tall molecule that
+becomes wide after rotation no longer overlaps its neighbors or the arrows, at
+any angle.
+
+*Naturally tall molecule rotated 90° to become wide, between two neighbors:*
+
+#reaction(
+  mol("CCO"),
+  rxn-arrow(),
+  mol("OCC(O)C(O)C(O)C(O)CO", rotation: 90deg),
+  mol("CCN"),
+)
+
+#v(1em)
+
+*Two rotated species that must not touch (35° and −35°):*
+
+#reaction(
+  mol("O=C(O)CCCCCC", rotation: 35deg),
+  mol("NCCCCCCC(=O)O", rotation: -35deg),
+)
+
+#v(1em)
+
+*`species()`-targeted arrow stops at the rotated visual edge (60°):*
+
+#reaction(
+  mol("CC(=O)OCCCCCC", rotation: 60deg),
+  rxn-arrow(),
+  ce("H2O"),
+  arrow(from: atom(0, 0), to: species(1), bend: "left"),
+)
+
+#v(1em)
+
+*Molecules lifted above/below an arrow, one rotated to become tall:*
+
+#reaction(
+  mol("CCBr"),
+  rxn-arrow(above: mol("CCCCCCO", rotation: 90deg), below: ce("NaH")),
+  mol("CCOCCCCCC"),
+)
+
+#v(1em)
+
+*Control — ordinary scheme/grid mode stays correct (no mechanism annotations):*
+
+#reaction(
+  mol("O=C(O)CCCCCC", rotation: 35deg),
+  rxn-arrow(above: "heat"),
+  mol("c1ccccc1", rotation: 90deg),
+)
+#pagebreak()
+
+= Arrow head sizing and default color
+
+The curly `arrow()` now defaults to a black shaft with a small, thin triangle
+tip, so it stays clear of nearby bonds. `head-length` (along the shaft) and
+`head-width` (base) resize the tip and scale with the drawing; they apply to
+every drawn head.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.6em,
+  align: center + horizon,
+  [*Default (black, thin)* \
+   #smiles("C=CC=C", scale: 1.2, arrow(from: bond(0, 1), to: bond(2, 3)))],
+  [*Both heads* \
+   #smiles("C=CC=C", scale: 1.2,
+     arrow(from: bond(0, 1), to: bond(2, 3), heads: "both"))],
+  [*Medium custom tip* \
+   #smiles("C=CC=C", scale: 1.2,
+     arrow(from: bond(0, 1), to: bond(2, 3), head-length: 0.18, head-width: 0.14))],
+  [*Larger tip* \
+   #smiles("C=CC=C", scale: 1.2,
+     arrow(from: bond(0, 1), to: bond(2, 3), head-length: 0.26, head-width: 0.22))],
+  [*Dashed, default color* \
+   #smiles("CC(=O)O", scale: 1.2,
+     arrow(from: atom(3), to: atom(2), style: "dashed"))],
+  [*Wavy, both heads* \
+   #smiles("OCCCCO", scale: 1.0,
+     arrow(from: atom(0), to: atom(5), style: "wavy", heads: "both", half: true))],
+)
+
+#v(1em)
+
+Lone-pair dots use a slightly wider default gap so the two electrons read as a
+pair rather than a single blob.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  gutter: 1.4em,
+  align: center + horizon,
+  [#smiles("CCO", lone-pairs: "dots", scale: 1.4)],
+  [#smiles("CCN", lone-pairs: "dots", scale: 1.4)],
+  [#smiles("[O-]C=O", lone-pairs: "dots", scale: 1.4)],
+  [#smiles("{>Cl|Cl|lp=4}C", lone-pairs: "dots", scale: 1.4)],
 )

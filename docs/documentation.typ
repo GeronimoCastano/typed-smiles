@@ -579,7 +579,9 @@ For example, ammonium (#c("[NH4+]")) has no nitrogen lone pair. On terminal
 hydrogen-bearing labels such as #c("OH"), #c("OH-"), and #c("NH2"), lone pairs are
 placed from the rendered heavy-atom glyph center. For charged bare atoms such as
 #c("[O-]") or #c("[Br-]"), the charge mark does not move the atom center used for
-lone pairs.]
+lone pairs. Lone pairs are never inferred for #c("{label}") abbreviations, whose
+internal bonds are hidden; declare them explicitly with #c("lp=N") — see
+@sec-abbrev-lp.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Atoms and charges
@@ -1072,6 +1074,38 @@ two highlighted groups, keep or set `color: true` and put everything else in
   ```)
 ]
 
+== Lone pairs on labels <sec-abbrev-lp>
+
+#demo[
+  A label hides its internal bonds, so lone pairs cannot be inferred from its
+  text. Declare them explicitly with an inline #c("lp=N") modifier, where #c("N")
+  is an integer from 1 to 4. The grammar of a label body is:
+
+  #align(center, c("{text[|style][|lp=N]}"))
+
+  The style field, when present, must come before #c("lp="); a second field that
+  begins with #c("lp=") therefore means the label has no style. As with all lone
+  pairs, the #c("lone-pairs") argument controls whether they are drawn and
+  whether they appear as dots or lines — #c("lp=N") only supplies the count.
+
+  When the label has a #c(">") attachment marker the pairs belong to the marked
+  glyph; otherwise they surround the whole label. In both cases the pairs are
+  kept clear of the rest of the label and of the bonds, and their placement is
+  deterministic under rotation.
+
+  #example(```typ
+  #smiles("{>PPh_3|P|lp=1}C=O", lone-pairs: "dots") \
+  #smiles("{>OR|O|lp=2}CC", lone-pairs: "dots") \
+  #smiles("{>Cl|Cl|lp=3}C", lone-pairs: "lines") \
+  #smiles("{NR_2|lp=1}CC", lone-pairs: "dots")
+  ```)
+]
+
+#note[A custom-label lone pair is addressable with #c("lp(i)") exactly like an
+inferred one, so an electron-pushing #c("arrow()") in a mechanism can start from
+it. The drawn pair and the arrow tail come from the same geometry, so they
+coincide.]
+
 // ═════════════════════════════════════════════════════════════════════════════
 = Chemical formulas: #raw("ce()")
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1467,6 +1501,12 @@ as soon as any curly #c("arrow()") or #c("highlight()") is present.
 #c("mol(offset:)") by itself stays in scheme layout and nudges the species
 inside its grid cell.
 
+#note[On the shared canvas, species are spaced using their true on-screen extent
+after rotation, mirroring, per-molecule scale, and labels. A molecule that
+becomes wider or taller once rotated therefore keeps a full gap from its
+neighbors and from the arrows at any angle, and a #c("species()") arrow endpoint
+snaps to the rotated visual edge.]
+
 == Referencing atoms
 
 Atoms are addressed by their *writing-order index* (0-based), so the SMILES string is
@@ -1505,13 +1545,16 @@ arrow-label content, and annotations are not counted.
 == #raw("arrow()") and #raw("highlight()")
 
 #demo[
-  #c("arrow(from:, to:, label: none, color: red, stroke: auto, bend: \"left\", angle: 15deg, half: false, heads: \"end\", style: \"solid\")")
+  #c("arrow(from:, to:, label: none, color: black, stroke: auto, bend: \"left\", angle: 15deg, half: false, heads: \"end\", head-length: 0.11, head-width: 0.07, style: \"solid\")")
   draws a curly arrow between two references. #c("bend") is #c("\"left\""),
   #c("\"right\""), or #c("none"); #c("angle") sets how strongly it bows;
   #c("half: true") draws fishhook (single-electron) heads. #c("heads") selects
   which ends carry an arrowhead — #c("\"end\"") (default), #c("\"both\""), or
   #c("\"none\"") — and #c("style") the shaft: #c("\"solid\"") (default),
-  #c("\"dashed\""), or #c("\"wavy\""); both combine freely with #c("bend"). #c("highlight(ref, fill:)")
+  #c("\"dashed\""), or #c("\"wavy\""); both combine freely with #c("bend"). The
+  compact triangle tip is sized in bond-length units by #c("head-length") (along
+  the shaft) and #c("head-width") (base); they apply to every drawn head and
+  scale with the drawing. #c("highlight(ref, fill:)")
   shades an atom (disk) or bond (capsule) behind the structure. Pass an array of
   references to shade several atoms or bonds with one call. Bond highlights are
   trimmed away from atom centers by default; set #c("include-atoms: true") to also
@@ -1569,6 +1612,18 @@ arrow-label content, and annotations are not counted.
     arrow(from: atom(3), to: atom(2), style: "dashed"))
   #smiles("OCCCCO",
     arrow(from: atom(0), to: atom(5), style: "wavy", heads: "both", half: true))
+  ```)
+]
+
+#demo[
+  The tip defaults to a small, thin triangle so it stays clear of nearby bonds.
+  Raise #c("head-length") and #c("head-width") for a bolder head.
+
+  #example(```typ
+  #smiles("C=CC=C",
+    arrow(from: bond(0, 1), to: bond(2, 3)))
+  #smiles("C=CC=C",
+    arrow(from: bond(0, 1), to: bond(2, 3), head-length: 0.24, head-width: 0.2))
   ```)
 ]
 
@@ -1799,6 +1854,7 @@ parameter.
   [#c("{label}")], [Abbreviated group pseudo-atom.],
   [#c("{>label}")], [Abbreviated group anchored at the glyph after #c(">").],
   [#c("{label|style}")], [Colored abbreviated group.],
+  [#c("{label|lp=N}")], [Declare N (1–4) lone pairs on a label (style optional before it).],
 )
 
 == #raw("smiles()") options
@@ -1884,7 +1940,7 @@ parameter.
   [#c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
   [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
   [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
-  [#c("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, style:)")], [Curly electron-pushing arrow; #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
+  [#c("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, head-length:, head-width:, style:)")], [Curly electron-pushing arrow (default #c("color: black")); #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("head-length") / #c("head-width") size the tip; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
   [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:)")], [Shade one atom/bond reference or an array of references.],
   [#c("brackets(body, sup:, sub:)")], [Square brackets with optional corner marks.],
 )
