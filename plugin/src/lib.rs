@@ -9,6 +9,8 @@ pub use render::LayoutOutput;
 use graph::{BondMarker, BondMarkerStyle, BondOrder, MoleculeGraph};
 use layout::compute_layout;
 use ptable::Element;
+use std::iter::Peekable;
+use std::str::Chars;
 
 // ── SMILES preprocessing ─────────────────────────────────────────────────────
 //
@@ -25,10 +27,10 @@ use ptable::Element;
 //
 // The cleaned string is valid parser input; extensions are stripped out.
 
-pub(crate) struct Preprocessed {
+pub(crate) struct PreprocessedSmiles {
     pub smiles: String,
     /// Labels in the order they appeared, one per {label} token.
-    pub abbrev_labels: Vec<AbbrevLabel>,
+    pub abbrev_labels: Vec<AbbreviationLabel>,
     /// One entry for each `/` or `\` token in `smiles`, recording whether it
     /// is plain SMILES or which typed-smiles bond/layout extension it carries.
     pub forced_direction_markers: Vec<BondMarker>,
@@ -38,7 +40,7 @@ pub(crate) struct Preprocessed {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct AbbrevLabel {
+pub(crate) struct AbbreviationLabel {
     pub text: String,
     pub style: String,
     pub anchor: usize,
@@ -48,196 +50,221 @@ pub(crate) struct AbbrevLabel {
     pub lone_pairs: Option<u8>,
 }
 
-pub(crate) fn preprocess_smiles(input: &str) -> Result<Preprocessed, String> {
-    let mut smiles = String::with_capacity(input.len());
-    let mut abbrev_labels = Vec::new();
-    let mut forced_direction_markers = Vec::new();
-    let mut aromatic_atom_markers = Vec::new();
+pub(crate) fn preprocess_smiles(input: &str) -> Result<PreprocessedSmiles, String> {
+    let mut parser_compatible_smiles = String::with_capacity(input.len());
+    let mut abbreviation_labels = Vec::new();
+    let mut bond_markers = Vec::new();
+    let mut aromatic_markers = Vec::new();
     let mut in_bracket = false;
 
-    let mut chars = input.chars().peekable();
-    while let Some(ch) = chars.next() {
-        // Bracket atoms pass through untouched; their contents (element
-        // symbols, hcount, charge) must not be mistaken for atom tokens.
+    let mut characters = input.chars().peekable();
+    while let Some(character) = characters.next() {
+        // Bracket contents pass through as a unit because their letters do not
+        // represent independent organic-subset atom tokens.
         if in_bracket {
-            if ch == ']' {
+            if character == ']' {
                 in_bracket = false;
             }
-            smiles.push(ch);
+            parser_compatible_smiles.push(character);
             continue;
         }
-        if ch == '{' {
-            let mut raw_label = String::new();
-            for inner in chars.by_ref() {
-                if inner == '}' {
-                    break;
-                }
-                raw_label.push(inner);
-            }
-            abbrev_labels.push(parse_abbrev_label(&raw_label)?);
-            smiles.push_str("[*]");
-        } else if ch == '!' {
-            let first = chars.next().ok_or_else(|| "incomplete `!` drawing extension".to_string())?;
-            let mut curl = false;
-            let mut style = BondMarkerStyle::Plain;
-            match first {
-                'c' => {
-                    curl = true;
-                    if chars.peek() == Some(&'!') {
-                        chars.next();
-                        style = match chars.next() {
-                            Some('w') => BondMarkerStyle::WedgeUp,
-                            Some('h') => BondMarkerStyle::WedgeDown,
-                            Some('s') => BondMarkerStyle::Wavy,
-                            Some('d') => BondMarkerStyle::Dashed,
-                            Some(other) => return Err(format!("unknown drawing extension `!{other}` after `!c`")),
-                            None => return Err("incomplete drawing extension after `!c`".to_string()),
-                        };
-                    }
-                }
-                'w' => style = BondMarkerStyle::WedgeUp,
-                'h' => style = BondMarkerStyle::WedgeDown,
-                's' => style = BondMarkerStyle::Wavy,
-                'd' => style = BondMarkerStyle::Dashed,
-                other => return Err(format!("unknown drawing extension `!{other}`")),
-            }
 
-            let order = match chars.peek().copied() {
-                Some('-') => {
-                    chars.next();
-                    BondOrder::Single
-                }
-                Some('=') => {
-                    chars.next();
-                    BondOrder::Double
-                }
-                Some('#') => {
-                    chars.next();
-                    BondOrder::Triple
-                }
-                Some('$') => {
-                    chars.next();
-                    BondOrder::Quadruple
-                }
-                Some(':') => {
-                    chars.next();
-                    BondOrder::Aromatic
-                }
-                _ => BondOrder::Single,
-            };
-            if style != BondMarkerStyle::Plain && order != BondOrder::Single {
-                return Err("wedge, hash, wavy, and dashed drawing extensions require a single bond".to_string());
+        match character {
+            '{' => {
+                let raw_label = collect_abbreviation_body(&mut characters);
+                abbreviation_labels.push(parse_abbreviation_label(&raw_label)?);
+                parser_compatible_smiles.push_str("[*]");
             }
-            smiles.push('/');
-            forced_direction_markers.push(BondMarker { style, order, curl });
-        } else if ch == '>' {
-            return Err(
-                "`>` is only valid inside an abbreviation label like `{>PPh3}`".to_string(),
-            );
-        } else {
-            match ch {
-                '[' => in_bracket = true,
-                '/' | '\\' => forced_direction_markers.push(BondMarker {
+            '!' => {
+                bond_markers.push(parse_drawing_extension(&mut characters)?);
+                parser_compatible_smiles.push('/');
+            }
+            '>' => {
+                return Err(
+                    "`>` is only valid inside an abbreviation label like `{>PPh3}`".to_string(),
+                );
+            }
+            '[' => {
+                in_bracket = true;
+                parser_compatible_smiles.push(character);
+            }
+            '/' | '\\' => {
+                bond_markers.push(BondMarker {
                     style: BondMarkerStyle::Directional,
                     order: BondOrder::Single,
                     curl: false,
-                }),
-                // Aromatic organic-subset atoms: uppercase for the parser,
-                // remember the aromatic designation.
-                'b' | 'c' | 'n' | 'o' | 'p' | 's' => {
-                    smiles.push(ch.to_ascii_uppercase());
-                    aromatic_atom_markers.push(true);
-                    continue;
-                }
-                // Aliphatic organic-subset atom starts ('l' of Cl and 'r' of
-                // Br fall through to the default arm, so each two-letter
-                // symbol counts once).
-                'B' | 'C' | 'N' | 'O' | 'S' | 'P' | 'F' | 'I' => {
-                    aromatic_atom_markers.push(false);
-                }
-                _ => {}
+                });
+                parser_compatible_smiles.push(character);
             }
-            smiles.push(ch);
+            'b' | 'c' | 'n' | 'o' | 'p' | 's' => {
+                parser_compatible_smiles.push(character.to_ascii_uppercase());
+                aromatic_markers.push(true);
+            }
+            'B' | 'C' | 'N' | 'O' | 'S' | 'P' | 'F' | 'I' => {
+                aromatic_markers.push(false);
+                parser_compatible_smiles.push(character);
+            }
+            _ => parser_compatible_smiles.push(character),
         }
     }
 
-    let smiles = normalize_post_branch_ring_bonds(&smiles)?;
+    let smiles = normalize_post_branch_ring_bonds(&parser_compatible_smiles)?;
 
-    Ok(Preprocessed {
+    Ok(PreprocessedSmiles {
         smiles,
-        abbrev_labels,
-        forced_direction_markers,
-        aromatic_atom_markers,
+        abbrev_labels: abbreviation_labels,
+        forced_direction_markers: bond_markers,
+        aromatic_atom_markers: aromatic_markers,
     })
+}
+
+fn collect_abbreviation_body(characters: &mut Peekable<Chars<'_>>) -> String {
+    let mut label = String::new();
+    for character in characters.by_ref() {
+        if character == '}' {
+            break;
+        }
+        label.push(character);
+    }
+    label
+}
+
+fn parse_drawing_extension(characters: &mut Peekable<Chars<'_>>) -> Result<BondMarker, String> {
+    let extension = characters
+        .next()
+        .ok_or_else(|| "incomplete `!` drawing extension".to_string())?;
+    let (style, curl) = parse_drawing_style(extension, characters)?;
+    let order = consume_optional_bond_order(characters);
+
+    if style != BondMarkerStyle::Plain && order != BondOrder::Single {
+        return Err(
+            "wedge, hash, wavy, and dashed drawing extensions require a single bond".to_string(),
+        );
+    }
+
+    Ok(BondMarker { style, order, curl })
+}
+
+fn parse_drawing_style(
+    extension: char,
+    characters: &mut Peekable<Chars<'_>>,
+) -> Result<(BondMarkerStyle, bool), String> {
+    if extension == 'c' {
+        let style = consume_optional_curl_style(characters)?;
+        return Ok((style, true));
+    }
+
+    let style = bond_marker_style(extension)
+        .ok_or_else(|| format!("unknown drawing extension `!{extension}`"))?;
+    Ok((style, false))
+}
+
+fn consume_optional_curl_style(
+    characters: &mut Peekable<Chars<'_>>,
+) -> Result<BondMarkerStyle, String> {
+    if characters.peek() != Some(&'!') {
+        return Ok(BondMarkerStyle::Plain);
+    }
+
+    characters.next();
+    let extension = characters
+        .next()
+        .ok_or_else(|| "incomplete drawing extension after `!c`".to_string())?;
+    bond_marker_style(extension)
+        .ok_or_else(|| format!("unknown drawing extension `!{extension}` after `!c`"))
+}
+
+fn bond_marker_style(extension: char) -> Option<BondMarkerStyle> {
+    match extension {
+        'w' => Some(BondMarkerStyle::WedgeUp),
+        'h' => Some(BondMarkerStyle::WedgeDown),
+        's' => Some(BondMarkerStyle::Wavy),
+        'd' => Some(BondMarkerStyle::Dashed),
+        _ => None,
+    }
+}
+
+fn consume_optional_bond_order(characters: &mut Peekable<Chars<'_>>) -> BondOrder {
+    let order = match characters.peek() {
+        Some('-') => BondOrder::Single,
+        Some('=') => BondOrder::Double,
+        Some('#') => BondOrder::Triple,
+        Some('$') => BondOrder::Quadruple,
+        Some(':') => BondOrder::Aromatic,
+        _ => return BondOrder::Single,
+    };
+    characters.next();
+    order
 }
 
 fn normalize_post_branch_ring_bonds(input: &str) -> Result<String, String> {
     // Ring closures are branch-like atom modifiers in SMILES, but the parser
     // crate only accepts them before parenthesized branches on the same atom.
     let bytes = input.as_bytes();
-    let mut out = String::with_capacity(input.len());
-    let mut i = 0;
+    let mut normalized = String::with_capacity(input.len());
+    let mut cursor = 0;
 
-    while i < bytes.len() {
-        let Some(atom_end) = atom_token_end(input, i)? else {
-            out.push(bytes[i] as char);
-            i += 1;
+    while cursor < bytes.len() {
+        let Some(atom_end) = atom_token_end(input, cursor)? else {
+            normalized.push(bytes[cursor] as char);
+            cursor += 1;
             continue;
         };
 
-        let atom = &input[i..atom_end];
-        let mut j = atom_end;
+        let atom_token = &input[cursor..atom_end];
+        let mut suffix_cursor = atom_end;
         let mut ring_bonds = String::new();
         let mut branches = Vec::new();
-        let mut seen_branch = false;
+        let mut has_non_ring_branch = false;
 
         loop {
-            if let Some(end) = ring_bond_token_end(input, j, !seen_branch) {
-                ring_bonds.push_str(&input[j..end]);
-                j = end;
+            if let Some(end) = ring_bond_token_end(input, suffix_cursor, !has_non_ring_branch) {
+                ring_bonds.push_str(&input[suffix_cursor..end]);
+                suffix_cursor = end;
                 continue;
             }
 
-            if bytes.get(j) == Some(&b'(') {
-                let end = matching_paren_end(input, j)?;
-                let inner = normalize_post_branch_ring_bonds(&input[j + 1..end - 1])?;
-                if ring_bond_sequence_end(&inner, false) == Some(inner.len()) {
-                    ring_bonds.push_str(&inner);
+            if bytes.get(suffix_cursor) == Some(&b'(') {
+                let branch_end = matching_paren_end(input, suffix_cursor)?;
+                let branch_contents =
+                    normalize_post_branch_ring_bonds(&input[suffix_cursor + 1..branch_end - 1])?;
+                if ring_bond_sequence_end(&branch_contents, false) == Some(branch_contents.len()) {
+                    ring_bonds.push_str(&branch_contents);
                 } else {
-                    branches.push(format!("({inner})"));
-                    seen_branch = true;
+                    branches.push(format!("({branch_contents})"));
+                    has_non_ring_branch = true;
                 }
-                j = end;
+                suffix_cursor = branch_end;
                 continue;
             }
 
             break;
         }
 
-        out.push_str(atom);
-        out.push_str(&ring_bonds);
+        normalized.push_str(atom_token);
+        normalized.push_str(&ring_bonds);
         for branch in branches {
-            out.push_str(&branch);
+            normalized.push_str(&branch);
         }
-        i = j;
+        cursor = suffix_cursor;
     }
 
-    Ok(out)
+    Ok(normalized)
 }
 
 fn atom_token_end(input: &str, start: usize) -> Result<Option<usize>, String> {
     let bytes = input.as_bytes();
-    let Some(&ch) = bytes.get(start) else {
+    let Some(&first_byte) = bytes.get(start) else {
         return Ok(None);
     };
 
-    if ch == b'[' {
-        let mut i = start + 1;
-        while i < bytes.len() {
-            if bytes[i] == b']' {
-                return Ok(Some(i + 1));
+    if first_byte == b'[' {
+        let mut cursor = start + 1;
+        while cursor < bytes.len() {
+            if bytes[cursor] == b']' {
+                return Ok(Some(cursor + 1));
             }
-            i += 1;
+            cursor += 1;
         }
         return Err("unclosed bracket atom".to_string());
     }
@@ -250,7 +277,7 @@ fn atom_token_end(input: &str, start: usize) -> Result<Option<usize>, String> {
     }
 
     if matches!(
-        ch,
+        first_byte,
         b'B' | b'C' | b'N' | b'O' | b'P' | b'S' | b'F' | b'I' | b'*'
     ) {
         return Ok(Some(start + 1));
@@ -262,16 +289,16 @@ fn atom_token_end(input: &str, start: usize) -> Result<Option<usize>, String> {
 fn matching_paren_end(input: &str, start: usize) -> Result<usize, String> {
     let bytes = input.as_bytes();
     let mut depth = 0usize;
-    let mut i = start;
+    let mut cursor = start;
 
-    while i < bytes.len() {
-        match bytes[i] {
+    while cursor < bytes.len() {
+        match bytes[cursor] {
             b'[' => {
-                i += 1;
-                while i < bytes.len() && bytes[i] != b']' {
-                    i += 1;
+                cursor += 1;
+                while cursor < bytes.len() && bytes[cursor] != b']' {
+                    cursor += 1;
                 }
-                if i == bytes.len() {
+                if cursor == bytes.len() {
                     return Err("unclosed bracket atom".to_string());
                 }
             }
@@ -279,25 +306,25 @@ fn matching_paren_end(input: &str, start: usize) -> Result<usize, String> {
             b')' => {
                 depth = depth.saturating_sub(1);
                 if depth == 0 {
-                    return Ok(i + 1);
+                    return Ok(cursor + 1);
                 }
             }
             _ => {}
         }
-        i += 1;
+        cursor += 1;
     }
 
     Err("unclosed branch".to_string())
 }
 
 fn ring_bond_sequence_end(input: &str, allow_directional: bool) -> Option<usize> {
-    let mut i = 0;
-    let mut found = false;
-    while let Some(end) = ring_bond_token_end(input, i, allow_directional) {
-        found = true;
-        i = end;
+    let mut cursor = 0;
+    let mut found_ring_bond = false;
+    while let Some(end) = ring_bond_token_end(input, cursor, allow_directional) {
+        found_ring_bond = true;
+        cursor = end;
     }
-    found.then_some(i)
+    found_ring_bond.then_some(cursor)
 }
 
 fn ring_bond_token_end(input: &str, start: usize, allow_directional: bool) -> Option<usize> {
@@ -306,26 +333,26 @@ fn ring_bond_token_end(input: &str, start: usize, allow_directional: bool) -> Op
         return None;
     }
 
-    let mut i = start;
-    if matches!(bytes[i], b'-' | b'=' | b'#' | b'$' | b':')
-        || (allow_directional && matches!(bytes[i], b'/' | b'\\'))
+    let mut cursor = start;
+    if matches!(bytes[cursor], b'-' | b'=' | b'#' | b'$' | b':')
+        || (allow_directional && matches!(bytes[cursor], b'/' | b'\\'))
     {
-        i += 1;
-        if i >= bytes.len() {
+        cursor += 1;
+        if cursor >= bytes.len() {
             return None;
         }
     }
 
-    if bytes[i].is_ascii_digit() {
-        return Some(i + 1);
+    if bytes[cursor].is_ascii_digit() {
+        return Some(cursor + 1);
     }
 
-    if bytes[i] == b'%'
-        && i + 2 < bytes.len()
-        && bytes[i + 1].is_ascii_digit()
-        && bytes[i + 2].is_ascii_digit()
+    if bytes[cursor] == b'%'
+        && cursor + 2 < bytes.len()
+        && bytes[cursor + 1].is_ascii_digit()
+        && bytes[cursor + 2].is_ascii_digit()
     {
-        return Some(i + 3);
+        return Some(cursor + 3);
     }
 
     None
@@ -342,7 +369,7 @@ fn ring_bond_token_end(input: &str, start: usize, allow_directional: bool) -> Op
 ///
 /// The plain style field, when present, must precede any named modifier. A
 /// second field that begins with `lp=` therefore means the label has no style.
-fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
+fn parse_abbreviation_label(raw_label: &str) -> Result<AbbreviationLabel, String> {
     let mut fields = raw_label.split('|');
     let raw_text = fields.next().unwrap_or("");
 
@@ -352,25 +379,27 @@ fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
     let mut seen_named = false;
     for field in fields {
         let trimmed = field.trim();
-        if let Some((key, value)) = trimmed.split_once('=') {
-            let key = key.trim();
-            let value = value.trim();
-            match key {
+        if let Some((raw_modifier_name, raw_modifier_value)) = trimmed.split_once('=') {
+            let modifier_name = raw_modifier_name.trim();
+            let modifier_value = raw_modifier_value.trim();
+            match modifier_name {
                 "lp" => {
                     if lone_pairs.is_some() {
                         return Err(
-                            "abbreviation label has more than one `lp=` modifier".to_string(),
+                            "abbreviation label has more than one `lp=` modifier".to_string()
                         );
                     }
-                    let n: u8 = value.parse().map_err(|_| {
-                        format!("abbreviation `lp=` needs an integer from 1 to 4, got `{value}`")
+                    let count: u8 = modifier_value.parse().map_err(|_| {
+                        format!(
+                            "abbreviation `lp=` needs an integer from 1 to 4, got `{modifier_value}`"
+                        )
                     })?;
-                    if !(1..=4).contains(&n) {
+                    if !(1..=4).contains(&count) {
                         return Err(format!(
-                            "abbreviation `lp=` must be from 1 to 4, got {n}"
+                            "abbreviation `lp=` must be from 1 to 4, got {count}"
                         ));
                     }
-                    lone_pairs = Some(n);
+                    lone_pairs = Some(count);
                 }
                 other => {
                     return Err(format!("unknown abbreviation modifier `{other}=`"));
@@ -399,41 +428,43 @@ fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
     }
 
     let mut text = String::with_capacity(raw_text.len());
-    let mut marker = None;
-    for ch in raw_text.chars() {
-        if ch == '>' {
-            marker = Some(text.chars().count());
+    let mut attachment_marker = None;
+    for character in raw_text.chars() {
+        if character == '>' {
+            attachment_marker = Some(text.chars().count());
         } else {
-            text.push(ch);
+            text.push(character);
         }
     }
 
-    let chars: Vec<char> = text.chars().collect();
-    let (anchor, anchor_len) = if let Some(pos) = marker {
-        if chars.is_empty() {
+    let label_characters: Vec<char> = text.chars().collect();
+    let (anchor, anchor_len) = if let Some(marker_position) = attachment_marker {
+        if label_characters.is_empty() {
             return Err("abbreviation attachment marker `>` needs a label glyph".to_string());
         }
-        if pos >= chars.len() {
+        if marker_position >= label_characters.len() {
             return Err(
                 "abbreviation attachment marker `>` must precede a label glyph".to_string(),
             );
         }
-        let anchor = pos;
-        let len = if chars.get(anchor).is_some_and(|ch| ch.is_ascii_uppercase())
-            && chars
+        let anchor = marker_position;
+        let anchor_len = if label_characters
+            .get(anchor)
+            .is_some_and(|character| character.is_ascii_uppercase())
+            && label_characters
                 .get(anchor + 1)
-                .is_some_and(|ch| ch.is_ascii_lowercase())
+                .is_some_and(|character| character.is_ascii_lowercase())
         {
             2
         } else {
             1
         };
-        (anchor, len)
+        (anchor, anchor_len)
     } else {
         (0, 0)
     };
 
-    Ok(AbbrevLabel {
+    Ok(AbbreviationLabel {
         text,
         style,
         anchor,
@@ -444,57 +475,73 @@ fn parse_abbrev_label(raw_label: &str) -> Result<AbbrevLabel, String> {
 
 /// Apply collected abbreviation labels to the matching `*` atoms in the graph
 /// (N-th `*` atom ← N-th label, in atom-index order).
-fn assign_abbrevs(mol: &mut MoleculeGraph, labels: &[AbbrevLabel]) {
+fn assign_abbreviation_labels(molecule: &mut MoleculeGraph, labels: &[AbbreviationLabel]) {
     let mut label_iter = labels.iter();
-    for atom in mol.atoms.iter_mut() {
-        if atom.symbol == "*" {
-            if let Some(label) = label_iter.next() {
-                atom.abbrev = label.text.clone();
-                atom.abbrev_style = label.style.clone();
-                atom.abbrev_anchor = label.anchor;
-                atom.abbrev_anchor_len = label.anchor_len;
-                atom.abbrev_lone_pairs = label.lone_pairs.unwrap_or(0);
-            }
-        }
+    for atom in molecule.atoms.iter_mut().filter(|atom| atom.symbol == "*") {
+        let Some(label) = label_iter.next() else {
+            break;
+        };
+        atom.abbrev = label.text.clone();
+        atom.abbrev_style = label.style.clone();
+        atom.abbrev_anchor = label.anchor;
+        atom.abbrev_anchor_len = label.anchor_len;
+        atom.abbrev_lone_pairs = label.lone_pairs.unwrap_or(0);
     }
 }
 
-// ── Molecular weight ─────────────────────────────────────────────────────────
+fn parse_molecule(smiles: &str) -> Result<MoleculeGraph, String> {
+    let preprocessed = preprocess_smiles(smiles)?;
+    let mut molecule = MoleculeGraph::from_smiles(
+        &preprocessed.smiles,
+        preprocessed.forced_direction_markers,
+        preprocessed.aromatic_atom_markers,
+    )?;
+    assign_abbreviation_labels(&mut molecule, &preprocessed.abbrev_labels);
+    Ok(molecule)
+}
 
-/// Sums standard atomic weights (PubChem / IUPAC values via ptable) over all
-/// atoms, including explicit and implicit hydrogens. Errors on anything whose
-/// mass is undefined: wildcard atoms, `{label}` abbreviations, and isotope
-/// labels (standard atomic weights do not apply to specific nuclides).
-fn compute_mol_weight(mol: &MoleculeGraph) -> Result<f64, String> {
-    let h_mass = Element::Hydrogen.get_atomic_mass() as f64;
-    let mut total = 0.0f64;
-    for (i, atom) in mol.atoms.iter().enumerate() {
-        if !atom.abbrev.is_empty() {
-            return Err(format!(
-                "cannot compute molecular weight: abbreviation {{{}}} has no defined composition",
-                atom.abbrev
-            ));
-        }
-        if atom.symbol == "*" {
-            return Err(
-                "cannot compute molecular weight: wildcard atom `*` has no mass".to_string(),
-            );
-        }
-        if let Some(isotope) = atom.isotope {
-            return Err(format!(
-                "cannot compute molecular weight: isotope [{isotope}{}] needs a nuclide mass, \
-                 not a standard atomic weight",
-                atom.symbol
-            ));
-        }
-        let element = Element::from_symbol(&atom.symbol).ok_or_else(|| {
-            format!("cannot compute molecular weight: unknown element {}", atom.symbol)
-        })?;
-        total += element.get_atomic_mass() as f64;
-        let hydrogens = atom.hcount as f64 + layout::implicit_h_count(mol, i) as f64;
-        total += hydrogens * h_mass;
+fn atomic_mass(atom: &graph::Atom) -> Result<f64, String> {
+    if !atom.abbrev.is_empty() {
+        return Err(format!(
+            "cannot compute molecular weight: abbreviation {{{}}} has no defined composition",
+            atom.abbrev
+        ));
     }
-    Ok(total)
+    if atom.symbol == "*" {
+        return Err("cannot compute molecular weight: wildcard atom `*` has no mass".to_string());
+    }
+    if let Some(isotope) = atom.isotope {
+        return Err(format!(
+            "cannot compute molecular weight: isotope [{isotope}{}] needs a nuclide mass, \
+             not a standard atomic weight",
+            atom.symbol
+        ));
+    }
+
+    Element::from_symbol(&atom.symbol)
+        .map(|element| element.get_atomic_mass() as f64)
+        .ok_or_else(|| {
+            format!(
+                "cannot compute molecular weight: unknown element {}",
+                atom.symbol
+            )
+        })
+}
+
+fn hydrogen_count(molecule: &MoleculeGraph, atom_index: usize) -> u8 {
+    molecule.atoms[atom_index].hcount + layout::implicit_h_count(molecule, atom_index)
+}
+
+fn compute_molecular_weight(molecule: &MoleculeGraph) -> Result<f64, String> {
+    let hydrogen_mass = Element::Hydrogen.get_atomic_mass() as f64;
+    let mut molecular_weight = 0.0;
+
+    for (atom_index, atom) in molecule.atoms.iter().enumerate() {
+        molecular_weight += atomic_mass(atom)?;
+        molecular_weight += f64::from(hydrogen_count(molecule, atom_index)) * hydrogen_mass;
+    }
+
+    Ok(molecular_weight)
 }
 
 // ── WASM / Typst plugin entrypoint ──────────────────────────────────────────
@@ -511,32 +558,22 @@ mod wasm_entrypoint {
     /// Accepts extended SMILES with `{label}` abbreviation syntax.
     #[wasm_func]
     pub fn layout(smiles: &[u8]) -> Result<Vec<u8>, String> {
-        let s = core::str::from_utf8(smiles).map_err(|e| format!("UTF-8 error: {e}"))?;
-        let pre = preprocess_smiles(s)?;
-        let mut mol = MoleculeGraph::from_smiles(
-            &pre.smiles,
-            pre.forced_direction_markers,
-            pre.aromatic_atom_markers,
-        )?;
-        assign_abbrevs(&mut mol, &pre.abbrev_labels);
-        let out = compute_layout(&mol)?;
-        serde_json::to_vec(&out).map_err(|e| format!("JSON error: {e}"))
+        let smiles =
+            core::str::from_utf8(smiles).map_err(|error| format!("UTF-8 error: {error}"))?;
+        let molecule = parse_molecule(smiles)?;
+        let layout = compute_layout(&molecule)?;
+        serde_json::to_vec(&layout).map_err(|error| format!("JSON error: {error}"))
     }
 
     /// Called from Typst as `smiles-plugin.mol_weight(bytes(smiles-str))`.
     /// Returns the molecular weight in g/mol as a JSON number.
     #[wasm_func]
     pub fn mol_weight(smiles: &[u8]) -> Result<Vec<u8>, String> {
-        let s = core::str::from_utf8(smiles).map_err(|e| format!("UTF-8 error: {e}"))?;
-        let pre = preprocess_smiles(s)?;
-        let mut mol = MoleculeGraph::from_smiles(
-            &pre.smiles,
-            pre.forced_direction_markers,
-            pre.aromatic_atom_markers,
-        )?;
-        assign_abbrevs(&mut mol, &pre.abbrev_labels);
-        let weight = compute_mol_weight(&mol)?;
-        serde_json::to_vec(&weight).map_err(|e| format!("JSON error: {e}"))
+        let smiles =
+            core::str::from_utf8(smiles).map_err(|error| format!("UTF-8 error: {error}"))?;
+        let molecule = parse_molecule(smiles)?;
+        let molecular_weight = compute_molecular_weight(&molecule)?;
+        serde_json::to_vec(&molecular_weight).map_err(|error| format!("JSON error: {error}"))
     }
 }
 
@@ -544,26 +581,14 @@ mod wasm_entrypoint {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
-    let pre = preprocess_smiles(smiles)?;
-    let mut mol = MoleculeGraph::from_smiles(
-        &pre.smiles,
-        pre.forced_direction_markers,
-        pre.aromatic_atom_markers,
-    )?;
-    assign_abbrevs(&mut mol, &pre.abbrev_labels);
-    compute_layout(&mol)
+    let molecule = parse_molecule(smiles)?;
+    compute_layout(&molecule)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn mol_weight_native(smiles: &str) -> Result<f64, String> {
-    let pre = preprocess_smiles(smiles)?;
-    let mut mol = MoleculeGraph::from_smiles(
-        &pre.smiles,
-        pre.forced_direction_markers,
-        pre.aromatic_atom_markers,
-    )?;
-    assign_abbrevs(&mut mol, &pre.abbrev_labels);
-    compute_mol_weight(&mol)
+    let molecule = parse_molecule(smiles)?;
+    compute_molecular_weight(&molecule)
 }
 
 #[cfg(test)]
@@ -571,14 +596,14 @@ mod tests {
     use super::*;
 
     /// Smallest distance between any two distinct non-virtual atoms.
-    fn min_atom_distance(out: &LayoutOutput) -> f64 {
+    fn min_atom_distance(layout_output: &LayoutOutput) -> f64 {
         let mut min = f64::INFINITY;
-        for i in 0..out.atoms.len() {
-            for j in (i + 1)..out.atoms.len() {
-                if out.atoms[i].virtual_h || out.atoms[j].virtual_h {
+        for i in 0..layout_output.atoms.len() {
+            for j in (i + 1)..layout_output.atoms.len() {
+                if layout_output.atoms[i].virtual_h || layout_output.atoms[j].virtual_h {
                     continue;
                 }
-                min = min.min(out.atoms[i].pos.dist(out.atoms[j].pos));
+                min = min.min(layout_output.atoms[i].pos.dist(layout_output.atoms[j].pos));
             }
         }
         min
@@ -588,28 +613,29 @@ mod tests {
     fn ortho_ring_substituents_do_not_collide() {
         // Aspirin: the acetyl C=O and the carboxyl OH grow from ortho ring
         // positions toward each other and must not land on the same point.
-        let out = layout_native("CC(=O)OC1=CC=CC=C1C(=O)O").unwrap();
+        let layout_output = layout_native("CC(=O)OC1=CC=CC=C1C(=O)O").unwrap();
         assert!(
-            min_atom_distance(&out) > 0.5,
+            min_atom_distance(&layout_output) > 0.5,
             "atoms overlap: min distance {}",
-            min_atom_distance(&out)
+            min_atom_distance(&layout_output)
         );
 
         // The carboxyl carbon (atom 10: ring C9, =O 11, OH 12) must keep its
         // textbook trigonal geometry: the conflict is resolved by flipping
         // the acetyl branch aside, not by squeezing the carboxyl bonds into a
         // narrow fan or a straight line.
-        let c = out.atoms[10].pos;
+        let carboxyl_center = layout_output.atoms[10].pos;
         let angles: Vec<f64> = [9, 11, 12]
             .iter()
-            .map(|&n| {
-                let p = out.atoms[n].pos;
-                (p.y - c.y).atan2(p.x - c.x)
+            .map(|&neighbor_index| {
+                let neighbor_position = layout_output.atoms[neighbor_index].pos;
+                (neighbor_position.y - carboxyl_center.y)
+                    .atan2(neighbor_position.x - carboxyl_center.x)
             })
             .collect();
-        for i in 0..angles.len() {
-            for j in (i + 1)..angles.len() {
-                let mut delta = (angles[i] - angles[j]).abs();
+        for first_angle_index in 0..angles.len() {
+            for second_angle_index in (first_angle_index + 1)..angles.len() {
+                let mut delta = (angles[first_angle_index] - angles[second_angle_index]).abs();
                 if delta > std::f64::consts::PI {
                     delta = 2.0 * std::f64::consts::PI - delta;
                 }
@@ -625,8 +651,8 @@ mod tests {
     #[test]
     fn crowded_branch_chains_do_not_collide() {
         // Two ortho substituent chains long enough to sweep past each other.
-        let out = layout_native("CCCC1=CC=CC=C1CCC").unwrap();
-        assert!(min_atom_distance(&out) > 0.5);
+        let layout_output = layout_native("CCCC1=CC=CC=C1CCC").unwrap();
+        assert!(min_atom_distance(&layout_output) > 0.5);
     }
 
     #[test]
@@ -634,49 +660,58 @@ mod tests {
         // 1,6-dioxaspiro[4.4]nonane: two five-membered rings joined at a single
         // spiro atom. Each ring must close as a regular pentagon rather than
         // unravel into a chain, so no atoms collide.
-        let out = layout_native("CC[C@H](O1)CC[C@@]12CCCO2").unwrap();
+        let layout_output = layout_native("CC[C@H](O1)CC[C@@]12CCCO2").unwrap();
         assert!(
-            min_atom_distance(&out) > 0.5,
+            min_atom_distance(&layout_output) > 0.5,
             "spiro atoms overlap: min distance {}",
-            min_atom_distance(&out)
+            min_atom_distance(&layout_output)
         );
         // The two ring oxygens (atoms 3 and 10) both neighbor the spiro carbon
         // (atom 6) and must sit one bond length away from it.
-        let spiro = out.atoms[6].pos;
-        for o in [3usize, 10] {
-            let d = out.atoms[o].pos.dist(spiro);
-            assert!((d - 1.0).abs() < 0.05, "ring O-spiro bond length {} for atom {}", d, o);
+        let spiro = layout_output.atoms[6].pos;
+        for oxygen_index in [3usize, 10] {
+            let distance = layout_output.atoms[oxygen_index].pos.dist(spiro);
+            assert!(
+                (distance - 1.0).abs() < 0.05,
+                "ring O-spiro bond length {} for atom {}",
+                distance,
+                oxygen_index
+            );
         }
     }
 
     #[test]
     fn benzene_kekule() {
-        let out = layout_native("C1=CC=CC=C1").expect("benzene layout failed");
-        assert_eq!(out.atoms.len(), 6);
-        assert_eq!(out.bonds.len(), 6);
+        let layout_output = layout_native("C1=CC=CC=C1").expect("benzene layout failed");
+        assert_eq!(layout_output.atoms.len(), 6);
+        assert_eq!(layout_output.bonds.len(), 6);
     }
 
     #[test]
     fn ethanol() {
         // CCO: 3 real atoms + 1 virtual H for terminal O (implicit OH)
-        let out = layout_native("CCO").expect("ethanol layout failed");
-        assert_eq!(out.atoms.len(), 4);
-        assert!(out.atoms[3].virtual_h);
+        let layout_output = layout_native("CCO").expect("ethanol layout failed");
+        assert_eq!(layout_output.atoms.len(), 4);
+        assert!(layout_output.atoms[3].virtual_h);
     }
 
     #[test]
     fn implicit_h_counts_ethanol() {
         // implicit_h counts for real atoms only (virtual H has implicit_h = 0)
-        let out = layout_native("CCO").expect("ethanol layout failed");
-        let counts: Vec<u8> = out.atoms.iter().map(|a| a.implicit_h).collect();
+        let layout_output = layout_native("CCO").expect("ethanol layout failed");
+        let counts: Vec<u8> = layout_output
+            .atoms
+            .iter()
+            .map(|atom| atom.implicit_h)
+            .collect();
         assert_eq!(counts, vec![3, 2, 1, 0]);
     }
 
     #[test]
     fn explicit_h_suppresses_implicit_h() {
-        let out = layout_native("[NH4+]").expect("ammonium layout failed");
-        assert_eq!(out.atoms[0].hcount, 4);
-        assert_eq!(out.atoms[0].implicit_h, 0);
+        let layout_output = layout_native("[NH4+]").expect("ammonium layout failed");
+        assert_eq!(layout_output.atoms[0].hcount, 4);
+        assert_eq!(layout_output.atoms[0].implicit_h, 0);
     }
 
     #[test]
@@ -684,76 +719,88 @@ mod tests {
         // Methane written with four explicit [H] atoms collapses into one
         // carbon carrying the folded hydrogen count; the only remaining H is the
         // virtual label placeholder, never a drawn atom.
-        let out = layout_native("C([H])([H])([H])[H]").expect("methane layout failed");
-        assert_eq!(out.atoms[0].symbol, "C");
-        assert_eq!(out.atoms[0].hcount, 4);
-        assert_eq!(out.atoms[0].implicit_h, 0);
-        let drawn_h = out
+        let layout_output = layout_native("C([H])([H])([H])[H]").expect("methane layout failed");
+        assert_eq!(layout_output.atoms[0].symbol, "C");
+        assert_eq!(layout_output.atoms[0].hcount, 4);
+        assert_eq!(layout_output.atoms[0].implicit_h, 0);
+        let drawn_hydrogen_count = layout_output
             .atoms
             .iter()
-            .filter(|a| a.symbol == "H" && !a.virtual_h)
+            .filter(|atom| atom.symbol == "H" && !atom.virtual_h)
             .count();
-        assert_eq!(drawn_h, 0);
+        assert_eq!(drawn_hydrogen_count, 0);
     }
 
     #[test]
     fn folded_hydrogens_drop_from_neighbor_ordering() {
         // The dichloromethyl carbon keeps only its three heavy neighbors after
         // the explicit hydrogen is folded away.
-        let out = layout_native("ClC([H])Cl").expect("dichloromethane layout failed");
-        let heavy = out.atoms.iter().filter(|a| a.symbol != "H").count();
-        assert_eq!(heavy, 3);
-        assert_eq!(out.bonds.iter().filter(|b| !b.virtual_bond).count(), 2);
+        let layout_output = layout_native("ClC([H])Cl").expect("dichloromethane layout failed");
+        let heavy_atom_count = layout_output
+            .atoms
+            .iter()
+            .filter(|atom| atom.symbol != "H")
+            .count();
+        assert_eq!(heavy_atom_count, 3);
+        assert_eq!(
+            layout_output
+                .bonds
+                .iter()
+                .filter(|bond| !bond.virtual_bond)
+                .count(),
+            2
+        );
     }
 
     #[test]
     fn isotopic_and_charged_hydrogens_are_kept() {
         // Deuterium is a real, drawn atom; only the plain [H] atoms fold away.
-        let out = layout_native("[2H]C([H])([H])[H]").expect("deuteromethane layout failed");
-        let drawn_h = out
+        let layout_output =
+            layout_native("[2H]C([H])([H])[H]").expect("deuteromethane layout failed");
+        let drawn_hydrogen_count = layout_output
             .atoms
             .iter()
-            .filter(|a| a.symbol == "H" && !a.virtual_h)
+            .filter(|atom| atom.symbol == "H" && !atom.virtual_h)
             .count();
-        assert_eq!(drawn_h, 1);
+        assert_eq!(drawn_hydrogen_count, 1);
     }
 
     #[test]
     fn double_bond() {
-        let out = layout_native("C=C").expect("ethylene layout failed");
-        assert_eq!(out.bonds[0].order, 2);
+        let layout_output = layout_native("C=C").expect("ethylene layout failed");
+        assert_eq!(layout_output.bonds[0].order, 2);
     }
 
     #[test]
     fn cumulated_double_bonds_are_linear() {
-        let out = layout_native("O=C=O").expect("carbon dioxide layout failed");
-        assert!(atoms_are_collinear(&out, 0, 1, 2));
+        let layout_output = layout_native("O=C=O").expect("carbon dioxide layout failed");
+        assert!(atoms_are_collinear(&layout_output, 0, 1, 2));
     }
 
     #[test]
     fn single_triple_chain_is_linear_at_middle_atom() {
-        let out = layout_native("CC#N").expect("nitrile layout failed");
-        assert!(atoms_are_collinear(&out, 0, 1, 2));
+        let layout_output = layout_native("CC#N").expect("nitrile layout failed");
+        assert!(atoms_are_collinear(&layout_output, 0, 1, 2));
     }
 
     #[test]
     fn saturated_two_neighbor_atom_keeps_zigzag() {
-        let out = layout_native("CCC").expect("propane layout failed");
-        assert!(!atoms_are_collinear(&out, 0, 1, 2));
+        let layout_output = layout_native("CCC").expect("propane layout failed");
+        assert!(!atoms_are_collinear(&layout_output, 0, 1, 2));
     }
 
     #[test]
     fn cyclohexane() {
-        let out = layout_native("C1CCCCC1").expect("cyclohexane layout failed");
-        assert_eq!(out.atoms.len(), 6);
-        assert_eq!(out.bonds.len(), 6);
+        let layout_output = layout_native("C1CCCCC1").expect("cyclohexane layout failed");
+        assert_eq!(layout_output.atoms.len(), 6);
+        assert_eq!(layout_output.bonds.len(), 6);
     }
 
     #[test]
     fn separated_ring_systems_do_not_overlap() {
-        let out = layout_native("CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1")
+        let layout_output = layout_native("CC(N)C(=O)OCCC1=CC=CC=C1NCC1=CC=CC=C1")
             .expect("two-ring molecule layout failed");
-        assert!(max_bond_length(&out) < 1.2);
+        assert!(max_bond_length(&layout_output) < 1.2);
     }
 
     #[test]
@@ -762,14 +809,19 @@ mod tests {
         // figure (the "tweezers" depiction), not a rotational pinwheel. The layout
         // is built about the vertical axis, so reflecting every atom across that
         // axis must reproduce the same set of positions.
-        let out = layout_native("CCC(CC)(CC)CC").expect("tetraethylmethane layout failed");
-        let cx = out.atoms.iter().map(|a| a.pos.x).sum::<f64>() / out.atoms.len() as f64;
-        for atom in &out.atoms {
+        let layout_output =
+            layout_native("CCC(CC)(CC)CC").expect("tetraethylmethane layout failed");
+        let cx = layout_output
+            .atoms
+            .iter()
+            .map(|atom| atom.pos.x)
+            .sum::<f64>()
+            / layout_output.atoms.len() as f64;
+        for atom in &layout_output.atoms {
             let mirrored_x = 2.0 * cx - atom.pos.x;
-            let found = out
-                .atoms
-                .iter()
-                .any(|b| (b.pos.x - mirrored_x).abs() < 1e-6 && (b.pos.y - atom.pos.y).abs() < 1e-6);
+            let found = layout_output.atoms.iter().any(|b| {
+                (b.pos.x - mirrored_x).abs() < 1e-6 && (b.pos.y - atom.pos.y).abs() < 1e-6
+            });
             assert!(
                 found,
                 "no mirror partner for atom at ({:.3}, {:.3})",
@@ -783,44 +835,53 @@ mod tests {
         // The central acetal carbon has four substituents; the long ester chain
         // must continue away from the rest of the molecule instead of folding
         // back over the other ester group.
-        let out =
+        let layout_output =
             layout_native("BrCC(=O)OC(C)(O)OC(=O)C").expect("acetal diester layout failed");
         assert!(
-            min_nonbonded_distance(&out) > 0.5,
+            min_nonbonded_distance(&layout_output) > 0.5,
             "branches overlap: min non-bonded distance {}",
-            min_nonbonded_distance(&out)
+            min_nonbonded_distance(&layout_output)
         );
     }
 
     #[test]
     fn steroid_ring_system_has_regular_bond_lengths() {
-        let out = layout_native("C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O")
-            .expect("steroid-like molecule layout failed");
-        assert!(max_bond_length(&out) < 1.25);
+        let layout_output =
+            layout_native("C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O")
+                .expect("steroid-like molecule layout failed");
+        assert!(max_bond_length(&layout_output) < 1.25);
     }
 
     #[test]
     fn isobutane() {
-        let out = layout_native("CC(C)C").expect("isobutane layout failed");
-        assert_eq!(out.atoms.len(), 4);
-        assert_eq!(out.bonds.len(), 3);
+        let layout_output = layout_native("CC(C)C").expect("isobutane layout failed");
+        assert_eq!(layout_output.atoms.len(), 4);
+        assert_eq!(layout_output.bonds.len(), 3);
     }
 
     #[test]
     fn naphthalene_kekule() {
-        let out = layout_native("C1=CC2=CC=CC=C2C=C1").expect("naphthalene layout failed");
-        assert_eq!(out.atoms.len(), 10);
-        assert_eq!(out.bonds.len(), 11);
+        let layout_output =
+            layout_native("C1=CC2=CC=CC=C2C=C1").expect("naphthalene layout failed");
+        assert_eq!(layout_output.atoms.len(), 10);
+        assert_eq!(layout_output.bonds.len(), 11);
     }
 
     // ── Dot-disconnected structures ──────────────────────────────────────────
 
     #[test]
     fn dot_creates_no_bond() {
-        let out = layout_native("CCO.CCO").expect("two ethanols failed");
-        assert_eq!(out.atoms.iter().filter(|a| !a.virtual_h).count(), 6);
+        let layout_output = layout_native("CCO.CCO").expect("two ethanols failed");
+        assert_eq!(
+            layout_output.atoms.iter().filter(|a| !a.virtual_h).count(),
+            6
+        );
         // Two C-C-O fragments: 4 real bonds, none crossing the dot.
-        let real: Vec<_> = out.bonds.iter().filter(|b| !b.virtual_bond).collect();
+        let real: Vec<_> = layout_output
+            .bonds
+            .iter()
+            .filter(|b| !b.virtual_bond)
+            .collect();
         assert_eq!(real.len(), 4);
         assert!(real.iter().all(|b| (b.from < 3) == (b.to < 3)));
     }
@@ -829,33 +890,42 @@ mod tests {
     fn salt_fragments_are_disconnected_and_ordered() {
         // Sodium acetate: no bond may touch the sodium ion, and fragments keep
         // SMILES writing order left to right with a visible gap.
-        let out = layout_native("CC(=O)[O-].[Na+]").expect("sodium acetate failed");
-        let na = 4;
-        assert_eq!(out.atoms[na].symbol, "Na");
-        assert_eq!(out.atoms[na].charge, 1);
-        assert!(out.bonds.iter().all(|b| b.from != na && b.to != na));
+        let layout_output = layout_native("CC(=O)[O-].[Na+]").expect("sodium acetate failed");
+        let sodium_index = 4;
+        assert_eq!(layout_output.atoms[sodium_index].symbol, "Na");
+        assert_eq!(layout_output.atoms[sodium_index].charge, 1);
+        assert!(layout_output
+            .bonds
+            .iter()
+            .all(|bond| bond.from != sodium_index && bond.to != sodium_index));
 
-        let max_acetate_x = (0..4).map(|i| out.atoms[i].pos.x).fold(f64::MIN, f64::max);
+        let max_acetate_x = (0..4)
+            .map(|atom_index| layout_output.atoms[atom_index].pos.x)
+            .fold(f64::MIN, f64::max);
         assert!(
-            out.atoms[na].pos.x >= max_acetate_x + 1.0,
+            layout_output.atoms[sodium_index].pos.x >= max_acetate_x + 1.0,
             "Na+ should sit clearly right of the acetate fragment"
         );
     }
 
     #[test]
     fn bare_ion_pair() {
-        let out = layout_native("[Na+].[Cl-]").expect("sodium chloride failed");
-        assert_eq!(out.atoms.len(), 2);
-        assert!(out.bonds.is_empty());
-        assert!(out.atoms[1].pos.x > out.atoms[0].pos.x);
+        let layout_output = layout_native("[Na+].[Cl-]").expect("sodium chloride failed");
+        assert_eq!(layout_output.atoms.len(), 2);
+        assert!(layout_output.bonds.is_empty());
+        assert!(layout_output.atoms[1].pos.x > layout_output.atoms[0].pos.x);
     }
 
     #[test]
     fn three_fragments() {
-        let out = layout_native("O.O.O").expect("three waters failed");
-        let heavy: Vec<_> = out.atoms.iter().filter(|a| !a.virtual_h).collect();
+        let layout_output = layout_native("O.O.O").expect("three waters failed");
+        let heavy: Vec<_> = layout_output
+            .atoms
+            .iter()
+            .filter(|a| !a.virtual_h)
+            .collect();
         assert_eq!(heavy.len(), 3);
-        assert!(out.bonds.iter().all(|b| b.virtual_bond));
+        assert!(layout_output.bonds.iter().all(|bond| bond.virtual_bond));
         assert!(heavy[0].pos.x < heavy[1].pos.x && heavy[1].pos.x < heavy[2].pos.x);
     }
 
@@ -863,116 +933,131 @@ mod tests {
     fn ring_closure_across_dot_joins_fragments() {
         // OpenSMILES: "C1.C1" is ethane — the ring-closure bond still forms
         // even though a dot separates the digits.
-        let out = layout_native("C1.C1").expect("dot ring closure failed");
-        assert_eq!(out.atoms.len(), 2);
-        assert_eq!(out.bonds.len(), 1);
-        assert_eq!(out.atoms[0].implicit_h, 3);
+        let layout_output = layout_native("C1.C1").expect("dot ring closure failed");
+        assert_eq!(layout_output.atoms.len(), 2);
+        assert_eq!(layout_output.bonds.len(), 1);
+        assert_eq!(layout_output.atoms[0].implicit_h, 3);
     }
 
     #[test]
     fn aromatic_fragments_kekulize_independently() {
-        let out = layout_native("c1ccccc1.c1ccccc1").expect("two benzenes failed");
-        assert_eq!(out.atoms.len(), 12);
-        assert_eq!(order_counts(&out), (6, 6));
-        assert!(out.bonds.iter().all(|b| (b.from < 6) == (b.to < 6)));
+        let layout_output = layout_native("c1ccccc1.c1ccccc1").expect("two benzenes failed");
+        assert_eq!(layout_output.atoms.len(), 12);
+        assert_eq!(order_counts(&layout_output), (6, 6));
+        assert!(layout_output
+            .bonds
+            .iter()
+            .all(|b| (b.from < 6) == (b.to < 6)));
     }
 
     // ── Aromatic (lowercase) SMILES and kekulization ─────────────────────────
 
-    fn order_counts(out: &LayoutOutput) -> (usize, usize) {
-        let real = out.bonds.iter().filter(|b| !b.virtual_bond);
+    fn order_counts(layout_output: &LayoutOutput) -> (usize, usize) {
+        let real = layout_output.bonds.iter().filter(|b| !b.virtual_bond);
         (
-            real.clone().filter(|b| b.order == 1).count(),
-            real.filter(|b| b.order == 2).count(),
+            real.clone().filter(|bond| bond.order == 1).count(),
+            real.filter(|bond| bond.order == 2).count(),
         )
     }
 
     #[test]
     fn benzene_aromatic() {
-        let out = layout_native("c1ccccc1").expect("aromatic benzene failed");
-        assert_eq!(out.atoms.len(), 6);
-        assert_eq!(order_counts(&out), (3, 3));
-        assert!(out.atoms.iter().all(|a| a.implicit_h == 1));
+        let layout_output = layout_native("c1ccccc1").expect("aromatic benzene failed");
+        assert_eq!(layout_output.atoms.len(), 6);
+        assert_eq!(order_counts(&layout_output), (3, 3));
+        assert!(layout_output.atoms.iter().all(|atom| atom.implicit_h == 1));
     }
 
     #[test]
     fn aromatic_atom_indices_match_writing_order() {
         // Kekulization must not reorder atoms: index N is the Nth atom token,
         // so show-indices / highlight / arrow references keep working.
-        let out = layout_native("Cc1ccncc1").expect("4-methylpyridine failed");
-        let symbols: Vec<&str> = out
+        let layout_output = layout_native("Cc1ccncc1").expect("4-methylpyridine failed");
+        let symbols: Vec<&str> = layout_output
             .atoms
             .iter()
             .filter(|a| !a.virtual_h)
-            .map(|a| a.symbol.as_str())
+            .map(|atom| atom.symbol.as_str())
             .collect();
         assert_eq!(symbols, vec!["C", "C", "C", "C", "N", "C", "C"]);
     }
 
     #[test]
     fn pyridine_aromatic() {
-        let out = layout_native("c1ccncc1").expect("pyridine failed");
-        assert_eq!(out.atoms[3].symbol, "N");
-        assert_eq!(out.atoms[3].implicit_h, 0);
-        assert_eq!(order_counts(&out), (3, 3));
+        let layout_output = layout_native("c1ccncc1").expect("pyridine failed");
+        assert_eq!(layout_output.atoms[3].symbol, "N");
+        assert_eq!(layout_output.atoms[3].implicit_h, 0);
+        assert_eq!(order_counts(&layout_output), (3, 3));
     }
 
     #[test]
     fn pyrrole_aromatic() {
-        let out = layout_native("c1cc[nH]c1").expect("pyrrole failed");
-        let n = out.atoms.iter().find(|a| a.symbol == "N").unwrap();
-        assert_eq!(n.hcount, 1);
-        assert_eq!(order_counts(&out), (3, 2));
+        let layout_output = layout_native("c1cc[nH]c1").expect("pyrrole failed");
+        let nitrogen = layout_output
+            .atoms
+            .iter()
+            .find(|atom| atom.symbol == "N")
+            .unwrap();
+        assert_eq!(nitrogen.hcount, 1);
+        assert_eq!(order_counts(&layout_output), (3, 2));
     }
 
     #[test]
     fn furan_and_thiophene_aromatic() {
         for smiles in ["c1occc1", "c1sccc1"] {
-            let out = layout_native(smiles).expect("5-ring heteroaromatic failed");
-            assert_eq!(order_counts(&out), (3, 2), "wrong kekulization for {smiles}");
-            let hetero = &out.atoms[1];
+            let layout_output = layout_native(smiles).expect("5-ring heteroaromatic failed");
+            assert_eq!(
+                order_counts(&layout_output),
+                (3, 2),
+                "wrong kekulization for {smiles}"
+            );
+            let hetero = &layout_output.atoms[1];
             assert_eq!(hetero.implicit_h, 0);
         }
     }
 
     #[test]
     fn imidazole_aromatic() {
-        let out = layout_native("c1cnc[nH]1").expect("imidazole failed");
-        assert_eq!(order_counts(&out), (3, 2));
+        let layout_output = layout_native("c1cnc[nH]1").expect("imidazole failed");
+        assert_eq!(order_counts(&layout_output), (3, 2));
     }
 
     #[test]
     fn n_methylpyrrole_aromatic() {
         // A three-connected aromatic n carries no H and no double bond.
-        let out = layout_native("Cn1cccc1").expect("N-methylpyrrole failed");
-        assert_eq!(out.atoms[1].symbol, "N");
-        assert_eq!(out.atoms[1].implicit_h, 0);
-        assert_eq!(order_counts(&out), (4, 2));
+        let layout_output = layout_native("Cn1cccc1").expect("N-methylpyrrole failed");
+        assert_eq!(layout_output.atoms[1].symbol, "N");
+        assert_eq!(layout_output.atoms[1].implicit_h, 0);
+        assert_eq!(order_counts(&layout_output), (4, 2));
     }
 
     #[test]
     fn naphthalene_aromatic() {
-        let out = layout_native("c1ccc2ccccc2c1").expect("aromatic naphthalene failed");
-        assert_eq!(out.atoms.len(), 10);
-        assert_eq!(order_counts(&out), (6, 5));
+        let layout_output = layout_native("c1ccc2ccccc2c1").expect("aromatic naphthalene failed");
+        assert_eq!(layout_output.atoms.len(), 10);
+        assert_eq!(order_counts(&layout_output), (6, 5));
     }
 
     #[test]
     fn indane_mixed_aromatic_aliphatic() {
         // Spec example: aromatic ring fused to an aliphatic ring.
-        let out = layout_native("c1ccc2CCCc2c1").expect("indane failed");
-        assert_eq!(out.atoms.len(), 9);
-        assert_eq!(order_counts(&out), (7, 3));
+        let layout_output = layout_native("c1ccc2CCCc2c1").expect("indane failed");
+        assert_eq!(layout_output.atoms.len(), 9);
+        assert_eq!(order_counts(&layout_output), (7, 3));
     }
 
     #[test]
     fn biphenyl_explicit_and_implicit_single_link() {
         for smiles in ["c1ccccc1-c1ccccc1", "c1ccccc1c1ccccc1"] {
-            let out = layout_native(smiles).expect("biphenyl failed");
-            assert_eq!(out.atoms.len(), 12);
-            assert_eq!(order_counts(&out), (7, 6), "wrong kekulization for {smiles}");
+            let layout_output = layout_native(smiles).expect("biphenyl failed");
+            assert_eq!(layout_output.atoms.len(), 12);
+            assert_eq!(
+                order_counts(&layout_output),
+                (7, 6),
+                "wrong kekulization for {smiles}"
+            );
             // The inter-ring bond stays single.
-            let link = out
+            let link = layout_output
                 .bonds
                 .iter()
                 .find(|b| (b.from < 6) != (b.to < 6))
@@ -985,14 +1070,14 @@ mod tests {
     fn pyridinone_exocyclic_double_bond() {
         // The carbonyl carbon already has its double bond outside the ring and
         // must not receive another one during kekulization.
-        let out = layout_native("O=c1cccc[nH]1").expect("2-pyridinone failed");
-        assert_eq!(order_counts(&out), (4, 3));
+        let layout_output = layout_native("O=c1cccc[nH]1").expect("2-pyridinone failed");
+        assert_eq!(order_counts(&layout_output), (4, 3));
     }
 
     #[test]
     fn explicit_aromatic_bond_symbol() {
-        let out = layout_native("c1:c:c:c:c:c1").expect("explicit ':' benzene failed");
-        assert_eq!(order_counts(&out), (3, 3));
+        let layout_output = layout_native("c1:c:c:c:c:c1").expect("explicit ':' benzene failed");
+        assert_eq!(order_counts(&layout_output), (3, 3));
     }
 
     #[test]
@@ -1008,27 +1093,32 @@ mod tests {
 
     #[test]
     fn wildcard_in_aromatic_ring() {
-        let out = layout_native("c1cc*cc1").expect("aromatic ring with wildcard failed");
-        let (_, doubles) = order_counts(&out);
-        assert!(doubles >= 2, "expected an alternating pattern, got {doubles} double bonds");
+        let layout_output = layout_native("c1cc*cc1").expect("aromatic ring with wildcard failed");
+        let (_, doubles) = order_counts(&layout_output);
+        assert!(
+            doubles >= 2,
+            "expected an alternating pattern, got {doubles} double bonds"
+        );
     }
 
     #[test]
     fn azulene_aromatic() {
         // Non-alternant 5-7 fused system: every carbon needs a double bond.
-        let out = layout_native("c1ccc2cccc2cc1").expect("azulene failed");
-        assert_eq!(out.atoms.len(), 10);
-        assert_eq!(order_counts(&out), (6, 5));
+        let layout_output = layout_native("c1ccc2cccc2cc1").expect("azulene failed");
+        assert_eq!(layout_output.atoms.len(), 10);
+        assert_eq!(order_counts(&layout_output), (6, 5));
     }
 
     #[test]
     fn caffeine_aromatic() {
-        let out =
-            layout_native("Cn1cnc2c1c(=O)n(C)c(=O)n2C").expect("caffeine failed");
+        let layout_output = layout_native("Cn1cnc2c1c(=O)n(C)c(=O)n2C").expect("caffeine failed");
         // Purine core: the imidazole C=N plus the C4=C5 bridge double bond,
         // and the two exocyclic carbonyls.
-        assert_eq!(out.atoms.iter().filter(|a| !a.virtual_h).count(), 14);
-        let (_, doubles) = order_counts(&out);
+        assert_eq!(
+            layout_output.atoms.iter().filter(|a| !a.virtual_h).count(),
+            14
+        );
+        let (_, doubles) = order_counts(&layout_output);
         assert_eq!(doubles, 4);
     }
 
@@ -1056,52 +1146,60 @@ mod tests {
 
     #[test]
     fn forced_wedge_up_bond() {
-        let out = layout_native("C!wN").expect("forced wedge up failed");
-        assert_eq!(out.bonds[0].stereo, "wedge_up");
-        assert_eq!(out.bonds[0].direction, "none");
-        assert!(out.bonds[0].forced_stereo);
+        let layout_output = layout_native("C!wN").expect("forced wedge up failed");
+        assert_eq!(layout_output.bonds[0].stereo, "wedge_up");
+        assert_eq!(layout_output.bonds[0].direction, "none");
+        assert!(layout_output.bonds[0].forced_stereo);
     }
 
     #[test]
     fn forced_wedge_down_bond() {
-        let out = layout_native("C!hN").expect("forced wedge down failed");
-        assert_eq!(out.bonds[0].stereo, "wedge_down");
-        assert_eq!(out.bonds[0].direction, "none");
-        assert!(out.bonds[0].forced_stereo);
+        let layout_output = layout_native("C!hN").expect("forced wedge down failed");
+        assert_eq!(layout_output.bonds[0].stereo, "wedge_down");
+        assert_eq!(layout_output.bonds[0].direction, "none");
+        assert!(layout_output.bonds[0].forced_stereo);
     }
 
     #[test]
     fn forced_wavy_bond() {
-        let out = layout_native("C!sN").expect("forced wavy bond failed");
-        assert_eq!(out.bonds[0].stereo, "wavy");
-        assert_eq!(out.bonds[0].direction, "none");
-        assert!(!out.bonds[0].forced_stereo);
+        let layout_output = layout_native("C!sN").expect("forced wavy bond failed");
+        assert_eq!(layout_output.bonds[0].stereo, "wavy");
+        assert_eq!(layout_output.bonds[0].direction, "none");
+        assert!(!layout_output.bonds[0].forced_stereo);
     }
 
     #[test]
     fn forced_dashed_bond() {
-        let out = layout_native("C!dN").expect("forced dashed bond failed");
-        assert_eq!(out.bonds[0].stereo, "dashed");
-        assert_eq!(out.bonds[0].direction, "none");
-        assert!(!out.bonds[0].forced_stereo);
+        let layout_output = layout_native("C!dN").expect("forced dashed bond failed");
+        assert_eq!(layout_output.bonds[0].stereo, "dashed");
+        assert_eq!(layout_output.bonds[0].direction, "none");
+        assert!(!layout_output.bonds[0].forced_stereo);
     }
 
     #[test]
     fn forced_wavy_and_dashed_in_chain() {
-        let out = layout_native("CC!sO!dN").expect("wavy/dashed chain failed");
-        assert_eq!(out.bonds[0].stereo, "none");
-        assert_eq!(out.bonds[1].stereo, "wavy");
-        assert_eq!(out.bonds[2].stereo, "dashed");
+        let layout_output = layout_native("CC!sO!dN").expect("wavy/dashed chain failed");
+        assert_eq!(layout_output.bonds[0].stereo, "none");
+        assert_eq!(layout_output.bonds[1].stereo, "wavy");
+        assert_eq!(layout_output.bonds[2].stereo, "dashed");
     }
 
     #[test]
     fn forced_wavy_does_not_disturb_real_directional_bonds() {
         // A genuine trans alkene next to a forced wavy bond: the wavy marker
         // must not consume or shift the cis/trans direction tokens.
-        let out = layout_native("F/C=C/C!sN").expect("mixed directional/wavy failed");
-        let wavy = out.bonds.iter().filter(|b| b.stereo == "wavy").count();
+        let layout_output = layout_native("F/C=C/C!sN").expect("mixed directional/wavy failed");
+        let wavy = layout_output
+            .bonds
+            .iter()
+            .filter(|bond| bond.stereo == "wavy")
+            .count();
         assert_eq!(wavy, 1);
-        let directional = out.bonds.iter().filter(|b| b.direction != "none").count();
+        let directional = layout_output
+            .bonds
+            .iter()
+            .filter(|bond| bond.direction != "none")
+            .count();
         assert_eq!(directional, 2);
     }
 
@@ -1113,34 +1211,42 @@ mod tests {
 
     #[test]
     fn forced_wedge_in_chain() {
-        let out = layout_native("CC!wN").expect("forced wedge in chain failed");
-        assert_eq!(out.bonds[0].stereo, "none");
-        assert_eq!(out.bonds[1].stereo, "wedge_up");
-        assert!(out.bonds[1].forced_stereo);
+        let layout_output = layout_native("CC!wN").expect("forced wedge in chain failed");
+        assert_eq!(layout_output.bonds[0].stereo, "none");
+        assert_eq!(layout_output.bonds[1].stereo, "wedge_up");
+        assert!(layout_output.bonds[1].forced_stereo);
     }
 
     #[test]
     fn alkene_directional_bonds_do_not_render_as_wedges() {
-        let out = layout_native("F/C=C/F").expect("E-alkene failed");
-        let double = out.bonds.iter().find(|b| b.order == 2).unwrap();
+        let layout_output = layout_native("F/C=C/F").expect("E-alkene failed");
+        let double = layout_output
+            .bonds
+            .iter()
+            .find(|bond| bond.order == 2)
+            .unwrap();
         assert_eq!(double.order, 2);
-        assert!(out.bonds.iter().all(|b| b.stereo == "none"));
+        assert!(layout_output.bonds.iter().all(|bond| bond.stereo == "none"));
         assert_eq!(
-            out.bonds.iter().filter(|b| b.direction != "none").count(),
+            layout_output
+                .bonds
+                .iter()
+                .filter(|bond| bond.direction != "none")
+                .count(),
             2
         );
     }
 
     #[test]
     fn trans_alkene_substituents_are_opposite() {
-        let out = layout_native("F/C=C/F").expect("trans alkene failed");
-        assert_eq!(alkene_substituent_side_product(&out), -1);
+        let layout_output = layout_native("F/C=C/F").expect("trans alkene failed");
+        assert_eq!(alkene_substituent_side_product(&layout_output), -1);
     }
 
     #[test]
     fn cis_alkene_substituents_are_same_side() {
-        let out = layout_native("F/C=C\\F").expect("cis alkene failed");
-        assert_eq!(alkene_substituent_side_product(&out), 1);
+        let layout_output = layout_native("F/C=C\\F").expect("cis alkene failed");
+        assert_eq!(alkene_substituent_side_product(&layout_output), 1);
     }
 
     #[test]
@@ -1153,11 +1259,24 @@ mod tests {
 
     #[test]
     fn pyrethroid_like_smiles_with_multiple_alkene_markers_parses() {
-        let smiles =
-            "CC1=C(C(=O)C[C@@H]1OC(=O)[C@@H]2[C@H](C2(C)C)/C=C(\\C)/C(=O)OC)C/C=C\\C=C";
-        let out = layout_native(smiles).expect("pyrethroid-like molecule failed");
-        assert_eq!(out.atoms.iter().filter(|atom| !atom.virtual_h).count(), 27);
-        assert_eq!(out.bonds.iter().filter(|bond| bond.direction != "none").count(), 5);
+        let smiles = "CC1=C(C(=O)C[C@@H]1OC(=O)[C@@H]2[C@H](C2(C)C)/C=C(\\C)/C(=O)OC)C/C=C\\C=C";
+        let layout_output = layout_native(smiles).expect("pyrethroid-like molecule failed");
+        assert_eq!(
+            layout_output
+                .atoms
+                .iter()
+                .filter(|atom| !atom.virtual_h)
+                .count(),
+            27
+        );
+        assert_eq!(
+            layout_output
+                .bonds
+                .iter()
+                .filter(|bond| bond.direction != "none")
+                .count(),
+            5
+        );
     }
 
     #[test]
@@ -1168,15 +1287,22 @@ mod tests {
 
     #[test]
     fn tetrahedral_chirality_adds_rendered_stereo() {
-        let out = layout_native("N[C@@H](C)C(=O)O").expect("chiral alanine failed");
-        assert!(out.atoms.iter().any(|a| a.chirality == "tetra_clockwise"));
+        let layout_output = layout_native("N[C@@H](C)C(=O)O").expect("chiral alanine failed");
+        assert!(layout_output
+            .atoms
+            .iter()
+            .any(|atom| atom.chirality == "tetra_clockwise"));
         // Exactly one wedge for the single stereocenter; direction checked below.
-        let wedge_bonds = out
+        let wedge_bonds = layout_output
             .bonds
             .iter()
-            .filter(|b| b.stereo != "none")
+            .filter(|bond| bond.stereo != "none")
             .count();
-        let wedge_h = out.atoms.iter().filter(|a| a.stereo_h != "none").count();
+        let wedge_h = layout_output
+            .atoms
+            .iter()
+            .filter(|atom| atom.stereo_h != "none")
+            .count();
         assert_eq!(wedge_bonds + wedge_h, 1);
         assert!(chirality_matches_smiles("N[C@@H](C)C(=O)O"));
     }
@@ -1185,70 +1311,77 @@ mod tests {
     fn inverting_chirality_flips_the_wedge() {
         // Same skeleton/layout, opposite chirality token ⇒ the wedge on the chosen
         // bond must flip. Guards against regressing to a fixed @→up / @@→down map.
-        let r = layout_native("N[C@@H](C)C(=O)O").expect("R failed");
-        let s = layout_native("N[C@H](C)C(=O)O").expect("S failed");
-        let stereo = |out: &LayoutOutput| -> String {
-            out.bonds
+        let clockwise_layout = layout_native("N[C@@H](C)C(=O)O").expect("R failed");
+        let anticlockwise_layout = layout_native("N[C@H](C)C(=O)O").expect("S failed");
+        let stereo = |layout_output: &LayoutOutput| -> String {
+            layout_output
+                .bonds
                 .iter()
-                .find(|b| b.stereo != "none")
-                .map(|b| b.stereo.clone())
+                .find(|bond| bond.stereo != "none")
+                .map(|bond| bond.stereo.clone())
                 .or_else(|| {
-                    out.atoms
+                    layout_output
+                        .atoms
                         .iter()
-                        .find(|a| a.stereo_h != "none")
-                        .map(|a| a.stereo_h.clone())
+                        .find(|atom| atom.stereo_h != "none")
+                        .map(|atom| atom.stereo_h.clone())
                 })
                 .unwrap_or_else(|| "none".to_string())
         };
-        assert_ne!(stereo(&r), "none");
-        assert_ne!(stereo(&s), "none");
-        assert_ne!(stereo(&r), stereo(&s));
+        assert_ne!(stereo(&clockwise_layout), "none");
+        assert_ne!(stereo(&anticlockwise_layout), "none");
+        assert_ne!(stereo(&clockwise_layout), stereo(&anticlockwise_layout));
         assert!(chirality_matches_smiles("N[C@@H](C)C(=O)O"));
         assert!(chirality_matches_smiles("N[C@H](C)C(=O)O"));
     }
 
     #[test]
     fn tetrahedral_stereo_prefers_oh_substituent() {
-        let out = layout_native("CC[C@@H](O)CC/C=C/CO").expect("chiral alcohol failed");
-        assert!(chiral_oxygen_bond_has_stereo(&out));
+        let layout_output = layout_native("CC[C@@H](O)CC/C=C/CO").expect("chiral alcohol failed");
+        assert!(chiral_oxygen_bond_has_stereo(&layout_output));
     }
 
     #[test]
     fn chiral_alcohol_keeps_long_chain_as_continuation() {
-        let out = layout_native("CC[C@@H](O)CC/C=C/CO").expect("chiral alcohol failed");
+        let layout_output = layout_native("CC[C@@H](O)CC/C=C/CO").expect("chiral alcohol failed");
         // The long chain leaves the stereocenter (atom 2) as a straight
         // continuation; the short ethyl tail (atom 0) sits on the opposite side.
         // Direction-agnostic so it survives the conventional horizontal mirror.
-        let dir = out.atoms[4].pos.x - out.atoms[2].pos.x;
-        assert!(dir.abs() > 1e-6);
+        let continuation_direction = layout_output.atoms[4].pos.x - layout_output.atoms[2].pos.x;
+        assert!(continuation_direction.abs() > 1e-6);
         assert!(
-            (out.atoms[9].pos.x - out.atoms[4].pos.x) * dir > 0.0,
+            (layout_output.atoms[9].pos.x - layout_output.atoms[4].pos.x) * continuation_direction
+                > 0.0,
             "terminal alcohol should remain on the zig-zag continuation"
         );
         assert!(
-            (out.atoms[0].pos.x - out.atoms[2].pos.x) * dir < 0.0,
+            (layout_output.atoms[0].pos.x - layout_output.atoms[2].pos.x) * continuation_direction
+                < 0.0,
             "short ethyl branch should sit opposite the long continuation"
         );
-        assert!(out.atoms.iter().all(|atom| atom.stereo_h == "none"));
+        assert!(layout_output
+            .atoms
+            .iter()
+            .all(|atom| atom.stereo_h == "none"));
     }
 
     #[test]
     fn steroid_stereo_prefers_exocyclic_oh_over_ring_bond() {
-        let out =
+        let layout_output =
             layout_native("C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O")
                 .expect("steroid-like molecule layout failed");
-        assert!(chiral_oxygen_bond_has_stereo(&out));
+        assert!(chiral_oxygen_bond_has_stereo(&layout_output));
     }
 
     #[test]
     fn steroid_ring_chiral_hydrogens_are_rendered() {
         let smiles = "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O";
-        let out = layout_native(smiles).expect("steroid-like molecule layout failed");
+        let layout_output = layout_native(smiles).expect("steroid-like molecule layout failed");
 
         // The three ring-fusion stereocenters (no exocyclic substituent) render
         // an explicit wedge/hash hydrogen. The 17-OH carbon and the quaternary
         // C13 instead wedge their exocyclic substituent, so they get no H label.
-        let stereo_h: Vec<&str> = out
+        let stereo_h: Vec<&str> = layout_output
             .atoms
             .iter()
             .filter_map(|atom| (atom.stereo_h != "none").then_some(atom.stereo_h.as_str()))
@@ -1256,12 +1389,15 @@ mod tests {
         assert_eq!(stereo_h.len(), 3);
 
         // Adjacent ring-fusion stereocenters must point to opposite faces.
-        assert_ne!(out.atoms[5].stereo_h, "none");
-        assert_ne!(out.atoms[6].stereo_h, "none");
-        assert_ne!(out.atoms[5].stereo_h, out.atoms[6].stereo_h);
+        assert_ne!(layout_output.atoms[5].stereo_h, "none");
+        assert_ne!(layout_output.atoms[6].stereo_h, "none");
+        assert_ne!(
+            layout_output.atoms[5].stereo_h,
+            layout_output.atoms[6].stereo_h
+        );
 
         // The 17-OH bond is wedged (not the hydrogen).
-        assert!(chiral_oxygen_bond_has_stereo(&out));
+        assert!(chiral_oxygen_bond_has_stereo(&layout_output));
 
         // Every stereocenter is depicted with the geometrically correct handedness.
         assert!(chirality_matches_smiles(smiles));
@@ -1270,11 +1406,24 @@ mod tests {
     // ── Extended chirality classes and quadruple bonds ───────────────────────
 
     /// Cosine of the angle neighbor-a → center → neighbor-b.
-    fn bond_angle_cos(out: &LayoutOutput, center: usize, a: usize, b: usize) -> f64 {
-        let c = out.atoms[center].pos;
-        let (ax, ay) = (out.atoms[a].pos.x - c.x, out.atoms[a].pos.y - c.y);
-        let (bx, by) = (out.atoms[b].pos.x - c.x, out.atoms[b].pos.y - c.y);
-        (ax * bx + ay * by) / ((ax * ax + ay * ay).sqrt() * (bx * bx + by * by).sqrt())
+    fn bond_angle_cos(
+        layout_output: &LayoutOutput,
+        center: usize,
+        first_neighbor: usize,
+        second_neighbor: usize,
+    ) -> f64 {
+        let center_position = layout_output.atoms[center].pos;
+        let (first_offset_x, first_offset_y) = (
+            layout_output.atoms[first_neighbor].pos.x - center_position.x,
+            layout_output.atoms[first_neighbor].pos.y - center_position.y,
+        );
+        let (second_offset_x, second_offset_y) = (
+            layout_output.atoms[second_neighbor].pos.x - center_position.x,
+            layout_output.atoms[second_neighbor].pos.y - center_position.y,
+        );
+        (first_offset_x * second_offset_x + first_offset_y * second_offset_y)
+            / ((first_offset_x * first_offset_x + first_offset_y * first_offset_y).sqrt()
+                * (second_offset_x * second_offset_x + second_offset_y * second_offset_y).sqrt())
     }
 
     #[test]
@@ -1287,17 +1436,17 @@ mod tests {
         let trans = layout_native("N[Pt@SP2](N)(Cl)Cl").expect("transplatin failed");
         assert!((bond_angle_cos(&trans, 1, 3, 4) + 1.0).abs() < 1e-6);
         // @SP3 (Z shape) pairs N1 trans to Cl4, so the Cl pair is cis again.
-        let z = layout_native("N[Pt@SP3](N)(Cl)Cl").expect("SP3 failed");
-        assert!(bond_angle_cos(&z, 1, 3, 4).abs() < 1e-6);
-        assert!((bond_angle_cos(&z, 1, 0, 4) + 1.0).abs() < 1e-6);
+        let third_configuration = layout_native("N[Pt@SP3](N)(Cl)Cl").expect("SP3 failed");
+        assert!(bond_angle_cos(&third_configuration, 1, 3, 4).abs() < 1e-6);
+        assert!((bond_angle_cos(&third_configuration, 1, 0, 4) + 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn square_planar_all_neighbors_at_right_angles() {
-        let out = layout_native("C[Fe@SP1](Cl)(Br)I").expect("SP iron failed");
-        assert_eq!(out.atoms[1].chirality, "square_planar");
+        let layout_output = layout_native("C[Fe@SP1](Cl)(Br)I").expect("SP iron failed");
+        assert_eq!(layout_output.atoms[1].chirality, "square_planar");
         for (a, b) in [(0, 2), (2, 3), (3, 4)] {
-            assert!(bond_angle_cos(&out, 1, a, b).abs() < 1e-6);
+            assert!(bond_angle_cos(&layout_output, 1, a, b).abs() < 1e-6);
         }
     }
 
@@ -1308,72 +1457,78 @@ mod tests {
             "C[Co@OH1](F)(Cl)(Br)(I)N",
             "NC(Br)=[C@AL1]=C(O)C",
         ] {
-            let out = layout_native(smiles).expect("extended chirality should parse");
+            let layout_output = layout_native(smiles).expect("extended chirality should parse");
             assert!(
-                out.atoms.iter().any(|a| a.chirality == "undepicted"),
+                layout_output
+                    .atoms
+                    .iter()
+                    .any(|atom| atom.chirality == "undepicted"),
                 "missing undepicted center for {smiles}"
             );
-            assert!(out.bonds.iter().all(|b| b.stereo == "none"));
-            assert!(out.atoms.iter().all(|a| a.stereo_h == "none"));
+            assert!(layout_output.bonds.iter().all(|bond| bond.stereo == "none"));
+            assert!(layout_output
+                .atoms
+                .iter()
+                .all(|atom| atom.stereo_h == "none"));
         }
     }
 
     #[test]
     fn quadruple_bond_order() {
         // The classic metal-metal quadruple bond, e.g. in [Re2Cl8]2-.
-        let out = layout_native("[Re]$[Re]").expect("quadruple bond failed");
-        assert_eq!(out.bonds[0].order, 4);
+        let layout_output = layout_native("[Re]$[Re]").expect("quadruple bond failed");
+        assert_eq!(layout_output.bonds[0].order, 4);
     }
 
     #[test]
     fn quadruple_bond_counts_toward_valence() {
-        let out = layout_native("C$C").expect("C$C failed");
-        assert_eq!(out.bonds[0].order, 4);
-        assert!(out.atoms.iter().all(|a| a.implicit_h == 0));
+        let layout_output = layout_native("C$C").expect("C$C failed");
+        assert_eq!(layout_output.bonds[0].order, 4);
+        assert!(layout_output.atoms.iter().all(|atom| atom.implicit_h == 0));
     }
 
     // ── Abbreviation tests ────────────────────────────────────────────────────
 
     #[test]
     fn preprocess_single_abbrev() {
-        let p = preprocess_smiles("C({PPh3})=O").expect("preprocess failed");
-        assert_eq!(p.smiles, "C([*])=O");
-        assert_eq!(p.abbrev_labels[0].text, "PPh3");
-        assert_eq!(p.abbrev_labels[0].style, "");
-        assert_eq!(p.abbrev_labels[0].anchor_len, 0);
+        let preprocessed = preprocess_smiles("C({PPh3})=O").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "C([*])=O");
+        assert_eq!(preprocessed.abbrev_labels[0].text, "PPh3");
+        assert_eq!(preprocessed.abbrev_labels[0].style, "");
+        assert_eq!(preprocessed.abbrev_labels[0].anchor_len, 0);
     }
 
     #[test]
     fn preprocess_multiple_abbrevs() {
-        let p = preprocess_smiles("{OEt}C(=O){NHR}").expect("preprocess failed");
-        assert_eq!(p.smiles, "[*]C(=O)[*]");
-        assert_eq!(p.abbrev_labels[0].text, "OEt");
-        assert_eq!(p.abbrev_labels[1].text, "NHR");
+        let preprocessed = preprocess_smiles("{OEt}C(=O){NHR}").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "[*]C(=O)[*]");
+        assert_eq!(preprocessed.abbrev_labels[0].text, "OEt");
+        assert_eq!(preprocessed.abbrev_labels[1].text, "NHR");
     }
 
     #[test]
     fn preprocess_abbrev_style() {
-        let p = preprocess_smiles("{PPh3|P}C({LG|red})=O").expect("preprocess failed");
-        assert_eq!(p.smiles, "[*]C([*])=O");
-        assert_eq!(p.abbrev_labels[0].text, "PPh3");
-        assert_eq!(p.abbrev_labels[0].style, "P");
-        assert_eq!(p.abbrev_labels[1].text, "LG");
-        assert_eq!(p.abbrev_labels[1].style, "red");
+        let preprocessed = preprocess_smiles("{PPh3|P}C({LG|red})=O").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "[*]C([*])=O");
+        assert_eq!(preprocessed.abbrev_labels[0].text, "PPh3");
+        assert_eq!(preprocessed.abbrev_labels[0].style, "P");
+        assert_eq!(preprocessed.abbrev_labels[1].text, "LG");
+        assert_eq!(preprocessed.abbrev_labels[1].style, "red");
     }
 
     #[test]
     fn preprocess_abbrev_anchor_positions() {
-        let p = preprocess_smiles("{>CAT}C({C>AT}){CA>T}").expect("preprocess failed");
-        assert_eq!(p.smiles, "[*]C([*])[*]");
-        assert_eq!(p.abbrev_labels[0].text, "CAT");
-        assert_eq!(p.abbrev_labels[0].anchor, 0);
-        assert_eq!(p.abbrev_labels[0].anchor_len, 1);
-        assert_eq!(p.abbrev_labels[1].text, "CAT");
-        assert_eq!(p.abbrev_labels[1].anchor, 1);
-        assert_eq!(p.abbrev_labels[1].anchor_len, 1);
-        assert_eq!(p.abbrev_labels[2].text, "CAT");
-        assert_eq!(p.abbrev_labels[2].anchor, 2);
-        assert_eq!(p.abbrev_labels[2].anchor_len, 1);
+        let preprocessed = preprocess_smiles("{>CAT}C({C>AT}){CA>T}").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "[*]C([*])[*]");
+        assert_eq!(preprocessed.abbrev_labels[0].text, "CAT");
+        assert_eq!(preprocessed.abbrev_labels[0].anchor, 0);
+        assert_eq!(preprocessed.abbrev_labels[0].anchor_len, 1);
+        assert_eq!(preprocessed.abbrev_labels[1].text, "CAT");
+        assert_eq!(preprocessed.abbrev_labels[1].anchor, 1);
+        assert_eq!(preprocessed.abbrev_labels[1].anchor_len, 1);
+        assert_eq!(preprocessed.abbrev_labels[2].text, "CAT");
+        assert_eq!(preprocessed.abbrev_labels[2].anchor, 2);
+        assert_eq!(preprocessed.abbrev_labels[2].anchor_len, 1);
     }
 
     #[test]
@@ -1384,10 +1539,10 @@ mod tests {
 
     #[test]
     fn preprocess_forced_wedge_markers() {
-        let p = preprocess_smiles("C!wN!hO").expect("preprocess failed");
-        assert_eq!(p.smiles, "C/N/O");
+        let preprocessed = preprocess_smiles("C!wN!hO").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "C/N/O");
         assert_eq!(
-            p.forced_direction_markers,
+            preprocessed.forced_direction_markers,
             vec![
                 BondMarker {
                     style: BondMarkerStyle::WedgeUp,
@@ -1405,10 +1560,10 @@ mod tests {
 
     #[test]
     fn preprocess_curl_markers_and_combinations() {
-        let p = preprocess_smiles("CCC!cC").expect("plain curl failed");
-        assert_eq!(p.smiles, "CCC/C");
+        let preprocessed = preprocess_smiles("CCC!cC").expect("plain curl failed");
+        assert_eq!(preprocessed.smiles, "CCC/C");
         assert_eq!(
-            p.forced_direction_markers,
+            preprocessed.forced_direction_markers,
             vec![BondMarker {
                 style: BondMarkerStyle::Plain,
                 order: BondOrder::Single,
@@ -1416,42 +1571,51 @@ mod tests {
             }]
         );
 
-        let p = preprocess_smiles("CCC!c!wC").expect("curl wedge failed");
-        assert_eq!(p.smiles, "CCC/C");
-        assert_eq!(p.forced_direction_markers[0].style, BondMarkerStyle::WedgeUp);
-        assert!(p.forced_direction_markers[0].curl);
+        let preprocessed = preprocess_smiles("CCC!c!wC").expect("curl wedge failed");
+        assert_eq!(preprocessed.smiles, "CCC/C");
+        assert_eq!(
+            preprocessed.forced_direction_markers[0].style,
+            BondMarkerStyle::WedgeUp
+        );
+        assert!(preprocessed.forced_direction_markers[0].curl);
 
-        let p = preprocess_smiles("CCC!c=C").expect("curl double failed");
-        assert_eq!(p.smiles, "CCC/C");
-        assert_eq!(p.forced_direction_markers[0].order, BondOrder::Double);
-        assert!(p.forced_direction_markers[0].curl);
+        let preprocessed = preprocess_smiles("CCC!c=C").expect("curl double failed");
+        assert_eq!(preprocessed.smiles, "CCC/C");
+        assert_eq!(
+            preprocessed.forced_direction_markers[0].order,
+            BondOrder::Double
+        );
+        assert!(preprocessed.forced_direction_markers[0].curl);
     }
 
     #[test]
     fn preprocess_moves_ring_closures_written_after_branches() {
-        let p = preprocess_smiles("C1=CCCC(=O)1").expect("preprocess failed");
-        assert_eq!(p.smiles, "C1=CCCC1(=O)");
+        let preprocessed = preprocess_smiles("C1=CCCC(=O)1").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "C1=CCCC1(=O)");
 
-        let p = preprocess_smiles("C(=O)(O)1N").expect("preprocess failed");
-        assert_eq!(p.smiles, "C1(=O)(O)N");
+        let preprocessed = preprocess_smiles("C(=O)(O)1N").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "C1(=O)(O)N");
     }
 
     #[test]
     fn preprocess_no_abbrev() {
-        let p = preprocess_smiles("CCO").expect("preprocess failed");
-        assert_eq!(p.smiles, "CCO");
-        assert!(p.abbrev_labels.is_empty());
-        assert_eq!(p.aromatic_atom_markers, vec![false, false, false]);
+        let preprocessed = preprocess_smiles("CCO").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "CCO");
+        assert!(preprocessed.abbrev_labels.is_empty());
+        assert_eq!(
+            preprocessed.aromatic_atom_markers,
+            vec![false, false, false]
+        );
     }
 
     #[test]
     fn preprocess_uppercases_aromatic_atoms() {
-        let p = preprocess_smiles("Clc1ccccc1").expect("preprocess failed");
-        assert_eq!(p.smiles, "ClC1CCCCC1");
+        let preprocessed = preprocess_smiles("Clc1ccccc1").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "ClC1CCCCC1");
         // One marker per unbracketed organic-subset atom, in writing order;
         // the two-letter Cl counts once.
         assert_eq!(
-            p.aromatic_atom_markers,
+            preprocessed.aromatic_atom_markers,
             vec![false, true, true, true, true, true, true]
         );
     }
@@ -1460,40 +1624,43 @@ mod tests {
     fn preprocess_leaves_bracket_atoms_alone() {
         // Bracket contents are the parser's business: [nH] parses natively as
         // an aromatic atom, and the 'c' in [Sc] is not an aromatic carbon.
-        let p = preprocess_smiles("c1cc[nH]c1[Sc]").expect("preprocess failed");
-        assert_eq!(p.smiles, "C1CC[nH]C1[Sc]");
-        assert_eq!(p.aromatic_atom_markers, vec![true, true, true, true]);
+        let preprocessed = preprocess_smiles("c1cc[nH]c1[Sc]").expect("preprocess failed");
+        assert_eq!(preprocessed.smiles, "C1CC[nH]C1[Sc]");
+        assert_eq!(
+            preprocessed.aromatic_atom_markers,
+            vec![true, true, true, true]
+        );
     }
 
     #[test]
     fn abbrev_assigned_in_layout() {
-        let out = layout_native("{PPh3}C=O").expect("abbrev layout failed");
-        assert_eq!(out.atoms.len(), 3);
-        assert_eq!(out.atoms[0].abbrev, "PPh3");
-        assert_eq!(out.atoms[1].abbrev, "");
+        let layout_output = layout_native("{PPh3}C=O").expect("abbrev layout failed");
+        assert_eq!(layout_output.atoms.len(), 3);
+        assert_eq!(layout_output.atoms[0].abbrev, "PPh3");
+        assert_eq!(layout_output.atoms[1].abbrev, "");
     }
 
     #[test]
     fn abbrev_multiple_in_layout() {
         // [*]C(=O)[*] → atoms: 0=[*](OEt), 1=C, 2=O (branch), 3=[*](NHR)
-        let out = layout_native("{OEt}C(=O){NHR}").expect("multi abbrev layout failed");
-        assert_eq!(out.atoms[0].abbrev, "OEt");
-        assert_eq!(out.atoms[3].abbrev, "NHR");
+        let layout_output = layout_native("{OEt}C(=O){NHR}").expect("multi abbrev layout failed");
+        assert_eq!(layout_output.atoms[0].abbrev, "OEt");
+        assert_eq!(layout_output.atoms[3].abbrev, "NHR");
     }
 
     #[test]
     fn abbrev_style_assigned_in_layout() {
-        let out = layout_native("{PPh3|P}C=O").expect("styled abbrev layout failed");
-        assert_eq!(out.atoms[0].abbrev, "PPh3");
-        assert_eq!(out.atoms[0].abbrev_style, "P");
+        let layout_output = layout_native("{PPh3|P}C=O").expect("styled abbrev layout failed");
+        assert_eq!(layout_output.atoms[0].abbrev, "PPh3");
+        assert_eq!(layout_output.atoms[0].abbrev_style, "P");
     }
 
     #[test]
     fn abbrev_anchor_assigned_in_layout() {
-        let out = layout_native("{>PPh3}C=O").expect("anchored abbrev layout failed");
-        assert_eq!(out.atoms[0].abbrev, "PPh3");
-        assert_eq!(out.atoms[0].abbrev_anchor, 0);
-        assert_eq!(out.atoms[0].abbrev_anchor_len, 1);
+        let layout_output = layout_native("{>PPh3}C=O").expect("anchored abbrev layout failed");
+        assert_eq!(layout_output.atoms[0].abbrev, "PPh3");
+        assert_eq!(layout_output.atoms[0].abbrev_anchor, 0);
+        assert_eq!(layout_output.atoms[0].abbrev_anchor_len, 1);
     }
 
     // ── Abbreviation lone-pair modifier (`lp=N`) ─────────────────────────────
@@ -1502,7 +1669,7 @@ mod tests {
     fn abbrev_lp_parses_all_counts() {
         for n in 1u8..=4 {
             let raw = format!("Cl|Cl|lp={n}");
-            let label = parse_abbrev_label(&raw).expect("lp parse failed");
+            let label = parse_abbreviation_label(&raw).expect("lp parse failed");
             assert_eq!(label.text, "Cl");
             assert_eq!(label.style, "Cl");
             assert_eq!(label.lone_pairs, Some(n));
@@ -1511,7 +1678,7 @@ mod tests {
 
     #[test]
     fn abbrev_lp_without_style() {
-        let label = parse_abbrev_label("OR|lp=2").expect("lp without style failed");
+        let label = parse_abbreviation_label("OR|lp=2").expect("lp without style failed");
         assert_eq!(label.text, "OR");
         assert_eq!(label.style, "");
         assert_eq!(label.lone_pairs, Some(2));
@@ -1519,7 +1686,7 @@ mod tests {
 
     #[test]
     fn abbrev_lp_with_anchor_marker() {
-        let label = parse_abbrev_label(">PPh_3|P|lp=1").expect("anchored lp failed");
+        let label = parse_abbreviation_label(">PPh_3|P|lp=1").expect("anchored lp failed");
         assert_eq!(label.text, "PPh_3");
         assert_eq!(label.anchor, 0);
         assert_eq!(label.anchor_len, 1);
@@ -1529,7 +1696,7 @@ mod tests {
 
     #[test]
     fn abbrev_lp_with_anchor_no_style() {
-        let label = parse_abbrev_label(">OR|lp=2").expect("anchored lp no style failed");
+        let label = parse_abbreviation_label(">OR|lp=2").expect("anchored lp no style failed");
         assert_eq!(label.text, "OR");
         assert_eq!(label.anchor_len, 1);
         assert_eq!(label.style, "");
@@ -1538,49 +1705,49 @@ mod tests {
 
     #[test]
     fn abbrev_existing_syntax_preserved() {
-        assert_eq!(parse_abbrev_label("PPh3").unwrap().lone_pairs, None);
-        assert_eq!(parse_abbrev_label("PPh3|P").unwrap().style, "P");
-        assert_eq!(parse_abbrev_label("PPh3|P").unwrap().lone_pairs, None);
-        let anchored = parse_abbrev_label(">PPh3").unwrap();
+        assert_eq!(parse_abbreviation_label("PPh3").unwrap().lone_pairs, None);
+        assert_eq!(parse_abbreviation_label("PPh3|P").unwrap().style, "P");
+        assert_eq!(parse_abbreviation_label("PPh3|P").unwrap().lone_pairs, None);
+        let anchored = parse_abbreviation_label(">PPh3").unwrap();
         assert_eq!(anchored.anchor_len, 1);
         assert_eq!(anchored.lone_pairs, None);
-        let anchored_styled = parse_abbrev_label(">PPh3|red").unwrap();
+        let anchored_styled = parse_abbreviation_label(">PPh3|red").unwrap();
         assert_eq!(anchored_styled.style, "red");
         assert_eq!(anchored_styled.lone_pairs, None);
     }
 
     #[test]
     fn abbrev_lp_rejects_out_of_range_and_malformed() {
-        assert!(parse_abbrev_label("Cl|Cl|lp=0").is_err());
-        assert!(parse_abbrev_label("Cl|Cl|lp=5").is_err());
-        assert!(parse_abbrev_label("Cl|Cl|lp=-1").is_err());
-        assert!(parse_abbrev_label("Cl|Cl|lp=2.5").is_err());
-        assert!(parse_abbrev_label("Cl|Cl|lp=two").is_err());
-        assert!(parse_abbrev_label("Cl|Cl|lp=").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|lp=0").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|lp=5").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|lp=-1").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|lp=2.5").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|lp=two").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|lp=").is_err());
         // Duplicate lp modifiers.
-        assert!(parse_abbrev_label("Cl|Cl|lp=1|lp=2").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|lp=1|lp=2").is_err());
         // Unknown named modifier.
-        assert!(parse_abbrev_label("Cl|Cl|foo=1").is_err());
+        assert!(parse_abbreviation_label("Cl|Cl|foo=1").is_err());
         // Style after a named modifier.
-        assert!(parse_abbrev_label("Cl|lp=1|Cl").is_err());
+        assert!(parse_abbreviation_label("Cl|lp=1|Cl").is_err());
     }
 
     #[test]
     fn abbrev_lp_count_reaches_layout_output() {
-        let out = layout_native("{>Cl|Cl|lp=3}C").expect("lp layout failed");
-        assert_eq!(out.atoms[0].abbrev, "Cl");
-        assert_eq!(out.atoms[0].lone_pairs, 3);
+        let layout_output = layout_native("{>Cl|Cl|lp=3}C").expect("lp layout failed");
+        assert_eq!(layout_output.atoms[0].abbrev, "Cl");
+        assert_eq!(layout_output.atoms[0].lone_pairs, 3);
         // A fallback direction record is emitted per declared pair so lp()
         // references stay resolvable.
-        assert_eq!(out.atoms[0].lone_pair_dirs.len(), 3);
+        assert_eq!(layout_output.atoms[0].lone_pair_dirs.len(), 3);
     }
 
     #[test]
     fn abbrev_without_lp_has_no_pairs() {
-        let out = layout_native("{PPh3}C=O").expect("no-lp layout failed");
-        assert_eq!(out.atoms[0].abbrev, "PPh3");
-        assert_eq!(out.atoms[0].lone_pairs, 0);
-        assert_eq!(out.atoms[0].lone_pair_dirs.len(), 0);
+        let layout_output = layout_native("{PPh3}C=O").expect("no-lp layout failed");
+        assert_eq!(layout_output.atoms[0].abbrev, "PPh3");
+        assert_eq!(layout_output.atoms[0].lone_pairs, 0);
+        assert_eq!(layout_output.atoms[0].lone_pair_dirs.len(), 0);
     }
 
     #[test]
@@ -1598,32 +1765,37 @@ mod tests {
     #[test]
     fn bracket_h_group_is_one_addressable_index() {
         // [OH-]: one O heavy atom + one virtual H group → 2 atoms total.
-        let out = layout_native("[OH-]").expect("[OH-] layout failed");
-        assert_eq!(out.atoms.len(), 2);
-        assert_eq!(out.atoms[0].symbol, "O");
-        assert!(out.atoms[1].virtual_h);
-        assert_eq!(out.atoms[1].symbol, "H");
-        assert_eq!(out.bonds.len(), 1);
-        assert!(out.bonds[0].virtual_bond);
+        let layout_output = layout_native("[OH-]").expect("[OH-] layout failed");
+        assert_eq!(layout_output.atoms.len(), 2);
+        assert_eq!(layout_output.atoms[0].symbol, "O");
+        assert!(layout_output.atoms[1].virtual_h);
+        assert_eq!(layout_output.atoms[1].symbol, "H");
+        assert_eq!(layout_output.bonds.len(), 1);
+        assert!(layout_output.bonds[0].virtual_bond);
     }
 
     #[test]
     fn ammonium_h_group_is_one_index() {
         // [NH4+]: despite hcount=4 the H-label is one glyph → exactly 1 virtual H.
-        let out = layout_native("[NH4+]").expect("[NH4+] layout failed");
-        assert_eq!(out.atoms.len(), 2); // 1 N + 1 virtual H group
-        assert!(out.atoms[1].virtual_h);
-        assert_eq!(out.bonds.len(), 1);
-        assert!(out.bonds[0].virtual_bond);
+        let layout_output = layout_native("[NH4+]").expect("[NH4+] layout failed");
+        assert_eq!(layout_output.atoms.len(), 2); // 1 N + 1 virtual H group
+        assert!(layout_output.atoms[1].virtual_h);
+        assert_eq!(layout_output.bonds.len(), 1);
+        assert!(layout_output.bonds[0].virtual_bond);
     }
 
     #[test]
     fn virtual_h_has_valid_position() {
-        let out = layout_native("[OH-]").expect("[OH-] layout failed");
-        let o = out.atoms[0].pos;
-        let h = out.atoms[1].pos;
-        let dist = ((h.x - o.x).powi(2) + (h.y - o.y).powi(2)).sqrt();
-        assert!((dist - 0.35).abs() < 1e-6, "H should be 0.35 bond lengths from O, got {dist}");
+        let layout_output = layout_native("[OH-]").expect("[OH-] layout failed");
+        let oxygen_position = layout_output.atoms[0].pos;
+        let hydrogen_position = layout_output.atoms[1].pos;
+        let distance = ((hydrogen_position.x - oxygen_position.x).powi(2)
+            + (hydrogen_position.y - oxygen_position.y).powi(2))
+        .sqrt();
+        assert!(
+            (distance - 0.35).abs() < 1e-6,
+            "H should be 0.35 bond lengths from O, got {distance}"
+        );
     }
 
     // ── Implicit H for expanded valence table ────────────────────────────────
@@ -1631,8 +1803,8 @@ mod tests {
     #[test]
     fn implicit_h_boron() {
         // B (organic subset, valence 3): B bonded to one C → 2 implicit H
-        let out = layout_native("BC").expect("boron layout failed");
-        assert_eq!(out.atoms[0].implicit_h, 2);
+        let layout_output = layout_native("BC").expect("boron layout failed");
+        assert_eq!(layout_output.atoms[0].implicit_h, 2);
     }
 
     #[test]
@@ -1658,12 +1830,13 @@ mod tests {
         assert_eq!(formate.atoms[2].lone_pairs, 2);
     }
 
-    fn max_bond_length(out: &LayoutOutput) -> f64 {
-        out.bonds
+    fn max_bond_length(layout_output: &LayoutOutput) -> f64 {
+        layout_output
+            .bonds
             .iter()
             .map(|bond| {
-                let from = out.atoms[bond.from].pos;
-                let to = out.atoms[bond.to].pos;
+                let from = layout_output.atoms[bond.from].pos;
+                let to = layout_output.atoms[bond.to].pos;
                 from.dist(to)
             })
             .fold(0.0, f64::max)
@@ -1672,180 +1845,216 @@ mod tests {
     /// Smallest distance between any two atoms that are not bonded to each other.
     /// A value well below the ~1.0 bond length signals two parts of the molecule
     /// being laid out on top of one another.
-    fn min_nonbonded_distance(out: &LayoutOutput) -> f64 {
-        let bonded: std::collections::HashSet<(usize, usize)> = out
+    fn min_nonbonded_distance(layout_output: &LayoutOutput) -> f64 {
+        let bonded: std::collections::HashSet<(usize, usize)> = layout_output
             .bonds
             .iter()
             .map(|b| (b.from.min(b.to), b.from.max(b.to)))
             .collect();
         let mut min = f64::INFINITY;
-        for i in 0..out.atoms.len() {
-            for j in (i + 1)..out.atoms.len() {
+        for i in 0..layout_output.atoms.len() {
+            for j in (i + 1)..layout_output.atoms.len() {
                 if bonded.contains(&(i, j)) {
                     continue;
                 }
-                min = min.min(out.atoms[i].pos.dist(out.atoms[j].pos));
+                min = min.min(layout_output.atoms[i].pos.dist(layout_output.atoms[j].pos));
             }
         }
         min
     }
 
-    fn atoms_are_collinear(out: &LayoutOutput, a: usize, b: usize, c: usize) -> bool {
-        let a = out.atoms[a].pos;
-        let b = out.atoms[b].pos;
-        let c = out.atoms[c].pos;
-        let cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    fn atoms_are_collinear(
+        layout_output: &LayoutOutput,
+        first_atom: usize,
+        middle_atom: usize,
+        last_atom: usize,
+    ) -> bool {
+        let first_position = layout_output.atoms[first_atom].pos;
+        let middle_position = layout_output.atoms[middle_atom].pos;
+        let last_position = layout_output.atoms[last_atom].pos;
+        let cross = (middle_position.x - first_position.x) * (last_position.y - middle_position.y)
+            - (middle_position.y - first_position.y) * (last_position.x - middle_position.x);
         cross.abs() < 1e-8
     }
 
     /// End-to-end check: reconstructs the depicted 3D geometry from the rendered
     /// output and verifies every stereocenter's signed volume matches `@`/`@@`.
     fn chirality_matches_smiles(smiles: &str) -> bool {
-        use crate::layout::{implicit_h_count, signed_volume, stereo_h_direction};
+        use crate::layout::{implicit_h_count, signed_volume, stereochemical_hydrogen_direction};
 
-        let pre = preprocess_smiles(smiles).expect("preprocess failed");
-        let mol = MoleculeGraph::from_smiles(
-            &pre.smiles,
-            pre.forced_direction_markers,
-            pre.aromatic_atom_markers,
+        let preprocessed = preprocess_smiles(smiles).expect("preprocess failed");
+        let molecule = MoleculeGraph::from_smiles(
+            &preprocessed.smiles,
+            preprocessed.forced_direction_markers,
+            preprocessed.aromatic_atom_markers,
         )
         .expect("graph build failed");
-        let out = compute_layout(&mol).expect("layout failed");
-        let coords: Vec<crate::render::Vec2> = out.atoms.iter().map(|a| a.pos).collect();
+        let layout_output = compute_layout(&molecule).expect("layout failed");
+        let coordinates: Vec<crate::render::Vec2> =
+            layout_output.atoms.iter().map(|atom| atom.pos).collect();
 
-        for center in 0..mol.atoms.len() {
-            let parity = match out.atoms[center].chirality.as_str() {
+        for center in 0..molecule.atoms.len() {
+            let parity = match layout_output.atoms[center].chirality.as_str() {
                 "tetra_anti" => -1.0_f64,
                 "tetra_clockwise" => 1.0_f64,
                 _ => continue,
             };
-            let neighbor_bonds = &mol.neighbor_bonds[center];
-            let n_h = (mol.atoms[center].hcount + implicit_h_count(&mol, center)) as usize;
-            if neighbor_bonds.len() + n_h != 4 || n_h > 1 {
+            let neighbor_bonds = &molecule.neighbor_bonds[center];
+            let hydrogen_count =
+                (molecule.atoms[center].hcount + implicit_h_count(&molecule, center)) as usize;
+            if neighbor_bonds.len() + hydrogen_count != 4 || hydrogen_count > 1 {
                 continue;
             }
 
             // Neighbor order with the implicit hydrogen inserted (same rule as the
             // renderer): after the "from" atom, or first if there is none.
             #[derive(Clone, Copy)]
-            enum N {
+            enum TetrahedralNeighbor {
                 Bond(usize, usize),
-                H,
+                Hydrogen,
             }
-            let mut order: Vec<N> = neighbor_bonds
+            let mut neighbor_order: Vec<TetrahedralNeighbor> = neighbor_bonds
                 .iter()
-                .map(|&b| {
-                    let bond = &mol.bonds[b];
-                    let other = if bond.from == center { bond.to } else { bond.from };
-                    N::Bond(b, other)
+                .map(|&bond_index| {
+                    let bond = &molecule.bonds[bond_index];
+                    let other = if bond.from == center {
+                        bond.to
+                    } else {
+                        bond.from
+                    };
+                    TetrahedralNeighbor::Bond(bond_index, other)
                 })
                 .collect();
-            if n_h == 1 {
-                let pos = if mol.has_preceding[center] { 1 } else { 0 };
-                order.insert(pos.min(order.len()), N::H);
+            if hydrogen_count == 1 {
+                let insertion_position = if molecule.has_preceding[center] { 1 } else { 0 };
+                neighbor_order.insert(
+                    insertion_position.min(neighbor_order.len()),
+                    TetrahedralNeighbor::Hydrogen,
+                );
             }
 
             // Which bond (if any) carries the rendered wedge, and its z sign.
             let wedge_bond = neighbor_bonds
                 .iter()
-                .find(|&&b| out.bonds[b].stereo != "none")
+                .find(|&&bond_index| layout_output.bonds[bond_index].stereo != "none")
                 .copied();
-            let h_dir = stereo_h_direction(&mol, center, &coords, None);
+            let hydrogen_direction =
+                stereochemical_hydrogen_direction(&molecule, center, &coordinates, None);
 
-            let unit = |dx: f64, dy: f64| {
-                let l = (dx * dx + dy * dy).sqrt();
-                if l > 1e-12 {
-                    (dx / l, dy / l)
+            let normalize = |offset_x: f64, offset_y: f64| {
+                let length = (offset_x * offset_x + offset_y * offset_y).sqrt();
+                if length > 1e-12 {
+                    (offset_x / length, offset_y / length)
                 } else {
-                    (dx, dy)
+                    (offset_x, offset_y)
                 }
             };
-            let z_of = |s: &str| if s == "wedge_up" { 1.0 } else { -1.0 };
+            let stereo_depth = |stereo: &str| if stereo == "wedge_up" { 1.0 } else { -1.0 };
 
-            let mut dirs = [[0.0_f64; 3]; 4];
-            for (i, slot) in order.iter().enumerate() {
-                dirs[i] = match slot {
-                    N::Bond(b, other) => {
-                        let (ux, uy) =
-                            unit(coords[*other].x - coords[center].x, coords[*other].y - coords[center].y);
-                        let z = if Some(*b) == wedge_bond {
-                            z_of(&out.bonds[*b].stereo)
+            let mut directions = [[0.0_f64; 3]; 4];
+            for (neighbor_index, neighbor) in neighbor_order.iter().enumerate() {
+                directions[neighbor_index] = match neighbor {
+                    TetrahedralNeighbor::Bond(bond_index, other) => {
+                        let (direction_x, direction_y) = normalize(
+                            coordinates[*other].x - coordinates[center].x,
+                            coordinates[*other].y - coordinates[center].y,
+                        );
+                        let depth = if Some(*bond_index) == wedge_bond {
+                            stereo_depth(&layout_output.bonds[*bond_index].stereo)
                         } else {
                             0.0
                         };
-                        [ux, uy, z]
+                        [direction_x, direction_y, depth]
                     }
-                    N::H => {
+                    TetrahedralNeighbor::Hydrogen => {
                         // If the H itself is wedged, use that; otherwise it sits on
                         // the face opposite the wedged heavy substituent.
-                        let z = if out.atoms[center].stereo_h != "none" {
-                            z_of(&out.atoms[center].stereo_h)
-                        } else if let Some(b) = wedge_bond {
-                            -z_of(&out.bonds[b].stereo)
+                        let depth = if layout_output.atoms[center].stereo_h != "none" {
+                            stereo_depth(&layout_output.atoms[center].stereo_h)
+                        } else if let Some(bond_index) = wedge_bond {
+                            -stereo_depth(&layout_output.bonds[bond_index].stereo)
                         } else {
                             0.0
                         };
-                        let dir = if out.atoms[center].stereo_h != "none" {
-                            out.atoms[center].stereo_h_dir
+                        let direction = if layout_output.atoms[center].stereo_h != "none" {
+                            layout_output.atoms[center].stereo_h_dir
                         } else {
-                            h_dir
+                            hydrogen_direction
                         };
-                        [dir.x, dir.y, z]
+                        [direction.x, direction.y, depth]
                     }
                 };
             }
 
-            let vol = signed_volume(&dirs);
-            if vol.abs() < 1e-9 || vol.signum() != parity {
+            let volume = signed_volume(&directions);
+            if volume.abs() < 1e-9 || volume.signum() != parity {
                 return false;
             }
         }
         true
     }
 
-    fn chiral_oxygen_bond_has_stereo(out: &LayoutOutput) -> bool {
-        out.bonds.iter().any(|bond| {
-            let from = &out.atoms[bond.from];
-            let to = &out.atoms[bond.to];
+    fn chiral_oxygen_bond_has_stereo(layout_output: &LayoutOutput) -> bool {
+        layout_output.bonds.iter().any(|bond| {
+            let from = &layout_output.atoms[bond.from];
+            let to = &layout_output.atoms[bond.to];
             bond.stereo != "none"
                 && ((from.chirality != "none" && to.symbol == "O")
                     || (to.chirality != "none" && from.symbol == "O"))
         })
     }
 
-    fn alkene_substituent_side_product(out: &LayoutOutput) -> i8 {
-        let double = out.bonds.iter().find(|b| b.order == 2).unwrap();
-        let a = double.from;
-        let b = double.to;
-        let left = out
+    fn alkene_substituent_side_product(layout_output: &LayoutOutput) -> i8 {
+        let double = layout_output
             .bonds
             .iter()
-            .find(|bond| bond.order == 1 && (bond.from == a || bond.to == a))
+            .find(|bond| bond.order == 2)
             .unwrap();
-        let right = out
+        let first_alkene_atom = double.from;
+        let second_alkene_atom = double.to;
+        let left = layout_output
             .bonds
             .iter()
-            .find(|bond| bond.order == 1 && (bond.from == b || bond.to == b))
+            .find(|bond| {
+                bond.order == 1 && (bond.from == first_alkene_atom || bond.to == first_alkene_atom)
+            })
             .unwrap();
-        let left_neighbor = if left.from == a { left.to } else { left.from };
-        let right_neighbor = if right.from == b {
+        let right = layout_output
+            .bonds
+            .iter()
+            .find(|bond| {
+                bond.order == 1
+                    && (bond.from == second_alkene_atom || bond.to == second_alkene_atom)
+            })
+            .unwrap();
+        let left_neighbor = if left.from == first_alkene_atom {
+            left.to
+        } else {
+            left.from
+        };
+        let right_neighbor = if right.from == second_alkene_atom {
             right.to
         } else {
             right.from
         };
         side(
-            out.atoms[a].pos,
-            out.atoms[b].pos,
-            out.atoms[left_neighbor].pos,
+            layout_output.atoms[first_alkene_atom].pos,
+            layout_output.atoms[second_alkene_atom].pos,
+            layout_output.atoms[left_neighbor].pos,
         ) * side(
-            out.atoms[a].pos,
-            out.atoms[b].pos,
-            out.atoms[right_neighbor].pos,
+            layout_output.atoms[first_alkene_atom].pos,
+            layout_output.atoms[second_alkene_atom].pos,
+            layout_output.atoms[right_neighbor].pos,
         )
     }
 
-    fn side(a: crate::render::Vec2, b: crate::render::Vec2, p: crate::render::Vec2) -> i8 {
-        let cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    fn side(
+        line_start: crate::render::Vec2,
+        line_end: crate::render::Vec2,
+        point: crate::render::Vec2,
+    ) -> i8 {
+        let cross = (line_end.x - line_start.x) * (point.y - line_start.y)
+            - (line_end.y - line_start.y) * (point.x - line_start.x);
         if cross > 1e-8 {
             1
         } else {
@@ -1853,11 +2062,7 @@ mod tests {
         }
     }
 
-    fn turn_cross(
-        a: crate::render::Vec2,
-        b: crate::render::Vec2,
-        c: crate::render::Vec2,
-    ) -> f64 {
+    fn turn_cross(a: crate::render::Vec2, b: crate::render::Vec2, c: crate::render::Vec2) -> f64 {
         (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
     }
 
@@ -1866,32 +2071,62 @@ mod tests {
         let normal = layout_native("CCCC").expect("normal chain failed");
         let curled = layout_native("CCC!cC").expect("curled chain failed");
 
-        let normal_first = turn_cross(normal.atoms[0].pos, normal.atoms[1].pos, normal.atoms[2].pos);
-        let normal_second = turn_cross(normal.atoms[1].pos, normal.atoms[2].pos, normal.atoms[3].pos);
+        let normal_first = turn_cross(
+            normal.atoms[0].pos,
+            normal.atoms[1].pos,
+            normal.atoms[2].pos,
+        );
+        let normal_second = turn_cross(
+            normal.atoms[1].pos,
+            normal.atoms[2].pos,
+            normal.atoms[3].pos,
+        );
         assert!(normal_first * normal_second < 0.0);
 
-        let curl_first = turn_cross(curled.atoms[0].pos, curled.atoms[1].pos, curled.atoms[2].pos);
-        let curl_second = turn_cross(curled.atoms[1].pos, curled.atoms[2].pos, curled.atoms[3].pos);
+        let curl_first = turn_cross(
+            curled.atoms[0].pos,
+            curled.atoms[1].pos,
+            curled.atoms[2].pos,
+        );
+        let curl_second = turn_cross(
+            curled.atoms[1].pos,
+            curled.atoms[2].pos,
+            curled.atoms[3].pos,
+        );
         assert!(curl_first * curl_second > 0.0);
     }
 
     #[test]
     fn curl_swaps_forward_branch_slots_without_overlap() {
-        let out = layout_native("CCC({PPh3})!cC(=O)OCC").expect("branched curl failed");
-        let first = turn_cross(out.atoms[0].pos, out.atoms[1].pos, out.atoms[2].pos);
-        let second = turn_cross(out.atoms[1].pos, out.atoms[2].pos, out.atoms[4].pos);
+        let layout_output = layout_native("CCC({PPh3})!cC(=O)OCC").expect("branched curl failed");
+        let first = turn_cross(
+            layout_output.atoms[0].pos,
+            layout_output.atoms[1].pos,
+            layout_output.atoms[2].pos,
+        );
+        let second = turn_cross(
+            layout_output.atoms[1].pos,
+            layout_output.atoms[2].pos,
+            layout_output.atoms[4].pos,
+        );
         assert!(first * second > 0.0);
-        assert!(min_atom_distance(&out) >= 0.5);
+        assert!(min_atom_distance(&layout_output) >= 0.5);
     }
 
     #[test]
     fn consecutive_curls_repeat_each_new_turn() {
-        let out = layout_native("CCCC!cC!cC").expect("consecutive curls failed");
+        let layout_output = layout_native("CCCC!cC!cC").expect("consecutive curls failed");
         let turns = (0..3)
-            .map(|i| turn_cross(out.atoms[i + 1].pos, out.atoms[i + 2].pos, out.atoms[i + 3].pos))
+            .map(|i| {
+                turn_cross(
+                    layout_output.atoms[i + 1].pos,
+                    layout_output.atoms[i + 2].pos,
+                    layout_output.atoms[i + 3].pos,
+                )
+            })
             .collect::<Vec<_>>();
         assert!(turns.iter().all(|turn| turns[0] * turn > 0.0));
-        assert!(min_atom_distance(&out) >= 0.5);
+        assert!(min_atom_distance(&layout_output) >= 0.5);
     }
 
     #[test]
@@ -1903,8 +2138,9 @@ mod tests {
         ];
 
         for smiles in molecules {
-            let out = layout_native(smiles).unwrap_or_else(|err| panic!("{smiles}: {err}"));
-            let min = min_atom_distance(&out);
+            let layout_output =
+                layout_native(smiles).unwrap_or_else(|err| panic!("{smiles}: {err}"));
+            let min = min_atom_distance(&layout_output);
             assert!(min >= 0.5, "{smiles}: min atom distance {min:.3}");
         }
     }
@@ -1916,8 +2152,16 @@ mod tests {
 
         let double = layout_native("CCC!c=C").expect("curled double failed");
         assert_eq!(double.bonds[2].order, 2);
-        let first = turn_cross(double.atoms[0].pos, double.atoms[1].pos, double.atoms[2].pos);
-        let second = turn_cross(double.atoms[1].pos, double.atoms[2].pos, double.atoms[3].pos);
+        let first = turn_cross(
+            double.atoms[0].pos,
+            double.atoms[1].pos,
+            double.atoms[2].pos,
+        );
+        let second = turn_cross(
+            double.atoms[1].pos,
+            double.atoms[2].pos,
+            double.atoms[3].pos,
+        );
         assert!(first * second > 0.0);
     }
 
@@ -1934,21 +2178,19 @@ mod tests {
     // PubChemElements_all.json).
 
     fn assert_weight(smiles: &str, expected: f64) {
-        let w = mol_weight_native(smiles).expect("mol weight failed");
+        let molecular_weight = mol_weight_native(smiles).expect("mol weight failed");
         assert!(
-            (w - expected).abs() < 0.01,
-            "mol_weight({smiles}) = {w}, expected {expected}"
+            (molecular_weight - expected).abs() < 0.01,
+            "mol_weight({smiles}) = {molecular_weight}, expected {expected}"
         );
     }
 
     /// Extracts every SMILES string literal passed to `smiles("...")` or
     /// `mol("...")` in the visual test file, undoing Typst string escapes.
     fn test_typ_smiles_strings() -> Vec<String> {
-        let src = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../tests/test.typ"
-        ))
-        .expect("tests/test.typ not found");
+        let src =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/test.typ"))
+                .expect("tests/test.typ not found");
         let src: String = src
             .lines()
             .filter(|l| !l.trim_start().starts_with("//"))
@@ -1983,13 +2225,16 @@ mod tests {
     #[test]
     fn every_molecule_in_test_typ_has_no_overlapping_atoms() {
         let molecules = test_typ_smiles_strings();
-        assert!(molecules.len() > 50, "extraction looks broken: {molecules:?}");
+        assert!(
+            molecules.len() > 50,
+            "extraction looks broken: {molecules:?}"
+        );
         let mut failures = Vec::new();
         for m in &molecules {
             match layout_native(m) {
-                Ok(out) => {
-                    let min = min_atom_distance(&out);
-                    if out.atoms.len() > 1 && min < 0.5 {
+                Ok(layout_output) => {
+                    let min = min_atom_distance(&layout_output);
+                    if layout_output.atoms.len() > 1 && min < 0.5 {
                         failures.push(format!("{m}: min atom distance {min:.3}"));
                     }
                 }
@@ -2007,32 +2252,39 @@ mod tests {
 
     #[test]
     fn aromatic_input_emits_ring_circles() {
-        let out = layout_native("c1ccccc1").expect("benzene layout failed");
-        assert_eq!(out.aromatic_rings.len(), 1);
-        let ring = &out.aromatic_rings[0];
+        let layout_output = layout_native("c1ccccc1").expect("benzene layout failed");
+        assert_eq!(layout_output.aromatic_rings.len(), 1);
+        let ring = &layout_output.aromatic_rings[0];
         // Hexagon with unit bonds: inradius ~0.866, so radius ~0.62.
         assert!((ring.radius - 0.866 * 0.72).abs() < 0.05);
-        assert!(out.bonds.iter().filter(|b| b.aromatic).count() == 6);
+        assert!(
+            layout_output
+                .bonds
+                .iter()
+                .filter(|bond| bond.aromatic)
+                .count()
+                == 6
+        );
     }
 
     #[test]
     fn kekule_input_emits_no_ring_circles() {
-        let out = layout_native("C1=CC=CC=C1").expect("benzene layout failed");
-        assert!(out.aromatic_rings.is_empty());
-        assert!(out.bonds.iter().all(|b| !b.aromatic));
+        let layout_output = layout_native("C1=CC=CC=C1").expect("benzene layout failed");
+        assert!(layout_output.aromatic_rings.is_empty());
+        assert!(layout_output.bonds.iter().all(|b| !b.aromatic));
     }
 
     #[test]
     fn fused_aromatics_emit_one_circle_per_ring() {
-        let out = layout_native("c1ccc2ccccc2c1").expect("naphthalene layout failed");
-        assert_eq!(out.aromatic_rings.len(), 2);
+        let layout_output = layout_native("c1ccc2ccccc2c1").expect("naphthalene layout failed");
+        assert_eq!(layout_output.aromatic_rings.len(), 2);
     }
 
     #[test]
     fn aromatic_ring_with_saturated_neighbor_ring() {
         // Indane: only the aromatic ring gets a circle.
-        let out = layout_native("c1ccc2CCCc2c1").expect("indane layout failed");
-        assert_eq!(out.aromatic_rings.len(), 1);
+        let layout_output = layout_native("c1ccc2CCCc2c1").expect("indane layout failed");
+        assert_eq!(layout_output.aromatic_rings.len(), 1);
     }
 
     #[test]

@@ -1,9 +1,8 @@
 /// Builds an internal molecular graph by walking the smiles_parser Chain AST.
 ///
-/// We do NOT use smiles_parser::graph::MoleculeGraph because:
-///   - it ignores ring-closure bonds (cyclic molecules would be wrong)
-///   - it panics on N, S, halogens, and other common heteroatoms
-///   - it adds explicit H atoms (which we want to keep implicit for depiction)
+/// The parser's graph conversion does not preserve all information needed for
+/// depiction, including ring closures, common heteroatoms, and folded explicit
+/// hydrogens.
 ///
 /// We walk the Chain tree recursively and handle ring-closure bonds ourselves
 /// via a HashMap keyed on the SMILES ring-opening digit.
@@ -197,8 +196,8 @@ impl MoleculeGraph {
         aromatic_atom_markers: Vec<bool>,
     ) -> Result<Self, String> {
         // smiles_parser::chain takes &[u8] and returns IResult<&[u8], Chain>
-        let (remaining, chain_ast) = parse_chain(smiles.as_bytes())
-            .map_err(|e| format!("SMILES parse failed for {:?}: {e:?}", smiles))?;
+        let (remaining, chain) = parse_chain(smiles.as_bytes())
+            .map_err(|error| format!("SMILES parse failed for {:?}: {error:?}", smiles))?;
         if !remaining.is_empty() {
             let tail = std::str::from_utf8(remaining).unwrap_or("<invalid UTF-8>");
             return Err(format!(
@@ -212,22 +211,15 @@ impl MoleculeGraph {
             aromatic_atom_markers: VecDeque::from(aromatic_atom_markers),
             ..GraphBuilder::default()
         };
-        builder.walk_chain(&chain_ast, None, None);
+        builder.walk_chain(&chain, None, None);
 
-        // Drop any unpatched ring-opening slot (only possible for malformed SMILES).
         let neighbor_bonds = builder
             .neighbor_slots
             .into_iter()
-            .map(|slots| {
-                slots
-                    .into_iter()
-                    .filter(|&b| b >= 0)
-                    .map(|b| b as usize)
-                    .collect()
-            })
+            .map(|slots| slots.into_iter().flatten().collect())
             .collect();
 
-        let mut mol = MoleculeGraph {
+        let mut molecule = MoleculeGraph {
             atoms: builder.atoms,
             bonds: builder.bonds,
             adj: builder.adj,
@@ -235,8 +227,8 @@ impl MoleculeGraph {
             has_preceding: builder.has_preceding,
             preceding_atom: builder.preceding_atom,
         };
-        crate::kekulize::kekulize(&mut mol, &builder.bond_implicit)?;
-        Ok(mol)
+        crate::kekulize::kekulize(&mut molecule, &builder.bond_implicit)?;
+        Ok(molecule)
     }
 
     pub fn n_atoms(&self) -> usize {
@@ -244,21 +236,18 @@ impl MoleculeGraph {
     }
 }
 
-// ── Internal tree walker ──────────────────────────────────────────────────────
-
 #[derive(Default)]
 struct GraphBuilder {
     atoms: Vec<Atom>,
     bonds: Vec<Bond>,
     adj: Vec<Vec<(usize, usize)>>,
-    /// Per-atom bond indices in SMILES writing order. A value of -1 is a
-    /// placeholder reserved for a ring-opening bond, patched when the ring closes.
-    neighbor_slots: Vec<Vec<i64>>,
+    /// Per-atom bond indices in SMILES writing order. An empty slot reserves
+    /// the writing position of a ring-opening bond until the ring closes.
+    neighbor_slots: Vec<Vec<Option<usize>>>,
     /// has_preceding[i] = atom `i` had a "from" atom to its left.
     has_preceding: Vec<bool>,
     preceding_atom: Vec<Option<usize>>,
-    /// ring_number → (atom_idx, bond_spec_or_none, slot_index_in_opener)
-    open_rings: HashMap<u8, (usize, Option<BondSpec>, usize)>,
+    open_rings: HashMap<u8, OpenRing>,
     /// One entry for every `/` or `\` bond token seen by smiles-parser,
     /// recording whether it is genuine SMILES or a typed-smiles drawing
     /// extension (`!w`/`!h`/`!s`/`!d`) and which forced style it carries.
@@ -272,152 +261,215 @@ struct GraphBuilder {
     bond_implicit: Vec<bool>,
 }
 
+struct OpenRing {
+    atom_index: usize,
+    bond_specification: Option<BondSpec>,
+    neighbor_slot: usize,
+}
+
 impl GraphBuilder {
     fn add_atom(&mut self, atom: Atom) -> usize {
-        let idx = self.atoms.len();
+        let atom_index = self.atoms.len();
         self.atoms.push(atom);
         self.adj.push(Vec::new());
         self.neighbor_slots.push(Vec::new());
         self.has_preceding.push(false);
         self.preceding_atom.push(None);
-        idx
+        atom_index
     }
 
-    fn add_bond(&mut self, from: usize, to: usize, spec: BondSpec, implicit: bool) {
-        let b_idx = self.bonds.len();
+    fn add_bond(&mut self, from: usize, to: usize, bond_specification: BondSpec, implicit: bool) {
+        let bond_index = self.bonds.len();
         self.bonds.push(Bond {
             from,
             to,
-            order: spec.order,
-            stereo: spec.stereo,
-            direction: spec.direction,
-            forced_stereo: spec.forced_stereo,
-            curl: spec.curl,
+            order: bond_specification.order,
+            stereo: bond_specification.stereo,
+            direction: bond_specification.direction,
+            forced_stereo: bond_specification.forced_stereo,
+            curl: bond_specification.curl,
             aromatic: false,
         });
         self.bond_implicit.push(implicit);
-        self.adj[from].push((to, b_idx));
-        self.adj[to].push((from, b_idx));
+        self.adj[from].push((to, bond_index));
+        self.adj[to].push((from, bond_index));
     }
 
-    /// Walk a Chain node.
-    ///
-    /// `prev_atom`    — index of the preceding atom to bond to (or None at root).
-    /// `incoming_bond` — bond order for the edge (prev → cur). Determined by the
-    ///                   *parent* chain's `bond_or_dot`, not this node's own field.
-    ///
-    /// Key invariant: `chain.bond_or_dot` describes the bond from the CURRENT
-    /// atom OUTWARD to the next atom in `chain.chain`. It must be forwarded as
-    /// `incoming_bond` when recursing into `chain.chain`, not read by the child.
+    /// The parent passes its outgoing bond to the child because `bond_or_dot`
+    /// belongs to the current chain node rather than its successor.
     fn walk_chain(
         &mut self,
         chain: &smiles_parser::Chain,
-        prev_atom: Option<usize>,
-        incoming: Option<BondSpec>,
+        preceding_atom: Option<usize>,
+        incoming_bond: Option<BondSpec>,
     ) {
-        let ba = &chain.branched_atom;
-
-        // Add this atom. Unbracketed organic-subset atoms consume one aromatic
-        // marker each; bracket atoms carry the flag from the parser instead.
-        let mut atom = smiles_atom_to_atom(&ba.atom);
-        if matches!(ba.atom, SAtom::AliphaticOrganic(_))
+        let branched_atom = &chain.branched_atom;
+        let mut atom = smiles_atom_to_atom(&branched_atom.atom);
+        if matches!(branched_atom.atom, SAtom::AliphaticOrganic(_))
             && self.aromatic_atom_markers.pop_front().unwrap_or(false)
         {
             atom.aromatic = true;
         }
 
-        // Fold a terminal plain hydrogen (`[H]`) into its heavy neighbor's
-        // hydrogen count instead of keeping it as a drawn atom, mirroring how
-        // depiction tools treat explicit hydrogens. Isotopic, charged, or
-        // further-bonded hydrogens, and H2, stay as real atoms.
-        if let Some(prev) = prev_atom {
-            if atom.symbol == "H"
-                && atom.charge == 0
-                && atom.isotope.is_none()
-                && ba.ring_bonds.is_empty()
-                && ba.branches.is_empty()
-                && chain.chain.is_none()
-                && self.atoms[prev].symbol != "H"
-            {
-                self.atoms[prev].hcount = self.atoms[prev].hcount.saturating_add(1);
-                self.atoms[prev].has_explicit_h = true;
-                // Release the neighbor slot the parent reserved for this bond so
-                // it is dropped from the parent's neighbor ordering.
-                if let Some(slot) = self.neighbor_slots[prev].last_mut() {
-                    *slot = -1;
-                }
-                return;
-            }
+        if self.fold_terminal_hydrogen(&atom, chain, preceding_atom) {
+            return;
         }
 
-        let cur = self.add_atom(atom);
-
-        // Bond to the previous atom using the bond the PARENT passed down; the
-        // incoming bond is the first neighbor slot for `cur`.
-        if let Some(prev) = prev_atom {
-            self.has_preceding[cur] = true;
-            self.preceding_atom[cur] = Some(prev);
-            let b_idx = self.bonds.len();
-            let implicit = incoming.is_none();
-            self.add_bond(prev, cur, incoming.unwrap_or_else(BondSpec::single), implicit);
-            self.neighbor_slots[cur].push(b_idx as i64);
+        let current_atom = self.add_atom(atom);
+        if let Some(preceding_atom) = preceding_atom {
+            self.connect_to_preceding_atom(current_atom, preceding_atom, incoming_bond);
         }
 
-        // Process ring-closure bonds. The digit is written here, so it occupies a
-        // neighbor slot at this position even though the bond is created later at
-        // the closing atom (reserved as -1, patched on close).
-        for rb in &ba.ring_bonds {
-            let ring_num = rb.ring_number;
-            let ring_spec = rb.bond.as_ref().map(|b| self.sparser_to_bond_spec(b));
+        self.process_ring_bonds(current_atom, &branched_atom.ring_bonds);
+        self.process_branches(current_atom, &branched_atom.branches);
+        self.continue_main_chain(current_atom, chain);
+    }
 
-            if let Some((open_atom, open_spec, open_slot)) = self.open_rings.remove(&ring_num) {
-                let implicit = ring_spec.is_none() && open_spec.is_none();
-                let spec = ring_spec.or(open_spec).unwrap_or_else(BondSpec::single);
-                let b_idx = self.bonds.len();
-                self.add_bond(open_atom, cur, spec, implicit);
-                self.neighbor_slots[open_atom][open_slot] = b_idx as i64;
-                self.neighbor_slots[cur].push(b_idx as i64);
+    fn fold_terminal_hydrogen(
+        &mut self,
+        atom: &Atom,
+        chain: &smiles_parser::Chain,
+        preceding_atom: Option<usize>,
+    ) -> bool {
+        let Some(preceding_atom) = preceding_atom else {
+            return false;
+        };
+        let branched_atom = &chain.branched_atom;
+        let should_fold = atom.symbol == "H"
+            && atom.charge == 0
+            && atom.isotope.is_none()
+            && branched_atom.ring_bonds.is_empty()
+            && branched_atom.branches.is_empty()
+            && chain.chain.is_none()
+            && self.atoms[preceding_atom].symbol != "H";
+        if !should_fold {
+            return false;
+        }
+
+        self.atoms[preceding_atom].hcount = self.atoms[preceding_atom].hcount.saturating_add(1);
+        self.atoms[preceding_atom].has_explicit_h = true;
+        if let Some(neighbor_slot) = self.neighbor_slots[preceding_atom].last_mut() {
+            *neighbor_slot = None;
+        }
+        true
+    }
+
+    fn connect_to_preceding_atom(
+        &mut self,
+        current_atom: usize,
+        preceding_atom: usize,
+        incoming_bond: Option<BondSpec>,
+    ) {
+        self.has_preceding[current_atom] = true;
+        self.preceding_atom[current_atom] = Some(preceding_atom);
+        let bond_index = self.bonds.len();
+        let implicit = incoming_bond.is_none();
+        self.add_bond(
+            preceding_atom,
+            current_atom,
+            incoming_bond.unwrap_or_else(BondSpec::single),
+            implicit,
+        );
+        self.neighbor_slots[current_atom].push(Some(bond_index));
+    }
+
+    fn process_ring_bonds(&mut self, current_atom: usize, ring_bonds: &[smiles_parser::RingBond]) {
+        for ring_bond in ring_bonds {
+            let ring_number = ring_bond.ring_number;
+            let closing_specification = ring_bond
+                .bond
+                .as_ref()
+                .map(|bond| self.parser_bond_to_specification(bond));
+
+            if let Some(open_ring) = self.open_rings.remove(&ring_number) {
+                self.close_ring(current_atom, open_ring, closing_specification);
             } else {
-                let slot = self.neighbor_slots[cur].len();
-                self.neighbor_slots[cur].push(-1);
-                self.open_rings.insert(ring_num, (cur, ring_spec, slot));
+                self.open_ring(current_atom, ring_number, closing_specification);
             }
         }
+    }
 
-        // Process branches — each branch starts from `cur`. A dot separator
-        // means "no bond": the branch is a disconnected fragment and gets no
-        // bond and no neighbor slot on `cur`.
-        for branch in &ba.branches {
+    fn close_ring(
+        &mut self,
+        current_atom: usize,
+        open_ring: OpenRing,
+        closing_specification: Option<BondSpec>,
+    ) {
+        let implicit = closing_specification.is_none() && open_ring.bond_specification.is_none();
+        let bond_specification = closing_specification
+            .or(open_ring.bond_specification)
+            .unwrap_or_else(BondSpec::single);
+        let bond_index = self.bonds.len();
+        self.add_bond(
+            open_ring.atom_index,
+            current_atom,
+            bond_specification,
+            implicit,
+        );
+        self.neighbor_slots[open_ring.atom_index][open_ring.neighbor_slot] = Some(bond_index);
+        self.neighbor_slots[current_atom].push(Some(bond_index));
+    }
+
+    fn open_ring(
+        &mut self,
+        current_atom: usize,
+        ring_number: u8,
+        bond_specification: Option<BondSpec>,
+    ) {
+        let neighbor_slot = self.neighbor_slots[current_atom].len();
+        self.neighbor_slots[current_atom].push(None);
+        self.open_rings.insert(
+            ring_number,
+            OpenRing {
+                atom_index: current_atom,
+                bond_specification,
+                neighbor_slot,
+            },
+        );
+    }
+
+    fn process_branches(&mut self, current_atom: usize, branches: &[smiles_parser::Branch]) {
+        for branch in branches {
             if matches!(branch.bond_or_dot, Some(BondOrDot::Dot(_))) {
                 self.walk_chain(&branch.chain, None, None);
                 continue;
             }
-            let branch_bond = branch.bond_or_dot.as_ref().and_then(|bod| match bod {
-                BondOrDot::Bond(b) => Some(self.sparser_to_bond_spec(b)),
-                BondOrDot::Dot(_) => None,
-            });
-            self.neighbor_slots[cur].push(self.bonds.len() as i64);
-            self.walk_chain(&branch.chain, Some(cur), branch_bond);
-        }
 
-        // Continue the main chain, forwarding THIS node's outgoing bond. A dot
-        // starts a new disconnected fragment instead of bonding to `cur`.
+            let branch_bond =
+                branch
+                    .bond_or_dot
+                    .as_ref()
+                    .and_then(|bond_or_dot| match bond_or_dot {
+                        BondOrDot::Bond(bond) => Some(self.parser_bond_to_specification(bond)),
+                        BondOrDot::Dot(_) => None,
+                    });
+            self.neighbor_slots[current_atom].push(Some(self.bonds.len()));
+            self.walk_chain(&branch.chain, Some(current_atom), branch_bond);
+        }
+    }
+
+    fn continue_main_chain(&mut self, current_atom: usize, chain: &smiles_parser::Chain) {
         if let Some(next) = &chain.chain {
             if matches!(chain.bond_or_dot, Some(BondOrDot::Dot(_))) {
                 self.walk_chain(next, None, None);
                 return;
             }
-            let outgoing = chain.bond_or_dot.as_ref().and_then(|bod| match bod {
-                BondOrDot::Bond(b) => Some(self.sparser_to_bond_spec(b)),
-                BondOrDot::Dot(_) => None,
-            });
-            self.neighbor_slots[cur].push(self.bonds.len() as i64);
-            self.walk_chain(next, Some(cur), outgoing);
+
+            let outgoing_bond =
+                chain
+                    .bond_or_dot
+                    .as_ref()
+                    .and_then(|bond_or_dot| match bond_or_dot {
+                        BondOrDot::Bond(bond) => Some(self.parser_bond_to_specification(bond)),
+                        BondOrDot::Dot(_) => None,
+                    });
+            self.neighbor_slots[current_atom].push(Some(self.bonds.len()));
+            self.walk_chain(next, Some(current_atom), outgoing_bond);
         }
     }
 
-    fn sparser_to_bond_spec(&mut self, b: &SBond) -> BondSpec {
-        let marker = if matches!(b, SBond::Up | SBond::Down) {
+    fn parser_bond_to_specification(&mut self, parser_bond: &SBond) -> BondSpec {
+        let marker = if matches!(parser_bond, SBond::Up | SBond::Down) {
             self.forced_direction_markers
                 .pop_front()
                 .unwrap_or(BondMarker {
@@ -427,16 +479,16 @@ impl GraphBuilder {
                 })
         } else {
             return BondSpec {
-                order: sparser_bond_to_order(b),
+                order: parser_bond_order(parser_bond),
                 stereo: BondStereo::None,
-                direction: sparser_bond_to_direction(b),
+                direction: parser_bond_direction(parser_bond),
                 forced_stereo: false,
                 curl: false,
             };
         };
         let (stereo, direction, forced_stereo) = match marker.style {
             BondMarkerStyle::Directional => {
-                (BondStereo::None, sparser_bond_to_direction(b), false)
+                (BondStereo::None, parser_bond_direction(parser_bond), false)
             }
             BondMarkerStyle::Plain => (BondStereo::None, BondDirection::None, false),
             BondMarkerStyle::WedgeUp => (BondStereo::WedgeUp, BondDirection::None, true),
@@ -454,56 +506,47 @@ impl GraphBuilder {
     }
 }
 
-// ── Conversion helpers ────────────────────────────────────────────────────────
-
 fn smiles_atom_to_atom(atom: &SAtom) -> Atom {
     match atom {
-        SAtom::AliphaticOrganic(a) => Atom {
-            symbol: element_symbol(a.element),
-            aromatic: false,
-            hcount: 0,
-            has_explicit_h: false,
-            isotope: None,
-            charge: 0,
-            chirality: AtomChirality::None,
-            abbrev: String::new(),
-            abbrev_style: String::new(),
-            abbrev_anchor: 0,
-            abbrev_anchor_len: 0,
-            abbrev_lone_pairs: 0,
-        },
-        SAtom::Bracket(b) => bracket_to_atom(b),
-        SAtom::Unknown => Atom {
-            symbol: "*".to_string(),
-            aromatic: false,
-            hcount: 0,
-            has_explicit_h: false,
-            isotope: None,
-            charge: 0,
-            chirality: AtomChirality::None,
-            abbrev: String::new(),
-            abbrev_style: String::new(),
-            abbrev_anchor: 0,
-            abbrev_anchor_len: 0,
-            abbrev_lone_pairs: 0,
-        },
+        SAtom::AliphaticOrganic(organic_atom) => {
+            atom_with_symbol(element_symbol(organic_atom.element))
+        }
+        SAtom::Bracket(bracket_atom) => bracket_to_atom(bracket_atom),
+        SAtom::Unknown => atom_with_symbol("*".to_string()),
     }
 }
 
-fn bracket_to_atom(b: &BracketAtom) -> Atom {
-    let (symbol, aromatic) = match &b.symbol {
-        Symbol::ElementSymbol(e) => (element_symbol(*e), false),
-        Symbol::AromaticSymbol(e) => (element_symbol(*e), true),
+fn atom_with_symbol(symbol: String) -> Atom {
+    Atom {
+        symbol,
+        aromatic: false,
+        hcount: 0,
+        has_explicit_h: false,
+        isotope: None,
+        charge: 0,
+        chirality: AtomChirality::None,
+        abbrev: String::new(),
+        abbrev_style: String::new(),
+        abbrev_anchor: 0,
+        abbrev_anchor_len: 0,
+        abbrev_lone_pairs: 0,
+    }
+}
+
+fn bracket_to_atom(bracket_atom: &BracketAtom) -> Atom {
+    let (symbol, aromatic) = match &bracket_atom.symbol {
+        Symbol::ElementSymbol(element) => (element_symbol(*element), false),
+        Symbol::AromaticSymbol(element) => (element_symbol(*element), true),
         Symbol::Unknown => ("*".to_string(), false),
     };
     Atom {
         symbol,
         aromatic,
-        hcount: b.hcount,
+        hcount: bracket_atom.hcount,
         has_explicit_h: true,
-        isotope: b.isotope,
-        charge: b.charge,
-        chirality: b
+        isotope: bracket_atom.isotope,
+        charge: bracket_atom.charge,
+        chirality: bracket_atom
             .chiral
             .map(chirality_to_atom_chirality)
             .unwrap_or(AtomChirality::None),
@@ -527,12 +570,12 @@ fn chirality_to_atom_chirality(chirality: Chirality) -> AtomChirality {
     }
 }
 
-fn element_symbol(e: Element) -> String {
-    e.get_symbol().to_string()
+fn element_symbol(element: Element) -> String {
+    element.get_symbol().to_string()
 }
 
-fn sparser_bond_to_order(b: &SBond) -> BondOrder {
-    match b {
+fn parser_bond_order(parser_bond: &SBond) -> BondOrder {
+    match parser_bond {
         SBond::Single | SBond::Up | SBond::Down => BondOrder::Single,
         SBond::Double => BondOrder::Double,
         SBond::Triple => BondOrder::Triple,
@@ -541,8 +584,8 @@ fn sparser_bond_to_order(b: &SBond) -> BondOrder {
     }
 }
 
-fn sparser_bond_to_direction(b: &SBond) -> BondDirection {
-    match b {
+fn parser_bond_direction(parser_bond: &SBond) -> BondDirection {
+    match parser_bond {
         SBond::Up => BondDirection::Up,
         SBond::Down => BondDirection::Down,
         _ => BondDirection::None,

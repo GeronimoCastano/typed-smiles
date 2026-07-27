@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 pub struct AtomOutput {
     pub symbol: String,
     pub pos: Vec2,
-    /// Explicit hydrogen count (shown as subscript when > 0)
+    /// Explicit hydrogen count (shown as subscript when greater than zero).
     pub hcount: u8,
-    /// Computed implicit hydrogen count (shown only when requested)
+    /// Computed implicit hydrogen count (shown only when requested).
     #[serde(default)]
     pub implicit_h: u8,
-    /// Formal charge (shown as superscript when != 0)
+    /// Formal charge (shown as superscript when nonzero).
     pub charge: i8,
     /// Mass number from a bracket isotope (shown as a leading superscript when > 0).
     #[serde(default)]
@@ -55,14 +55,14 @@ pub struct AtomOutput {
 pub struct BondOutput {
     pub from: usize,
     pub to: usize,
-    /// 1 = single, 2 = double, 3 = triple, 4 = aromatic
+    /// 1 = single, 2 = double, 3 = triple, 4 = quadruple.
     pub order: u8,
-    /// Rendered stereochemistry: "none" | "wedge_up" | "wedge_down"
+    /// Rendered stereochemistry: "none" | "wedge_up" | "wedge_down".
     pub stereo: String,
     /// True when stereo came from a typed-smiles drawing extension (`!w`/`!h`).
     #[serde(default)]
     pub forced_stereo: bool,
-    /// OpenSMILES directional marker: "none" | "up" | "down"
+    /// OpenSMILES directional marker: "none" | "up" | "down".
     #[serde(default)]
     pub direction: String,
     /// For double bonds that are part of a ring: unit vector pointing from the
@@ -103,9 +103,13 @@ impl Vec2 {
     }
 
     pub fn dist(self, other: Self) -> f64 {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        (dx * dx + dy * dy).sqrt()
+        self.distance_to(other)
+    }
+
+    pub(crate) fn distance_to(self, other: Self) -> f64 {
+        let horizontal_distance = self.x - other.x;
+        let vertical_distance = self.y - other.y;
+        (horizontal_distance * horizontal_distance + vertical_distance * vertical_distance).sqrt()
     }
 }
 
@@ -118,7 +122,7 @@ pub struct LayoutOutput {
     /// circle depiction.
     #[serde(default)]
     pub aromatic_rings: Vec<AromaticRing>,
-    /// Bounding box dimensions in bond-length units (for auto-scaling in Typst)
+    /// Bounding box dimensions in bond-length units (for auto-scaling in Typst).
     pub bbox_width: f64,
     pub bbox_height: f64,
 }

@@ -77,7 +77,7 @@
     panic("atom-annotations must be an array of (index, content) or (index, content, offset) tuples")
   }
 
-  let out = ()
+  let normalized-annotations = ()
   for entry in atom-annotations {
     if type(entry) != array or (entry.len() != 2 and entry.len() != 3) {
       panic("atom-annotations entries must be (index, content) or (index, content, offset)")
@@ -85,13 +85,13 @@
     if type(entry.at(0)) != int {
       panic("atom-annotations index must be an integer")
     }
-    out.push((
+    normalized-annotations.push((
       index: entry.at(0),
       body: entry.at(1),
       offset: if entry.len() == 3 { entry.at(2) } else { (0, 0) },
     ))
   }
-  out
+  normalized-annotations
 }
 
 // An opacity value is a ratio (40%) or a number in 0..1; both normalize to a
@@ -113,54 +113,59 @@
   if type(bond-customizations) != array {
     panic("bond-customizations must be an array of (bond(i, j), (..options..)) pairs")
   }
-  let out = (:)
+  let normalized-customizations = (:)
   for entry in bond-customizations {
     if type(entry) != array or entry.len() != 2 {
       panic("bond-customizations entries must be (bond(i, j), (..options..)) pairs")
     }
-    let (ref, opts) = (entry.at(0), entry.at(1))
-    let (i, j) = if type(ref) == dictionary and ref.at("__ref__", default: "") == "bond" {
-      (ref.i, ref.j)
-    } else if type(ref) == array and ref.len() == 2 {
-      (ref.at(0), ref.at(1))
+    let (bond-reference, options) = (entry.at(0), entry.at(1))
+    let (first-atom-index, second-atom-index) = if type(bond-reference) == dictionary and bond-reference.at("__ref__", default: "") == "bond" {
+      (bond-reference.i, bond-reference.j)
+    } else if type(bond-reference) == array and bond-reference.len() == 2 {
+      (bond-reference.at(0), bond-reference.at(1))
     } else {
       panic("bond-customizations bonds must be bond(i, j) references or (i, j) pairs")
     }
-    if type(opts) != dictionary {
+    if type(options) != dictionary {
       panic("bond-customizations options must be a dictionary")
     }
-    for k in opts.keys() {
-      if k not in ("color", "stroke", "opacity") {
-        panic("unknown bond customization \"" + k + "\" (expected color, stroke, or opacity)")
+    for option-name in options.keys() {
+      if option-name not in ("color", "stroke", "opacity") {
+        panic("unknown bond customization \"" + option-name + "\" (expected color, stroke, or opacity)")
       }
     }
-    if "color" in opts and type(opts.color) != color {
+    if "color" in options and type(options.color) != color {
       panic("bond customization color must be a color")
     }
-    if "stroke" in opts and type(opts.stroke) != length {
+    if "stroke" in options and type(options.stroke) != length {
       panic("bond customization stroke must be a length (the bond width)")
     }
-    if "opacity" in opts {
-      opts.insert("opacity", _opacity-ratio(opts.opacity, "bond customization opacity"))
+    if "opacity" in options {
+      options.insert("opacity", _opacity-ratio(options.opacity, "bond customization opacity"))
     }
-    out.insert(str(calc.min(i, j)) + "-" + str(calc.max(i, j)), opts)
+    normalized-customizations.insert(
+      str(calc.min(first-atom-index, second-atom-index))
+        + "-"
+        + str(calc.max(first-atom-index, second-atom-index)),
+      options,
+    )
   }
-  out
+  normalized-customizations
 }
 
 // CPK hues bright enough to read on either background keep one value; the
 // dark theme lifts the lightness of the hues that vanish on dark slides
 // (N, Br, I; O slightly) without changing their identity.
-#let _atom-color(sym, theme: "light", fg: black) = {
+#let _atom-color(symbol, theme: "light", fg: black) = {
   let dark = theme == "dark"
-  if sym == "N" or sym == "n"      { if dark { rgb("#7A8CFF") } else { rgb("#3050F8") } }
-  else if sym == "O" or sym == "o" { if dark { rgb("#FF5252") } else { rgb("#FF0D0D") } }
-  else if sym == "S" or sym == "s" { rgb("#E6C800") }
-  else if sym == "P"               { rgb("#FF8000") }
-  else if sym == "F"               { rgb("#90E050") }
-  else if sym == "Cl"              { rgb("#1FF01F") }
-  else if sym == "Br"              { if dark { rgb("#D07C7C") } else { rgb("#A62929") } }
-  else if sym == "I"               { if dark { rgb("#DC7CDC") } else { rgb("#940094") } }
+  if symbol == "N" or symbol == "n"      { if dark { rgb("#7A8CFF") } else { rgb("#3050F8") } }
+  else if symbol == "O" or symbol == "o" { if dark { rgb("#FF5252") } else { rgb("#FF0D0D") } }
+  else if symbol == "S" or symbol == "s" { rgb("#E6C800") }
+  else if symbol == "P"                  { rgb("#FF8000") }
+  else if symbol == "F"                  { rgb("#90E050") }
+  else if symbol == "Cl"                 { rgb("#1FF01F") }
+  else if symbol == "Br"                 { if dark { rgb("#D07C7C") } else { rgb("#A62929") } }
+  else if symbol == "I"                  { if dark { rgb("#DC7CDC") } else { rgb("#940094") } }
   else { fg }
 }
 
@@ -191,7 +196,7 @@
 // Resolves the fg/theme pair: an `auto` foreground inherits the surrounding
 // text color (so molecules recolor with the slide theme), and an `auto`
 // theme picks the dark palette when the foreground is light.
-#let _resolve-fg-theme(fg, theme) = {
+#let _resolve-foreground-theme(fg, theme) = {
   let resolved-fg = if fg == auto {
     if type(text.fill) == color { text.fill } else { black }
   } else { fg }
@@ -212,7 +217,7 @@
 // ── SMILES renderer ───────────────────────────────────────────────────────────
 
 // Parse a SMILES string into layout JSON via the WASM plugin.
-#let _layout(smiles-str) = json(smiles-plugin.layout(bytes(smiles-str)))
+#let _compute-layout(smiles-str) = json(smiles-plugin.layout(bytes(smiles-str)))
 
 /// Computes the molecular weight of a SMILES string in g/mol, summing IUPAC
 /// standard atomic weights over all atoms including implicit and explicit
@@ -266,101 +271,132 @@
       panic("mirror must be none, \"horizontal\", or \"vertical\"")
     }
   }
-  let cos-a = calc.cos(rotation)
-  let sin-a = calc.sin(rotation)
-  let matmul(a, b) = (
-    xx: a.xx * b.xx + a.xy * b.yx,
-    xy: a.xx * b.xy + a.xy * b.yy,
-    yx: a.yx * b.xx + a.yy * b.yx,
-    yy: a.yx * b.xy + a.yy * b.yy,
+  let rotation-cosine = calc.cos(rotation)
+  let rotation-sine = calc.sin(rotation)
+  let multiply-matrices(left, right) = (
+    xx: left.xx * right.xx + left.xy * right.yx,
+    xy: left.xx * right.xy + left.xy * right.yy,
+    yx: left.yx * right.xx + left.yy * right.yx,
+    yy: left.yx * right.xy + left.yy * right.yy,
   )
-  let base = (xx: -1.0, xy: 0.0, yx: 0.0, yy: 1.0)
-  let mat = if mirror == none {
-    base
+  let coordinate-normalization = (xx: -1.0, xy: 0.0, yx: 0.0, yy: 1.0)
+  let transformation = if mirror == none {
+    coordinate-normalization
   } else {
-    let rot = (xx: cos-a, xy: -sin-a, yx: sin-a, yy: cos-a)
-    let inv-rot = (xx: cos-a, xy: sin-a, yx: -sin-a, yy: cos-a)
-    let screen = if mirror == "horizontal" {
+    let rotation-matrix = (xx: rotation-cosine, xy: -rotation-sine, yx: rotation-sine, yy: rotation-cosine)
+    let inverse-rotation = (xx: rotation-cosine, xy: rotation-sine, yx: -rotation-sine, yy: rotation-cosine)
+    let screen-reflection = if mirror == "horizontal" {
       (xx: -1.0, xy: 0.0, yx: 0.0, yy: 1.0)
     } else {
       (xx: 1.0, xy: 0.0, yx: 0.0, yy: -1.0)
     }
-    matmul(matmul(matmul(inv-rot, screen), rot), base)
+    multiply-matrices(
+      multiply-matrices(
+        multiply-matrices(inverse-rotation, screen-reflection),
+        rotation-matrix,
+      ),
+      coordinate-normalization,
+    )
   }
-  if mat.xx == 1.0 and mat.xy == 0.0 and mat.yx == 0.0 and mat.yy == 1.0 { return layout }
-  let flip-stereo(s) = {
-    if s == "wedge_up" { "wedge_down" }
-    else if s == "wedge_down" { "wedge_up" }
-    else { s }
+  if transformation.xx == 1.0 and transformation.xy == 0.0 and transformation.yx == 0.0 and transformation.yy == 1.0 {
+    return layout
   }
-  let tr(x, y) = (
-    x: mat.xx * x + mat.xy * y,
-    y: mat.yx * x + mat.yy * y,
+  let flip-stereobond(stereobond) = {
+    if stereobond == "wedge_up" { "wedge_down" }
+    else if stereobond == "wedge_down" { "wedge_up" }
+    else { stereobond }
+  }
+  let transform-point(x, y) = (
+    x: transformation.xx * x + transformation.xy * y,
+    y: transformation.yx * x + transformation.yy * y,
   )
-  let flips-handedness = mat.xx * mat.yy - mat.xy * mat.yx < 0.0
-  let out = layout
-  out.atoms = layout.atoms.map(a => {
-    let m = a
-    m.pos = tr(a.pos.x, a.pos.y)
-    if "lone_pair_dirs" in a {
-      m.lone_pair_dirs = a.lone_pair_dirs.map(d => tr(d.x, d.y))
+  let determinant = (
+    transformation.xx * transformation.yy
+      - transformation.xy * transformation.yx
+  )
+  let flips-handedness = determinant < 0.0
+  let mirrored-layout = layout
+  mirrored-layout.atoms = layout.atoms.map(atom => {
+    let transformed-atom = atom
+    transformed-atom.pos = transform-point(atom.pos.x, atom.pos.y)
+    if "lone_pair_dirs" in atom {
+      transformed-atom.lone_pair_dirs = atom.lone_pair_dirs.map(direction => (
+        transform-point(direction.x, direction.y)
+      ))
     }
-    if "stereo_h_dir" in a {
-      m.stereo_h_dir = tr(a.stereo_h_dir.x, a.stereo_h_dir.y)
+    if "stereo_h_dir" in atom {
+      transformed-atom.stereo_h_dir = transform-point(atom.stereo_h_dir.x, atom.stereo_h_dir.y)
     }
-    if flips-handedness and "stereo_h" in a { m.stereo_h = flip-stereo(a.stereo_h) }
-    m
+    if flips-handedness and "stereo_h" in atom {
+      transformed-atom.stereo_h = flip-stereobond(atom.stereo_h)
+    }
+    transformed-atom
   })
-  out.bonds = layout.bonds.map(b => {
-    let m = b
-    let inner = tr(b.inner_x, b.inner_y)
-    m.inner_x = inner.x
-    m.inner_y = inner.y
-    if flips-handedness { m.stereo = flip-stereo(b.stereo) }
-    m
+  mirrored-layout.bonds = layout.bonds.map(bond-output => {
+    let transformed-bond = bond-output
+    let inner-direction = transform-point(bond-output.inner_x, bond-output.inner_y)
+    transformed-bond.inner_x = inner-direction.x
+    transformed-bond.inner_y = inner-direction.y
+    if flips-handedness {
+      transformed-bond.stereo = flip-stereobond(bond-output.stereo)
+    }
+    transformed-bond
   })
   if "aromatic_rings" in layout {
-    out.aromatic_rings = layout.aromatic_rings.map(r => {
-      let m = r
-      m.center = tr(r.center.x, r.center.y)
-      m
+    mirrored-layout.aromatic_rings = layout.aromatic_rings.map(ring => {
+      let transformed-ring = ring
+      transformed-ring.center = transform-point(ring.center.x, ring.center.y)
+      transformed-ring
     })
   }
-  if out.atoms.len() > 0 {
-    let min-x = out.atoms.fold(out.atoms.first().pos.x, (m, a) => calc.min(m, a.pos.x))
-    let max-x = out.atoms.fold(out.atoms.first().pos.x, (m, a) => calc.max(m, a.pos.x))
-    let min-y = out.atoms.fold(out.atoms.first().pos.y, (m, a) => calc.min(m, a.pos.y))
-    let max-y = out.atoms.fold(out.atoms.first().pos.y, (m, a) => calc.max(m, a.pos.y))
-    out.bbox_width = max-x - min-x
-    out.bbox_height = max-y - min-y
+  if mirrored-layout.atoms.len() > 0 {
+    let first-position = mirrored-layout.atoms.first().pos
+    let min-x = mirrored-layout.atoms.fold(
+      first-position.x,
+      (minimum, atom) => calc.min(minimum, atom.pos.x),
+    )
+    let max-x = mirrored-layout.atoms.fold(
+      first-position.x,
+      (maximum, atom) => calc.max(maximum, atom.pos.x),
+    )
+    let min-y = mirrored-layout.atoms.fold(
+      first-position.y,
+      (minimum, atom) => calc.min(minimum, atom.pos.y),
+    )
+    let max-y = mirrored-layout.atoms.fold(
+      first-position.y,
+      (maximum, atom) => calc.max(maximum, atom.pos.y),
+    )
+    mirrored-layout.bbox_width = max-x - min-x
+    mirrored-layout.bbox_height = max-y - min-y
   }
-  out
+  mirrored-layout
 }
 
-#let _label-anchor-offset(label, anchor, anchor-len, label-width) = {
-  if label == "" or anchor-len == 0 { return 0.0 }
+#let _label-anchor-offset(label, anchor, anchor-length, label-width) = {
+  if label == "" or anchor-length == 0 { return 0.0 }
   let prefix = label.slice(0, anchor)
-  let glyph = label.slice(anchor, anchor + anchor-len)
+  let glyph = label.slice(anchor, anchor + anchor-length)
   label-width(prefix) + label-width(glyph) / 2 - label-width(label) / 2
 }
 
 // Formats the lightweight script notation accepted in abbreviation labels.
 // A marker applies to the preceding glyph; writing both forms after that glyph
 // keeps its superscript and subscript paired (NH_4^+, rather than 4^+).
-#let _abbrev-label(label, atom-label, subscript-size, superscript-size) = {
-  let out = []
-  let i = 0
-  while i < label.len() {
-    let base = label.at(i)
-    if base == "\\" and i + 1 < label.len() {
-      out += atom-label(label.at(i + 1))
-      i += 2
+#let _abbreviation-label(label, atom-label, subscript-size, superscript-size) = {
+  let formatted-label = []
+  let character-index = 0
+  while character-index < label.len() {
+    let base = label.at(character-index)
+    if base == "\\" and character-index + 1 < label.len() {
+      formatted-label += atom-label(label.at(character-index + 1))
+      character-index += 2
       continue
     }
 
     let subscript = none
     let superscript = none
-    let next = i + 1
+    let next = character-index + 1
     while next < label.len() and (label.at(next) == "_" or label.at(next) == "^") {
       let marker = label.at(next)
       let start = next + 1
@@ -394,13 +430,13 @@
         let body = subscript.replace("-", "\u{2212}")
         scripts.br = $#atom-label(body, size: subscript-size)$
       }
-      out += math.attach(math.limits($#base-content$), ..scripts)
+      formatted-label += math.attach(math.limits($#base-content$), ..scripts)
     } else {
-      out += base-content
+      formatted-label += base-content
     }
-    i = if next > i + 1 { next } else { i + 1 }
+    character-index = if next > character-index + 1 { next } else { character-index + 1 }
   }
-  out
+  formatted-label
 }
 
 // Screen-space lone-pair placements for a custom abbreviation label.
@@ -410,79 +446,137 @@
 // pairs are never drawn through the remaining text. Bonds are obstacles too.
 // Pairs are placed on the clearest cardinal sides, pushed just outside the label
 // box on that side. This is the single source of truth for both the drawn dots
-// and the `lp()` reference endpoints: the drawing pass and `_resolve` both call
+// and the `lp()` reference endpoints: the drawing pass and `_resolve-reference` both call
 // it, so an electron-pushing arrow lands exactly on the pair it targets.
 //
 // Returns an array of `(dir, offset)`: a screen-space unit direction from the
 // anchor-glyph center and a radial distance in (unscaled) bond-length units.
-// Measurements are taken with `fs`/`cs`, so the caller must pass a font size and
-// canvas scale that share the molecule's own (mol-scale-free) units.
-#let _abbrev-lp-dirs(abbrev, anchor, anchor-len, count, bond-dirs, cs, fs, font, margin) = {
-  let mk-label(body, size: fs) = text(
+// Measurements use the supplied font size and canvas scale, which must share
+// the molecule's unscaled coordinate system.
+#let _abbreviation-lone-pair-directions(
+  abbreviation,
+  anchor,
+  anchor-length,
+  count,
+  bond-directions,
+  canvas-scale,
+  font-size,
+  font,
+  margin,
+) = {
+  let make-label(body, size: font-size) = text(
     size: size, font: font, style: "normal", weight: "regular", body,
   )
-  let lbl-width(body) = measure(_abbrev-label(body, mk-label, fs, fs)).width / cs
-  let full = measure(_abbrev-label(abbrev, mk-label, fs, fs))
-  let w = full.width / cs
-  let half-h = full.height / cs / 2
+  let label-width(body) = measure(
+    _abbreviation-label(body, make-label, font-size, font-size),
+  ).width / canvas-scale
+  let full-label-size = measure(
+    _abbreviation-label(abbreviation, make-label, font-size, font-size),
+  )
+  let width = full-label-size.width / canvas-scale
+  let half-height = full-label-size.height / canvas-scale / 2
   // Signed distance from the label center to the anchor-glyph center (positive
   // when the glyph sits right of center), so the box edges follow the glyph.
-  let ao = _label-anchor-offset(abbrev, anchor, anchor-len, lbl-width)
-  let box-right = w / 2 - ao
-  let box-left = w / 2 + ao
-  let (glyph-hw, glyph-hh) = if anchor-len > 0 {
-    let gm = measure(_abbrev-label(abbrev.slice(anchor, anchor + anchor-len), mk-label, fs, fs))
-    (gm.width / cs / 2, gm.height / cs / 2)
+  let anchor-offset = _label-anchor-offset(
+    abbreviation,
+    anchor,
+    anchor-length,
+    label-width,
+  )
+  let box-right = width / 2 - anchor-offset
+  let box-left = width / 2 + anchor-offset
+  let (glyph-half-width, glyph-half-height) = if anchor-length > 0 {
+    let glyph-size = measure(_abbreviation-label(
+      abbreviation.slice(anchor, anchor + anchor-length),
+      make-label,
+      font-size,
+      font-size,
+    ))
+    (glyph-size.width / canvas-scale / 2, glyph-size.height / canvas-scale / 2)
   } else {
-    (w / 2, half-h)
+    (width / 2, half-height)
   }
 
   // Each cardinal side carries how far the label protrudes past the glyph on
   // that side (`ext`, the penalty for drawing over text) and how far out a pair
   // must sit to clear the box edge (`off`).
   let cardinals = (
-    (dir: (x: 0.0, y: 1.0),  ext: half-h - glyph-hh,   off: half-h + margin),
-    (dir: (x: 0.0, y: -1.0), ext: half-h - glyph-hh,   off: half-h + margin),
-    (dir: (x: -1.0, y: 0.0), ext: box-left - glyph-hw, off: box-left + margin),
-    (dir: (x: 1.0, y: 0.0),  ext: box-right - glyph-hw, off: box-right + margin),
+    (
+      direction: (x: 0.0, y: 1.0),
+      text-extension: half-height - glyph-half-height,
+      offset: half-height + margin,
+    ),
+    (
+      direction: (x: 0.0, y: -1.0),
+      text-extension: half-height - glyph-half-height,
+      offset: half-height + margin,
+    ),
+    (
+      direction: (x: -1.0, y: 0.0),
+      text-extension: box-left - glyph-half-width,
+      offset: box-left + margin,
+    ),
+    (
+      direction: (x: 1.0, y: 0.0),
+      text-extension: box-right - glyph-half-width,
+      offset: box-right + margin,
+    ),
   )
 
   let chosen = ()
   for _ in range(calc.min(count, 4)) {
-    let best = none
-    let best-i = none
+    let best-side = none
+    let best-side-index = none
     let best-score = none
-    for ci in range(cardinals.len()) {
-      if chosen.any(s => s.i == ci) { continue }
-      let c = cardinals.at(ci)
-      let score = calc.max(0.0, c.ext) * 4.0
-      for b in bond-dirs {
-        let dot = c.dir.x * b.x + c.dir.y * b.y
+    for side-index in range(cardinals.len()) {
+      if chosen.any(choice => choice.index == side-index) { continue }
+      let side = cardinals.at(side-index)
+      let score = calc.max(0.0, side.text-extension) * 4.0
+      for bond-direction in bond-directions {
+        let dot = (
+          side.direction.x * bond-direction.x
+            + side.direction.y * bond-direction.y
+        )
         if dot > 0.85 { score += 100.0 }
         else if dot > 0.45 { score += 8.0 }
         else if dot > 0.10 { score += 1.0 }
       }
       // Reward placing a pair opposite one already chosen, so two pairs land on
       // well-separated sides rather than crowding together.
-      for s in chosen {
-        let sc = cardinals.at(s.i)
-        if c.dir.x * sc.dir.x + c.dir.y * sc.dir.y < -0.5 { score -= 2.0 }
+      for choice in chosen {
+        let chosen-side = cardinals.at(choice.index)
+        let separation = (
+          side.direction.x * chosen-side.direction.x
+            + side.direction.y * chosen-side.direction.y
+        )
+        if separation < -0.5 {
+          score -= 2.0
+        }
       }
       if best-score == none or score < best-score {
-        best = c
-        best-i = ci
+        best-side = side
+        best-side-index = side-index
         best-score = score
       }
     }
-    if best != none { chosen.push((i: best-i, dir: best.dir, off: best.off)) }
+    if best-side != none {
+      chosen.push((
+        index: best-side-index,
+        direction: best-side.direction,
+        offset: best-side.offset,
+      ))
+    }
   }
-  chosen.map(c => (dir: c.dir, offset: c.off))
+  chosen.map(choice => (
+    dir: choice.direction,
+    offset: choice.offset,
+  ))
 }
 
 // Draws a molecule's bonds, atom labels, and lone pairs into the current CeTZ
 // canvas, centered at the local origin. The caller sets the canvas unit to
 // `_canvas-scale(scale, bond-length)` and may translate before calling. Atom and
-// bond references are resolved separately (see `_atom-pos`) with the same
+// bond references are resolved separately (see `_atom-position`) with the same
 // rotation, so annotations line up exactly with what is drawn here.
 #let _draw-molecule(
   layout,
@@ -538,38 +632,38 @@
   let junction-overlap = calc.min(0.006, calc.max(0.00875, stroke-units * 0.49))
   let inner-trim      = 0.07
   let multiple-bond-trim = 0.10
-  let stroke-w        = actual-bond-stroke
+  let stroke-width        = actual-bond-stroke
   let subscript-size  = actual-font-size * 1.00
   let superscript-size = actual-font-size * 1.00
   let lone-pair-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.6)
   let lone-pair-terminal-offset = calc.max(0.1, actual-font-size / canvas-scale * 0.5)
-  let lone-pair-dot-r = calc.max(0.018, stroke-units * 0.75)
-  let lone-pair-dot-gap = calc.max(0.064, lone-pair-dot-r * 2.6)
+  let lone-pair-dot-radius = calc.max(0.018, stroke-units * 0.75)
+  let lone-pair-dot-gap = calc.max(0.064, lone-pair-dot-radius * 2.6)
   let lone-pair-line-half = calc.max(0.055, stroke-units * 2.4)
   // Clearance between a custom-label lone pair and the edge of the label box.
   let abbrev-lp-margin = calc.max(0.08, actual-font-size / canvas-scale * 0.34)
 
-  let atom-clr = if color {
-    (sym) => fade({
-      if sym in atom-colors { atom-colors.at(sym) }
-      else { _atom-color(sym, theme: theme, fg: base-fg) }
+  let atom-color = if color {
+    (symbol) => fade({
+      if symbol in atom-colors { atom-colors.at(symbol) }
+      else { _atom-color(symbol, theme: theme, fg: base-fg) }
     })
-  } else { (sym) => fg }
-  let label-clr = if color {
+  } else { (symbol) => fg }
+  let label-color = if color {
     (style) => fade({
       if style in atom-colors { atom-colors.at(style) }
       else { _label-color(style, theme: theme, fg: base-fg) }
     })
   } else { (style) => fg }
-  let display-clr(atom) = {
+  let display-color(atom) = {
     let abbrev = atom.at("abbrev", default: "")
     let abbrev-style = atom.at("abbrev_style", default: "")
     if abbrev != "" {
       let label-key = "{" + abbrev + "}"
       if color and label-key in atom-colors { fade(atom-colors.at(label-key)) }
-      else { label-clr(abbrev-style) }
+      else { label-color(abbrev-style) }
     } else {
-      atom-clr(atom.symbol)
+      atom-color(atom.symbol)
     }
   }
   let atom-label(body, fill: fg, size: actual-font-size) = text(
@@ -582,12 +676,14 @@
   )
   let transparent = rgb(0, 0, 0, 0)
   let content-width(body) = measure(body).width / canvas-scale
-  let index-marker-name(i, suffix) = index-prefix + "atom-index-marker-" + str(i) + suffix
+  let index-marker-name(atom-index, suffix) = (
+    index-prefix + "atom-index-marker-" + str(atom-index) + suffix
+  )
 
-  let cos-a = calc.cos(rotation)
-  let sin-a = calc.sin(rotation)
-  let rx(x, y) = x * cos-a - y * sin-a
-  let ry(x, y) = x * sin-a + y * cos-a
+  let rotation-cosine = calc.cos(rotation)
+  let rotation-sine = calc.sin(rotation)
+  let rotated-x(x, y) = x * rotation-cosine - y * rotation-sine
+  let rotated-y(x, y) = x * rotation-sine + y * rotation-cosine
 
   // cetz.draw exports a `scale` transform that would shadow the `scale` argument,
   // so import only after all scalar/style values above are computed.
@@ -595,78 +691,109 @@
 
   // Virtual bonds connect a heavy atom to its bracket-H atoms. They carry positions
   // for atom() references but must not affect structural computations or rendering.
-  let real-bonds = layout.bonds.filter(b => not b.at("virtual_bond", default: false))
-  let vh-parent = (:)
-  let vh-child = (:)
-  let vh-dir = (:)
-  for b in layout.bonds {
-    if b.at("virtual_bond", default: false) {
-      let pi = b.from
-      let hi = b.to
-      vh-parent.insert(str(hi), pi)
-      vh-child.insert(str(pi), hi)
-      let p = layout.atoms.at(pi)
-      let h = layout.atoms.at(hi)
-      let dx = rx(h.pos.x, h.pos.y) - rx(p.pos.x, p.pos.y)
-      let dy = ry(h.pos.x, h.pos.y) - ry(p.pos.x, p.pos.y)
-      let d = calc.sqrt(dx * dx + dy * dy)
-      let ux = if d > 0.001 { dx / d } else { 1.0 }
-      let uy = if d > 0.001 { dy / d } else { 0.0 }
-      vh-dir.insert(str(pi), (ux, uy))
+  let structural-bonds = layout.bonds.filter(
+    bond-output => not bond-output.at("virtual_bond", default: false),
+  )
+  let virtual-hydrogen-parent = (:)
+  let virtual-hydrogen-child = (:)
+  let virtual-hydrogen-direction = (:)
+  for bond-output in layout.bonds {
+    if bond-output.at("virtual_bond", default: false) {
+      let parent-index = bond-output.from
+      let hydrogen-index = bond-output.to
+      virtual-hydrogen-parent.insert(str(hydrogen-index), parent-index)
+      virtual-hydrogen-child.insert(str(parent-index), hydrogen-index)
+      let parent-atom = layout.atoms.at(parent-index)
+      let hydrogen-atom = layout.atoms.at(hydrogen-index)
+      let offset-x = (
+        rotated-x(hydrogen-atom.pos.x, hydrogen-atom.pos.y)
+          - rotated-x(parent-atom.pos.x, parent-atom.pos.y)
+      )
+      let offset-y = (
+        rotated-y(hydrogen-atom.pos.x, hydrogen-atom.pos.y)
+          - rotated-y(parent-atom.pos.x, parent-atom.pos.y)
+      )
+      let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
+      let direction-x = if distance > 0.001 { offset-x / distance } else { 1.0 }
+      let direction-y = if distance > 0.001 { offset-y / distance } else { 0.0 }
+      virtual-hydrogen-direction.insert(
+        str(parent-index),
+        (direction-x, direction-y),
+      )
     }
   }
 
-  let atom-degree(i) = real-bonds.filter(b => b.from == i or b.to == i).len()
-    let atom-neighbor-indices(i) = {
-      let indices = ()
-      for b in real-bonds {
-        if b.from == i {
-          indices.push(b.to)
-        } else if b.to == i {
-          indices.push(b.from)
-        }
+  let atom-degree(atom-index) = structural-bonds.filter(
+    bond-output => bond-output.from == atom-index
+      or bond-output.to == atom-index,
+  ).len()
+  let atom-neighbor-indices(atom-index) = {
+    let indices = ()
+    for bond-output in structural-bonds {
+      if bond-output.from == atom-index {
+        indices.push(bond-output.to)
+      } else if bond-output.to == atom-index {
+        indices.push(bond-output.from)
       }
-      indices
     }
+    indices
+  }
     // A cumulene-center carbon (two double bonds, collinear neighbors) is
     // drawn as an explicit C label: without it the two double bonds merge
     // into what reads as one long double bond (O=C=O, ketene, allenes).
-    let force-linear-carbon-label(i) = {
-      let atom = layout.atoms.at(i)
-      if not _is-carbon(atom) or atom.at("abbrev", default: "") != "" or atom-degree(i) != 2 {
-        false
-      } else {
-        let bonds = real-bonds.filter(b => b.from == i or b.to == i)
-        bonds.filter(b => b.order == 2).len() == 2
-      }
+  let force-linear-carbon-label(atom-index) = {
+    let atom = layout.atoms.at(atom-index)
+    if (
+      not _is-carbon(atom)
+        or atom.at("abbrev", default: "") != ""
+        or atom-degree(atom-index) != 2
+    ) {
+      false
+    } else {
+      let bonds = structural-bonds.filter(
+        bond-output => bond-output.from == atom-index
+          or bond-output.to == atom-index,
+      )
+      bonds.filter(bond-output => bond-output.order == 2).len() == 2
     }
-    let forced-h(i) = show-h-list.contains(i)
-    let has-label(i) = {
-      let atom = layout.atoms.at(i)
-      _has-label(atom, show-all-h: show-all-h, force: forced-h(i)) or force-linear-carbon-label(i)
-    }
-    let first-neighbor(i) = {
-      let result = none
-      for b in real-bonds {
-        if result == none and (b.from == i or b.to == i) {
-          result = if b.from == i { b.to } else { b.from }
+  }
+  let forced-hydrogen(atom-index) = show-h-list.contains(atom-index)
+  let has-label(atom-index) = {
+    let atom = layout.atoms.at(atom-index)
+    _has-label(
+      atom,
+      show-all-h: show-all-h,
+      force: forced-hydrogen(atom-index),
+    ) or force-linear-carbon-label(atom-index)
+  }
+  let first-neighbor(atom-index) = {
+    let neighbor-index = none
+    for bond-output in structural-bonds {
+      if neighbor-index == none and (
+        bond-output.from == atom-index or bond-output.to == atom-index
+      ) {
+        neighbor-index = if bond-output.from == atom-index {
+          bond-output.to
+        } else {
+          bond-output.from
         }
       }
-      result
     }
-    let visible-h-count(i) = {
-      let atom = layout.atoms.at(i)
-      let count = atom.hcount + _visible-implicit-h(
-        atom,
-        show-all-h: show-all-h,
-        force: forced-h(i),
-      )
-      if atom.at("stereo_h", default: "none") != "none" {
-        calc.max(0, count - 1)
-      } else {
-        count
-      }
+    neighbor-index
+  }
+  let visible-hydrogen-count(atom-index) = {
+    let atom = layout.atoms.at(atom-index)
+    let count = atom.hcount + _visible-implicit-h(
+      atom,
+      show-all-h: show-all-h,
+      force: forced-hydrogen(atom-index),
+    )
+    if atom.at("stereo_h", default: "none") != "none" {
+      calc.max(0, count - 1)
+    } else {
+      count
     }
+  }
     // How far a bond retreats from a labeled atom, in bond-length units.
     // Bare element symbols centered on the atom trim to the measured glyph
     // extent projected onto the bond direction, so a short label like "C"
@@ -674,105 +801,115 @@
     // hydrogens, charges, or isotopes keep the conservative fixed margin
     // because their content extends off-center. Short abbreviations can use
     // their measured box while longer groups keep the fixed guard.
-    let label-trim(atom, i, ux, uy) = {
-      let displays-h = visible-h-count(i) > 0 and (show-all-h or forced-h(i) or not _is-carbon(atom))
-      if not has-label(i) {
+  let label-trim(atom, atom-index, direction-x, direction-y) = {
+      let displays-hydrogen = visible-hydrogen-count(atom-index) > 0 and (
+        show-all-h or forced-hydrogen(atom-index) or not _is-carbon(atom)
+      )
+      if not has-label(atom-index) {
         0.0
-      } else if displays-h and atom-degree(i) == 1 and not _is-carbon(atom) {
+      } else if displays-hydrogen and atom-degree(atom-index) == 1 and not _is-carbon(atom) {
         0.06
       } else if (
         atom.at("abbrev", default: "") != ""
-        and not displays-h
+        and not displays-hydrogen
         and atom.charge == 0
         and atom.at("isotope", default: 0) == 0
       ) {
-        let m = measure(_abbrev-label(
+        let label-size = measure(_abbreviation-label(
           atom.at("abbrev", default: ""),
           atom-label,
           subscript-size,
           superscript-size,
         ))
-        let hw = m.width / canvas-scale / 2
-        let hh = m.height / canvas-scale / 2
-        let extent = hw * calc.abs(ux) + hh * calc.abs(uy) + 0.07
+        let half-width = label-size.width / canvas-scale / 2
+        let half-height = label-size.height / canvas-scale / 2
+        let extent = (
+          half-width * calc.abs(direction-x)
+            + half-height * calc.abs(direction-y)
+            + 0.07
+        )
         calc.min(label-margin, calc.max(0.14, extent))
       } else if (
         atom.at("abbrev", default: "") == ""
-        and not displays-h
+        and not displays-hydrogen
         and atom.charge == 0
         and atom.at("isotope", default: 0) == 0
       ) {
-        let m = measure(atom-label(atom.symbol))
-        let hw = m.width / canvas-scale / 2
-        let hh = m.height / canvas-scale / 2
-        let extent = hw * calc.abs(ux) + hh * calc.abs(uy) + 0.07
+        let label-size = measure(atom-label(atom.symbol))
+        let half-width = label-size.width / canvas-scale / 2
+        let half-height = label-size.height / canvas-scale / 2
+        let extent = (
+          half-width * calc.abs(direction-x)
+            + half-height * calc.abs(direction-y)
+            + 0.07
+        )
         calc.min(label-margin, calc.max(0.14, extent))
       } else {
         label-margin
       }
-    }
+  }
 
-    for bond in real-bonds {
-      let af = layout.atoms.at(bond.from)
-      let at = layout.atoms.at(bond.to)
-      let p1x = rx(af.pos.x, af.pos.y)
-      let p1y = ry(af.pos.x, af.pos.y)
-      let p2x = rx(at.pos.x, at.pos.y)
-      let p2y = ry(at.pos.x, at.pos.y)
-      let c1 = display-clr(af)
-      let c2 = display-clr(at)
+    for bond in structural-bonds {
+      let from-atom = layout.atoms.at(bond.from)
+      let to-atom = layout.atoms.at(bond.to)
+      let from-x = rotated-x(from-atom.pos.x, from-atom.pos.y)
+      let from-y = rotated-y(from-atom.pos.x, from-atom.pos.y)
+      let to-x = rotated-x(to-atom.pos.x, to-atom.pos.y)
+      let to-y = rotated-y(to-atom.pos.x, to-atom.pos.y)
+      let from-color = display-color(from-atom)
+      let to-color = display-color(to-atom)
 
       // Per-bond style overrides. A color override replaces the bicolor
       // halves with one uniform paint; stroke overrides the width for every
       // segment of this bond (double/triple lines, hashes, waves, dashes).
-      let bc = bond-custom.at(
+      let bond-customization = bond-custom.at(
         str(calc.min(bond.from, bond.to)) + "-" + str(calc.max(bond.from, bond.to)),
         default: (:),
       )
-      if "color" in bc {
-        c1 = fade(bc.color)
-        c2 = c1
+      if "color" in bond-customization {
+        from-color = fade(bond-customization.color)
+        to-color = from-color
       }
-      if "opacity" in bc {
-        c1 = c1.transparentize(100% - bc.opacity)
-        c2 = c2.transparentize(100% - bc.opacity)
+      if "opacity" in bond-customization {
+        from-color = from-color.transparentize(100% - bond-customization.opacity)
+        to-color = to-color.transparentize(100% - bond-customization.opacity)
       }
-      let stroke-w = if "stroke" in bc { bc.stroke } else { stroke-w }
+      let stroke-width = if "stroke" in bond-customization { bond-customization.stroke } else { stroke-width }
 
-      let dx = p2x - p1x
-      let dy = p2y - p1y
+      let dx = to-x - from-x
+      let dy = to-y - from-y
       let len = calc.sqrt(dx * dx + dy * dy)
       let ux = if len > 0.001 { dx / len } else { 1.0 }
       let uy = if len > 0.001 { dy / len } else { 0.0 }
 
-      let af-has-label = has-label(bond.from)
-      let at-has-label = has-label(bond.to)
-      let s1 = label-trim(af, bond.from, ux, uy)
-      let s2 = label-trim(at, bond.to, ux, uy)
-      let e1 = if not af-has-label and atom-degree(bond.from) > 1 { junction-overlap } else { 0.0 }
-      let e2 = if not at-has-label and atom-degree(bond.to) > 1 { junction-overlap } else { 0.0 }
-      let q1x = p1x + ux * s1 - ux * e1
-      let q1y = p1y + uy * s1 - uy * e1
-      let q2x = p2x - ux * s2 + ux * e2
-      let q2y = p2y - uy * s2 + uy * e2
-      let mx = (q1x + q2x) / 2
-      let my = (q1y + q2y) / 2
+      let from-atom-has-label = has-label(bond.from)
+      let to-has-label = has-label(bond.to)
+      let s1 = label-trim(from-atom, bond.from, ux, uy)
+      let s2 = label-trim(to-atom, bond.to, ux, uy)
+      let e1 = if not from-atom-has-label and atom-degree(bond.from) > 1 { junction-overlap } else { 0.0 }
+      let e2 = if not to-has-label and atom-degree(bond.to) > 1 { junction-overlap } else { 0.0 }
+      let bond-start-x = from-x + ux * s1 - ux * e1
+      let bond-start-y = from-y + uy * s1 - uy * e1
+      let bond-end-x = to-x - ux * s2 + ux * e2
+      let bond-end-y = to-y - uy * s2 + uy * e2
+      let mx = (bond-start-x + bond-end-x) / 2
+      let my = (bond-start-y + bond-end-y) / 2
 
       let stereo = bond.at("stereo", default: "none")
       let split-line(x1, y1, x2, y2, from-color, to-color) = {
         let xmid = (x1 + x2) / 2
         let ymid = (y1 + y2) / 2
-        line((x1, y1), (xmid, ymid), stroke: stroke-w + from-color)
-        line((xmid, ymid), (x2, y2), stroke: stroke-w + to-color)
+        line((x1, y1), (xmid, ymid), stroke: stroke-width + from-color)
+        line((xmid, ymid), (x2, y2), stroke: stroke-width + to-color)
       }
       let offset-side(atom-idx, other-idx, px, py) = {
         let side = 1.0
-        for b in real-bonds {
+        for b in structural-bonds {
           if (b.from == atom-idx or b.to == atom-idx) and not (b.from == other-idx or b.to == other-idx) {
-            let ni = if b.from == atom-idx { b.to } else { b.from }
-            let na = layout.atoms.at(ni)
-            let vx = rx(na.pos.x, na.pos.y) - px
-            let vy = ry(na.pos.x, na.pos.y) - py
+            let neighbor-index = if b.from == atom-idx { b.to } else { b.from }
+            let na = layout.atoms.at(neighbor-index)
+            let vx = rotated-x(na.pos.x, na.pos.y) - px
+            let vy = rotated-y(na.pos.x, na.pos.y) - py
             side = if vx * (-uy) + vy * ux >= 0.0 { 1.0 } else { -1.0 }
           }
         }
@@ -783,13 +920,13 @@
       // Explicit drawing wedges/hashes use the written source as the tip.
       // Inferred stereochemical bonds fall back to a local stereocenter
       // heuristic.
-      let af-abbr = af.at("abbrev", default: "") != ""
-      let at-abbr = at.at("abbrev", default: "") != ""
-      let af-is-c = (af.symbol == "C" or af.symbol == "c") and not af-abbr
-      let at-is-c = (at.symbol == "C" or at.symbol == "c") and not at-abbr
+      let from-atom-abbr = from-atom.at("abbrev", default: "") != ""
+      let to-is-abbreviation = to-atom.at("abbrev", default: "") != ""
+      let from-atom-is-c = (from-atom.symbol == "C" or from-atom.symbol == "c") and not from-atom-abbr
+      let to-is-carbon = (to-atom.symbol == "C" or to-atom.symbol == "c") and not to-is-abbreviation
       let tip-at-from = if bond.at("forced_stereo", default: false) { true }
-                        else if af-is-c and not at-is-c { true }
-                        else if at-is-c and not af-is-c { false }
+                        else if from-atom-is-c and not to-is-carbon { true }
+                        else if to-is-carbon and not from-atom-is-c { false }
                         else {
                           let df = atom-degree(bond.from)
                           let dt = atom-degree(bond.to)
@@ -802,9 +939,9 @@
         let oy =  ux * half-w
         // Bicolor the wedge at its midpoint, like a plain bond.
         let (tx, ty, bx, by, tip-c, base-c) = if tip-at-from {
-          (q1x, q1y, q2x, q2y, c1, c2)
+          (bond-start-x, bond-start-y, bond-end-x, bond-end-y, from-color, to-color)
         } else {
-          (q2x, q2y, q1x, q1y, c2, c1)
+          (bond-end-x, bond-end-y, bond-start-x, bond-start-y, to-color, from-color)
         }
         let mx2 = (tx + bx) / 2
         let my2 = (ty + by) / 2
@@ -822,20 +959,24 @@
         // Hashed wedge: perpendicular lines widening from tip to base.
         let n-lines = 8
         let half-w = 0.10
-        let (sx, sy, ex, ey, near-c, far-c) = if tip-at-from {
-          (q1x, q1y, q2x, q2y, c1, c2)
+        let (start-x, sy, end-x, ey, near-c, far-c) = if tip-at-from {
+          (bond-start-x, bond-start-y, bond-end-x, bond-end-y, from-color, to-color)
         } else {
-          (q2x, q2y, q1x, q1y, c2, c1)
+          (bond-end-x, bond-end-y, bond-start-x, bond-start-y, to-color, from-color)
         }
         for i in range(n-lines) {
           let t = i / (n-lines - 1)
-          let cx = sx + (ex - sx) * t
+          let cx = start-x + (end-x - start-x) * t
           let cy = sy + (ey - sy) * t
           let w  = half-w * calc.max(0.16, t)
           let ox = -uy * w
           let oy =  ux * w
-          let c  = if t < 0.5 { near-c } else { far-c }
-          line((cx - ox, cy - oy), (cx + ox, cy + oy), stroke: stroke-w + c)
+          let segment-color = if t < 0.5 { near-c } else { far-c }
+          line(
+            (cx - ox, cy - oy),
+            (cx + ox, cy + oy),
+            stroke: stroke-width + segment-color,
+          )
         }
 
       } else if stereo == "wavy" {
@@ -844,18 +985,18 @@
         // keeps both endpoints on-axis at the atoms.
         let waves = 4
         let amp = 0.075
-        let n-seg = 32
-        let bx = q2x - q1x
-        let by = q2y - q1y
-        let pts = range(n-seg + 1).map(i => {
-          let t = i / n-seg
+        let segment-count = 32
+        let bx = bond-end-x - bond-start-x
+        let by = bond-end-y - bond-start-y
+        let points = range(segment-count + 1).map(i => {
+          let t = i / segment-count
           let s = calc.sin(t * waves * 2.0 * calc.pi) * amp
-          (q1x + bx * t - uy * s, q1y + by * t + ux * s)
+          (bond-start-x + bx * t - uy * s, bond-start-y + by * t + ux * s)
         })
-        let half = calc.quo(n-seg, 2)
-        let wavy-stroke(c) = (paint: c, thickness: stroke-w, cap: "round", join: "round")
-        line(..pts.slice(0, half + 1), stroke: wavy-stroke(c1))
-        line(..pts.slice(half), stroke: wavy-stroke(c2))
+        let half = calc.quo(segment-count, 2)
+        let wavy-stroke(c) = (paint: c, thickness: stroke-width, cap: "round", join: "round")
+        line(..points.slice(0, half + 1), stroke: wavy-stroke(from-color))
+        line(..points.slice(half), stroke: wavy-stroke(to-color))
 
       } else if stereo == "dashed" {
         // Dashed bond: evenly spaced dashes drawn as explicit segments so the
@@ -866,70 +1007,74 @@
         for i in range(n-dash) {
           let t0 = (i + (1.0 - duty) / 2) * cell
           let t1 = (i + (1.0 + duty) / 2) * cell
-          let c = if (t0 + t1) / 2 < 0.5 { c1 } else { c2 }
+          let segment-color = if (t0 + t1) / 2 < 0.5 {
+            from-color
+          } else {
+            to-color
+          }
           line(
-            (q1x + (q2x - q1x) * t0, q1y + (q2y - q1y) * t0),
-            (q1x + (q2x - q1x) * t1, q1y + (q2y - q1y) * t1),
-            stroke: stroke-w + c,
+            (bond-start-x + (bond-end-x - bond-start-x) * t0, bond-start-y + (bond-end-y - bond-start-y) * t0),
+            (bond-start-x + (bond-end-x - bond-start-x) * t1, bond-start-y + (bond-end-y - bond-start-y) * t1),
+            stroke: stroke-width + segment-color,
           )
         }
 
       } else if (aromatic == "circle" and bond.at("aromatic", default: false)) or bond.order == 1 {
         // In circle mode an aromatic bond draws as a plain single line; the
         // ring's pi system is shown by the inscribed circle instead.
-        line((q1x, q1y), (mx, my),   stroke: stroke-w + c1)
-        line((mx, my),   (q2x, q2y), stroke: stroke-w + c2)
+        line((bond-start-x, bond-start-y), (mx, my),   stroke: stroke-width + from-color)
+        line((mx, my),   (bond-end-x, bond-end-y), stroke: stroke-width + to-color)
 
       } else if bond.order == 2 {
         let is-ring-bond = bond.inner_x != 0.0 or bond.inner_y != 0.0
 
         if is-ring-bond {
-          split-line(q1x, q1y, q2x, q2y, c1, c2)
-          let ix  = rx(bond.inner_x, bond.inner_y) * ring-double-gap
-          let iy  = ry(bond.inner_x, bond.inner_y) * ring-double-gap
-          let lx1 = q1x + ux * inner-trim + ix
-          let ly1 = q1y + uy * inner-trim + iy
-          let lx2 = q2x - ux * inner-trim + ix
-          let ly2 = q2y - uy * inner-trim + iy
-          split-line(lx1, ly1, lx2, ly2, c1, c2)
+          split-line(bond-start-x, bond-start-y, bond-end-x, bond-end-y, from-color, to-color)
+          let ix  = rotated-x(bond.inner_x, bond.inner_y) * ring-double-gap
+          let iy  = rotated-y(bond.inner_x, bond.inner_y) * ring-double-gap
+          let lx1 = bond-start-x + ux * inner-trim + ix
+          let ly1 = bond-start-y + uy * inner-trim + iy
+          let lx2 = bond-end-x - ux * inner-trim + ix
+          let ly2 = bond-end-y - uy * inner-trim + iy
+          split-line(lx1, ly1, lx2, ly2, from-color, to-color)
         } else {
-          let deg-f = atom-degree(bond.from)
-          let deg-t = atom-degree(bond.to)
-          let has-hidden-simple-continuation = (deg-f == 2 and not af-has-label) or (deg-t == 2 and not at-has-label)
+          let degree-f = atom-degree(bond.from)
+          let degree-t = atom-degree(bond.to)
+          let has-hidden-simple-continuation = (degree-f == 2 and not from-atom-has-label) or (degree-t == 2 and not to-has-label)
 
           if has-hidden-simple-continuation {
             // A chain continuation establishes the skeletal bond axis. Keep
             // that line connected to both vertices and draw the second line
             // inset and shortened at each substituted carbon.
-            split-line(q1x, q1y, q2x, q2y, c1, c2)
+            split-line(bond-start-x, bond-start-y, bond-end-x, bond-end-y, from-color, to-color)
 
-            let side = if deg-f == 2 and not af-has-label {
-              offset-side(bond.from, bond.to, q1x, q1y)
+            let side = if degree-f == 2 and not from-atom-has-label {
+              offset-side(bond.from, bond.to, bond-start-x, bond-start-y)
             } else {
-              offset-side(bond.to, bond.from, q2x, q2y)
+              offset-side(bond.to, bond.from, bond-end-x, bond-end-y)
             }
             let trim = calc.min(multiple-bond-trim, len * 0.25)
             let simple-double-gap = double-gap * 1.12
             let ox = -uy * simple-double-gap * side
             let oy =  ux * simple-double-gap * side
-            let trim-f = if deg-f > 1 and not af-has-label { trim } else { 0.0 }
-            let trim-t = if deg-t > 1 and not at-has-label { trim } else { 0.0 }
-            let lx1 = q1x + ux * trim-f + ox
-            let ly1 = q1y + uy * trim-f + oy
-            let lx2 = q2x - ux * trim-t + ox
-            let ly2 = q2y - uy * trim-t + oy
-            split-line(lx1, ly1, lx2, ly2, c1, c2)
+            let trim-f = if degree-f > 1 and not from-atom-has-label { trim } else { 0.0 }
+            let trim-t = if degree-t > 1 and not to-has-label { trim } else { 0.0 }
+            let lx1 = bond-start-x + ux * trim-f + ox
+            let ly1 = bond-start-y + uy * trim-f + oy
+            let lx2 = bond-end-x - ux * trim-t + ox
+            let ly2 = bond-end-y - uy * trim-t + oy
+            split-line(lx1, ly1, lx2, ly2, from-color, to-color)
           } else {
             // At real junctions (3+ bonds) extend slightly to close corner gap.
             let ext = 0.04
             let ox = -uy * double-gap
             let oy =  ux * double-gap
-            let e1x = q1x - ux * (if deg-f > 2 { ext } else { 0.0 })
-            let e1y = q1y - uy * (if deg-f > 2 { ext } else { 0.0 })
-            let e2x = q2x + ux * (if deg-t > 2 { ext } else { 0.0 })
-            let e2y = q2y + uy * (if deg-t > 2 { ext } else { 0.0 })
-            split-line(e1x + ox, e1y + oy, e2x + ox, e2y + oy, c1, c2)
-            split-line(e1x - ox, e1y - oy, e2x - ox, e2y - oy, c1, c2)
+            let e1x = bond-start-x - ux * (if degree-f > 2 { ext } else { 0.0 })
+            let e1y = bond-start-y - uy * (if degree-f > 2 { ext } else { 0.0 })
+            let e2x = bond-end-x + ux * (if degree-t > 2 { ext } else { 0.0 })
+            let e2y = bond-end-y + uy * (if degree-t > 2 { ext } else { 0.0 })
+            split-line(e1x + ox, e1y + oy, e2x + ox, e2y + oy, from-color, to-color)
+            split-line(e1x - ox, e1y - oy, e2x - ox, e2y - oy, from-color, to-color)
           }
         }
 
@@ -937,9 +1082,9 @@
         let ox = -uy * double-gap * 1.3
         let oy =  ux * double-gap * 1.3
         let trim = calc.min(multiple-bond-trim, len * 0.25)
-        split-line(q1x, q1y, q2x, q2y, c1, c2)
-        split-line(q1x + ux * trim + ox, q1y + uy * trim + oy, q2x - ux * trim + ox, q2y - uy * trim + oy, c1, c2)
-        split-line(q1x + ux * trim - ox, q1y + uy * trim - oy, q2x - ux * trim - ox, q2y - uy * trim - oy, c1, c2)
+        split-line(bond-start-x, bond-start-y, bond-end-x, bond-end-y, from-color, to-color)
+        split-line(bond-start-x + ux * trim + ox, bond-start-y + uy * trim + oy, bond-end-x - ux * trim + ox, bond-end-y - uy * trim + oy, from-color, to-color)
+        split-line(bond-start-x + ux * trim - ox, bond-start-y + uy * trim - oy, bond-end-x - ux * trim - ox, bond-end-y - uy * trim - oy, from-color, to-color)
 
       } else if bond.order == 4 {
         // Quadruple bond: four parallel lines symmetric about the bond axis,
@@ -950,9 +1095,9 @@
           let oy =  ux * double-gap * k
           let t = if calc.abs(k) > 1.0 { trim } else { 0.0 }
           split-line(
-            q1x + ux * t + ox, q1y + uy * t + oy,
-            q2x - ux * t + ox, q2y - uy * t + oy,
-            c1, c2,
+            bond-start-x + ux * t + ox, bond-start-y + uy * t + oy,
+            bond-end-x - ux * t + ox, bond-end-y - uy * t + oy,
+            from-color, to-color,
           )
         }
       }
@@ -962,9 +1107,9 @@
     if aromatic == "circle" {
       for ring in layout.at("aromatic_rings", default: ()) {
         circle(
-          (rx(ring.center.x, ring.center.y), ry(ring.center.x, ring.center.y)),
+          (rotated-x(ring.center.x, ring.center.y), rotated-y(ring.center.x, ring.center.y)),
           radius: ring.radius,
-          stroke: stroke-w + fg,
+          stroke: stroke-width + fg,
           fill: none,
         )
       }
@@ -976,41 +1121,55 @@
     // in screen space so the pairs avoid the bond and the inline hydrogen; all
     // other labeled atoms use the layout directions supplied by the plugin.
 
-    // Unit vector in screen space pointing from atom `i` toward atom `j`,
+    // Unit vector in screen space pointing from one atom toward another,
     // or none when the two atoms coincide.
-    let neighbor-screen-dir(i, j) = {
-      let a = layout.atoms.at(i).pos
-      let b = layout.atoms.at(j).pos
-      let vx = rx(b.x, b.y) - rx(a.x, a.y)
-      let vy = ry(b.x, b.y) - ry(a.x, a.y)
-      let len = calc.sqrt(vx * vx + vy * vy)
-      if len > 0.001 { (x: vx / len, y: vy / len) } else { none }
+    let neighbor-screen-direction(atom-index, neighbor-index) = {
+      let atom-position = layout.atoms.at(atom-index).pos
+      let neighbor-position = layout.atoms.at(neighbor-index).pos
+      let offset-x = (
+        rotated-x(neighbor-position.x, neighbor-position.y)
+          - rotated-x(atom-position.x, atom-position.y)
+      )
+      let offset-y = (
+        rotated-y(neighbor-position.x, neighbor-position.y)
+          - rotated-y(atom-position.x, atom-position.y)
+      )
+      let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
+      if distance > 0.001 {
+        (x: offset-x / distance, y: offset-y / distance)
+      } else {
+        none
+      }
     }
 
     // Cardinal screen directions for a hydrogen-bearing heteroatom, chosen
     // greedily to stay clear of the bonds, the inline hydrogen, and one another.
-    let inline-h-pair-dirs(i, count) = {
+    let inline-hydrogen-pair-directions(atom-index, count) = {
       let occupied = ()
-      for ni in atom-neighbor-indices(i) {
-        let d = neighbor-screen-dir(i, ni)
-        if d != none { occupied.push(d) }
+      for neighbor-index in atom-neighbor-indices(atom-index) {
+        let direction = neighbor-screen-direction(atom-index, neighbor-index)
+        if direction != none { occupied.push(direction) }
       }
-      if atom-degree(i) >= 2 {
+      if atom-degree(atom-index) >= 2 {
         // A stacked hydrogen is drawn directly above the symbol.
         occupied.push((x: 0.0, y: 1.0))
       } else {
         // An inline "XH" runs horizontally: the hydrogen sits opposite a
         // horizontal bond, or to the right of a vertical one.
-        let ni = first-neighbor(i)
-        let d = if ni != none { neighbor-screen-dir(i, ni) } else { none }
-        let h-dir = if d == none {
+        let neighbor-index = first-neighbor(atom-index)
+        let bond-direction = if neighbor-index != none {
+          neighbor-screen-direction(atom-index, neighbor-index)
+        } else {
+          none
+        }
+        let hydrogen-direction = if bond-direction == none {
           (x: 1.0, y: 0.0)
-        } else if calc.abs(d.x) >= calc.abs(d.y) {
-          (x: -d.x, y: 0.0)
+        } else if calc.abs(bond-direction.x) >= calc.abs(bond-direction.y) {
+          (x: -bond-direction.x, y: 0.0)
         } else {
           (x: 1.0, y: 0.0)
         }
-        occupied.push(h-dir)
+        occupied.push(hydrogen-direction)
       }
 
       let candidates = if count == 1 {
@@ -1021,12 +1180,15 @@
 
       let chosen = ()
       for _ in range(count) {
-        let best = none
+        let best-direction = none
         let best-score = none
-        for cand in candidates {
+        for candidate in candidates {
           let score = 0.0
-          for occ in occupied {
-            let dot = cand.x * occ.x + cand.y * occ.y
+          for occupied-direction in occupied {
+            let dot = (
+              candidate.x * occupied-direction.x
+                + candidate.y * occupied-direction.y
+            )
             if dot > 0.85 {
               score += 100.0
             } else if dot > 0.45 {
@@ -1035,64 +1197,70 @@
               score += 1.0
             }
           }
-          for sel in chosen {
-            if cand.x * sel.x + cand.y * sel.y > 0.85 { score += 100.0 }
+          for selected-direction in chosen {
+            let overlap = (
+              candidate.x * selected-direction.x
+                + candidate.y * selected-direction.y
+            )
+            if overlap > 0.85 {
+              score += 100.0
+            }
           }
           if best-score == none or score < best-score {
-            best = cand
+            best-direction = candidate
             best-score = score
           }
         }
-        if best != none {
-          chosen.push(best)
-          occupied.push(best)
+        if best-direction != none {
+          chosen.push(best-direction)
+          occupied.push(best-direction)
         }
       }
       chosen
     }
 
-    // Draw each direction in `dirs` (screen-space unit vectors) as one electron
+    // Draw each screen-space direction as one electron
     // pair around `origin`: two dots in "dots" mode, a short line in "lines".
     // `origin` can be a numeric point or a named glyph marker.
-    let render-pairs(origin, dirs, fill, offset) = {
-      let point-at(dx, dy) = if type(origin) == str or type(origin) == dictionary {
-        (to: origin, rel: (dx, dy))
+    let render-pairs(origin, directions, fill, offset) = {
+      let point-at(offset-x, offset-y) = if type(origin) == str or type(origin) == dictionary {
+        (to: origin, rel: (offset-x, offset-y))
       } else {
-        (origin.x + dx, origin.y + dy)
+        (origin.x + offset-x, origin.y + offset-y)
       }
-      for dir in dirs {
-        let ox = -dir.y
-        let oy = dir.x
+      for direction in directions {
+        let normal-x = -direction.y
+        let normal-y = direction.x
         if lone-pairs == "dots" {
           circle(
             point-at(
-              dir.x * offset + ox * lone-pair-dot-gap / 2,
-              dir.y * offset + oy * lone-pair-dot-gap / 2,
+              direction.x * offset + normal-x * lone-pair-dot-gap / 2,
+              direction.y * offset + normal-y * lone-pair-dot-gap / 2,
             ),
-            radius: lone-pair-dot-r,
+            radius: lone-pair-dot-radius,
             fill: fill,
             stroke: none,
           )
           circle(
             point-at(
-              dir.x * offset - ox * lone-pair-dot-gap / 2,
-              dir.y * offset - oy * lone-pair-dot-gap / 2,
+              direction.x * offset - normal-x * lone-pair-dot-gap / 2,
+              direction.y * offset - normal-y * lone-pair-dot-gap / 2,
             ),
-            radius: lone-pair-dot-r,
+            radius: lone-pair-dot-radius,
             fill: fill,
             stroke: none,
           )
         } else {
           line(
             point-at(
-              dir.x * offset - ox * lone-pair-line-half,
-              dir.y * offset - oy * lone-pair-line-half,
+              direction.x * offset - normal-x * lone-pair-line-half,
+              direction.y * offset - normal-y * lone-pair-line-half,
             ),
             point-at(
-              dir.x * offset + ox * lone-pair-line-half,
-              dir.y * offset + oy * lone-pair-line-half,
+              direction.x * offset + normal-x * lone-pair-line-half,
+              direction.y * offset + normal-y * lone-pair-line-half,
             ),
-            stroke: stroke-w + fill,
+            stroke: stroke-width + fill,
           )
         }
       }
@@ -1106,18 +1274,18 @@
         let count = atom.at("lone_pairs", default: 0)
         if count <= 0 { continue }
 
-        let px = rx(atom.pos.x, atom.pos.y)
-        let py = ry(atom.pos.x, atom.pos.y)
-        let fill = display-clr(atom)
+        let px = rotated-x(atom.pos.x, atom.pos.y)
+        let py = rotated-y(atom.pos.x, atom.pos.y)
+        let fill = display-color(atom)
         let abbrev = atom.at("abbrev", default: "")
 
         if abbrev != "" {
           // Custom labels place pairs in screen space, avoiding the label box
           // and the bonds. The same helper feeds lp() references.
           let bond-dirs = atom-neighbor-indices(i)
-            .map(ni => neighbor-screen-dir(i, ni))
+            .map(neighbor-index => neighbor-screen-direction(i, neighbor-index))
             .filter(d => d != none)
-          let placements = _abbrev-lp-dirs(
+          let placements = _abbreviation-lone-pair-directions(
             abbrev,
             atom.at("abbrev_anchor", default: 0),
             atom.at("abbrev_anchor_len", default: 0),
@@ -1136,23 +1304,23 @@
 
         let has-inline-h = (
           not _is-carbon(atom) and
-          visible-h-count(i) > 0
+          visible-hydrogen-count(i) > 0
         )
 
         if not has-inline-h {
           // Use the plugin's layout-space directions, rotated into screen space.
           let dirs = atom
             .at("lone_pair_dirs", default: ())
-            .map(d => (x: rx(d.x, d.y), y: ry(d.x, d.y)))
+            .map(d => (x: rotated-x(d.x, d.y), y: rotated-y(d.x, d.y)))
           render-pairs((x: px, y: py), dirs, fill, lone-pair-offset)
         } else {
-          let origin = if str(i) in vh-child {
+          let origin = if str(i) in virtual-hydrogen-child {
             index-marker-name(i, "-sym") + ".center"
           } else {
             (x: px, y: py)
           }
           let offset = if atom-degree(i) <= 1 { lone-pair-terminal-offset } else { lone-pair-offset }
-          render-pairs(origin, inline-h-pair-dirs(i, count), fill, offset)
+          render-pairs(origin, inline-hydrogen-pair-directions(i, count), fill, offset)
         }
       }
     }
@@ -1164,16 +1332,16 @@
       if atom.at("virtual_h", default: false) { continue }
       let stereo = atom.at("stereo_h", default: "none")
       if stereo != "none" {
-        let px = rx(atom.pos.x, atom.pos.y)
-        let py = ry(atom.pos.x, atom.pos.y)
+        let px = rotated-x(atom.pos.x, atom.pos.y)
+        let py = rotated-y(atom.pos.x, atom.pos.y)
         let dir = atom.at("stereo_h_dir", default: (x: 0.0, y: -1.0))
-        let ux = rx(dir.x, dir.y)
-        let uy = ry(dir.x, dir.y)
+        let ux = rotated-x(dir.x, dir.y)
+        let uy = rotated-y(dir.x, dir.y)
         let bond-end-x = px + ux * 0.62
         let bond-end-y = py + uy * 0.62
         let label-x = px + ux * 0.82
         let label-y = py + uy * 0.82
-        let h-fill = atom-clr("H")
+        let h-fill = atom-color("H")
 
         if stereo == "wedge_up" {
           let half-w = 0.085
@@ -1193,7 +1361,7 @@
             let w = half-w * t
             let ox = -uy * w
             let oy = ux * w
-            line((cx - ox, cy - oy), (cx + ox, cy + oy), stroke: stroke-w + h-fill)
+            line((cx - ox, cy - oy), (cx + ox, cy + oy), stroke: stroke-width + h-fill)
           }
         }
 
@@ -1213,11 +1381,11 @@
       if atom.at("virtual_h", default: false) { continue }
       if has-label(i) {
         let abbrev = atom.at("abbrev", default: "")
-        let fill = display-clr(atom)
-        let px = rx(atom.pos.x, atom.pos.y)
-        let py = ry(atom.pos.x, atom.pos.y)
-        let deg = atom-degree(i)
-        let h-count = visible-h-count(i)
+        let fill = display-color(atom)
+        let px = rotated-x(atom.pos.x, atom.pos.y)
+        let py = rotated-y(atom.pos.x, atom.pos.y)
+        let degree = atom-degree(i)
+        let h-count = visible-hydrogen-count(i)
 
         let charge-str = if atom.charge == 1        { "+" }
                          else if atom.charge == -1  { "\u{2212}" }
@@ -1239,8 +1407,8 @@
         } else {
           []
         }
-        let sym-text = isotope-content + atom-label(atom.symbol, fill: fill)
-        let h-text = if abbrev != "" or h-count == 0 or (_is-carbon(atom) and not (show-all-h or forced-h(i))) {
+        let symbol-text = isotope-content + atom-label(atom.symbol, fill: fill)
+        let h-text = if abbrev != "" or h-count == 0 or (_is-carbon(atom) and not (show-all-h or forced-hydrogen(i))) {
           []
         } else if h-count == 1 {
           atom-label("H", fill: fill)
@@ -1255,17 +1423,17 @@
         // Terminal heteroatom with an inline H (e.g. -OH, -NH₂): center the heavy
         // symbol on the bond terminus and hang the H off to one side, so the bond
         // always meets the heteroatom and never the trailing H at any angle.
-        let hetero-inline = abbrev == "" and h-text != [] and deg == 1 and not _is-carbon(atom)
+        let hetero-inline = abbrev == "" and h-text != [] and degree == 1 and not _is-carbon(atom)
 
         if hetero-inline {
-          let ni = first-neighbor(i)
-          let nb = layout.atoms.at(ni)
-          let dx = rx(nb.pos.x, nb.pos.y) - px
-          let dy = ry(nb.pos.x, nb.pos.y) - py
+          let neighbor-index = first-neighbor(i)
+          let neighbor-atom = layout.atoms.at(neighbor-index)
+          let dx = rotated-x(neighbor-atom.pos.x, neighbor-atom.pos.y) - px
+          let dy = rotated-y(neighbor-atom.pos.x, neighbor-atom.pos.y) - py
           // Anchor the symbol's bond-facing edge at the atom; the H hangs off the
           // opposite side. Pad only the bond-facing edge so the pair stays tight.
           let pad-bond = 1pt
-          let (sym-anchor, sym-pad, h-at, h-self) = if calc.abs(dx) >= calc.abs(dy) {
+          let (symbol-anchor, symbol-pad, h-at, h-self) = if calc.abs(dx) >= calc.abs(dy) {
             if dx > 0 {
               ("east", (right: pad-bond), "west", "east")
             } else {
@@ -1280,24 +1448,24 @@
           }
           // Keep the charge on the rightmost element so it reads as the group
           // charge: with the symbol when the H sits to its left, else with the H.
-          let sym-content = if h-at == "west" { sym-text + charge-content } else { sym-text }
+          let symbol-content = if h-at == "west" { symbol-text + charge-content } else { symbol-text }
           let h-content = if h-at == "west" { h-text } else { h-text + charge-content }
           let sname = "atom-" + str(i)
-          content((px, py), sym-content, anchor: sym-anchor, padding: sym-pad, name: sname)
-          if (show-indices or lone-pairs != none) and str(i) in vh-child {
-            let h-child = vh-child.at(str(i))
+          content((px, py), symbol-content, anchor: symbol-anchor, padding: symbol-pad, name: sname)
+          if (show-indices or lone-pairs != none) and str(i) in virtual-hydrogen-child {
+            let h-child = virtual-hydrogen-child.at(str(i))
             let pad-u = pad-bond / canvas-scale
-            let sym-marker-x = if sym-anchor == "east" {
+            let symbol-marker-x = if symbol-anchor == "east" {
               px - pad-u - content-width(if h-at == "west" { charge-content } else { [] })
-            } else if sym-anchor == "west" {
+            } else if symbol-anchor == "west" {
               px + pad-u
             } else {
               px
             }
             content(
-              (sym-marker-x, py),
+              (symbol-marker-x, py),
               atom-label(atom.symbol, fill: transparent),
-              anchor: sym-anchor,
+              anchor: symbol-anchor,
               padding: 0pt,
               name: index-marker-name(i, "-sym"),
             )
@@ -1328,42 +1496,42 @@
           let h-above-content = []
           let h-above-marker = none
         let label-content = if abbrev != "" {
-          _abbrev-label(
+          _abbreviation-label(
             abbrev,
             (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
             subscript-size,
             superscript-size,
           )
           } else {
-            let reverse-inline = if h-text == [] or deg != 1 {
+            let reverse-inline = if h-text == [] or degree != 1 {
               false
             } else {
-              let ni = first-neighbor(i)
-              if ni == none {
+              let neighbor-index = first-neighbor(i)
+              if neighbor-index == none {
                 false
               } else {
-                let neighbor = layout.atoms.at(ni)
-                let vx = rx(neighbor.pos.x, neighbor.pos.y) - px
+                let neighbor = layout.atoms.at(neighbor-index)
+                let vx = rotated-x(neighbor.pos.x, neighbor.pos.y) - px
                 vx > 0.05
               }
             }
-            let stacked-h = h-text != [] and deg >= 2 and not _is-carbon(atom)
+            let stacked-h = h-text != [] and degree >= 2 and not _is-carbon(atom)
             let base-text = if stacked-h {
               draw-h-above = true
               h-above-content = h-text
-              if (show-indices or lone-pairs != none) and str(i) in vh-child {
+              if (show-indices or lone-pairs != none) and str(i) in virtual-hydrogen-child {
                 h-above-marker = (
-                  child: vh-child.at(str(i)),
+                  child: virtual-hydrogen-child.at(str(i)),
                   group: h-text,
                   prefix: [],
                   fragment: atom-label("H", fill: transparent),
                 )
               }
-              sym-text
+              symbol-text
             } else if reverse-inline {
-              h-text + sym-text
+              h-text + symbol-text
             } else {
-              sym-text + h-text
+              symbol-text + h-text
             }
             base-text + charge-content
           }
@@ -1372,7 +1540,7 @@
 
           if symbol-centered-charge {
             content(
-              (px + (content-width(label-content) - content-width(sym-text)) / 2, py),
+              (px + (content-width(label-content) - content-width(symbol-text)) / 2, py),
               label-content,
               anchor: "center",
               padding: 1pt,
@@ -1386,15 +1554,15 @@
               padding: 1pt,
             )
             if h-above-marker != none {
-              let sym-marker = atom-label(atom.symbol, fill: transparent)
-              let sym-x = (
+              let symbol-marker = atom-label(atom.symbol, fill: transparent)
+              let symbol-x = (
                 px
                 - content-width(label-content) / 2
-                + content-width(sym-marker) / 2
+                + content-width(symbol-marker) / 2
               )
               content(
-                (sym-x, py),
-                sym-marker,
+                (symbol-x, py),
+                symbol-marker,
                 anchor: "center",
                 padding: 0pt,
                 name: index-marker-name(i, "-sym"),
@@ -1417,21 +1585,21 @@
             }
           }
 
-          if (show-indices or lone-pairs != none) and str(i) in vh-child and not draw-h-above {
-            let h-child = vh-child.at(str(i))
-            let sym-marker = atom-label(atom.symbol, fill: transparent)
+          if (show-indices or lone-pairs != none) and str(i) in virtual-hydrogen-child and not draw-h-above {
+            let h-child = virtual-hydrogen-child.at(str(i))
+            let symbol-marker = atom-label(atom.symbol, fill: transparent)
             let h-marker = atom-label("H", fill: transparent)
-            let h-prefix = if label-content == h-text + sym-text + charge-content {
+            let h-prefix = if label-content == h-text + symbol-text + charge-content {
               []
             } else {
-              sym-text
+              symbol-text
             }
-            let sym-prefix = if h-prefix == [] { h-text } else { [] }
-            let sym-x = (
+            let symbol-prefix = if h-prefix == [] { h-text } else { [] }
+            let symbol-x = (
               px
               - content-width(label-content) / 2
-              + content-width(sym-prefix)
-              + content-width(sym-marker) / 2
+              + content-width(symbol-prefix)
+              + content-width(symbol-marker) / 2
             )
             let h-x = (
               px
@@ -1440,8 +1608,8 @@
               + content-width(h-marker) / 2
             )
             content(
-              (sym-x, py),
-              sym-marker,
+              (symbol-x, py),
+              symbol-marker,
               anchor: "center",
               padding: 0pt,
               name: index-marker-name(i, "-sym"),
@@ -1461,7 +1629,7 @@
                 abbrev,
                 atom.at("abbrev_anchor", default: 0),
                 atom.at("abbrev_anchor_len", default: 0),
-                text => content-width(_abbrev-label(
+                text => content-width(_abbreviation-label(
                   text,
                   (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
                   subscript-size,
@@ -1483,28 +1651,45 @@
     // beyond the label region so they read as side notes rather than as the
     // sub- or superscripts of the chemical label itself.
     let annotation-fill = fade(if theme == "dark" { rgb("#9E9E9E") } else { rgb("#8F8F8F") })
-    for ann in atom-annotations {
-      let i = ann.index
-      let body = ann.body
-      let atom = layout.atoms.at(i)
+    for annotation in atom-annotations {
+      let atom-index = annotation.index
+      let body = annotation.body
+      let atom = layout.atoms.at(atom-index)
       if not atom.at("virtual_h", default: false) {
-        let px = rx(atom.pos.x, atom.pos.y)
-        let py = ry(atom.pos.x, atom.pos.y)
-        let sxv = atom-neighbor-indices(i)
-          .map(ni => neighbor-screen-dir(i, ni))
-          .filter(d => d != none)
-        let sum = sxv.fold((x: 0.0, y: 0.0), (acc, d) => (x: acc.x + d.x, y: acc.y + d.y))
-        let len = calc.sqrt(sum.x * sum.x + sum.y * sum.y)
-        let dir = if len > 0.05 {
-          (x: -sum.x / len, y: -sum.y / len)
+        let atom-x = rotated-x(atom.pos.x, atom.pos.y)
+        let atom-y = rotated-y(atom.pos.x, atom.pos.y)
+        let neighbor-directions = atom-neighbor-indices(atom-index)
+          .map(neighbor-index => (
+            neighbor-screen-direction(atom-index, neighbor-index)
+          ))
+          .filter(direction => direction != none)
+        let direction-sum = neighbor-directions.fold(
+          (x: 0.0, y: 0.0),
+          (accumulator, direction) => (
+            x: accumulator.x + direction.x,
+            y: accumulator.y + direction.y,
+          ),
+        )
+        let direction-length = calc.sqrt(
+          direction-sum.x * direction-sum.x
+            + direction-sum.y * direction-sum.y,
+        )
+        let annotation-direction = if direction-length > 0.05 {
+          (
+            x: -direction-sum.x / direction-length,
+            y: -direction-sum.y / direction-length,
+          )
         } else {
           // Symmetric surroundings or isolated atom: place diagonally.
           (x: 0.7071, y: 0.7071)
         }
-        let offset = if has-label(i) { label-margin + 0.14 } else { 0.30 }
-        let nudge = ann.at("offset", default: (0, 0))
+        let offset = if has-label(atom-index) { label-margin + 0.14 } else { 0.30 }
+        let nudge = annotation.at("offset", default: (0, 0))
         content(
-          (px + dir.x * offset + nudge.at(0), py + dir.y * offset + nudge.at(1)),
+          (
+            atom-x + annotation-direction.x * offset + nudge.at(0),
+            atom-y + annotation-direction.y * offset + nudge.at(1),
+          ),
           text(size: actual-font-size * 0.62, fill: annotation-fill, body),
           anchor: "center",
           padding: 1pt,
@@ -1522,37 +1707,48 @@
       let badge-size  = actual-font-size * 0.52
       let badge-bg = if theme == "dark" { rgb(30, 30, 30, 220) } else { rgb(255, 255, 255, 220) }
 
-      for i in range(layout.atoms.len()) {
-        let a  = layout.atoms.at(i)
-        let ax = rx(a.pos.x, a.pos.y)
-        let ay = ry(a.pos.x, a.pos.y)
+      for atom-index in range(layout.atoms.len()) {
+        let atom = layout.atoms.at(atom-index)
+        let atom-x = rotated-x(atom.pos.x, atom.pos.y)
+        let atom-y = rotated-y(atom.pos.x, atom.pos.y)
 
-        let (bx, by, btarget) = if (
-          not a.at("virtual_h", default: false) and
-          str(i) in vh-child and
-          _has-label(a, show-all-h: show-all-h, force: forced-h(i))
-        ) {
-          (0.0, 0.0, index-marker-name(i, "-sym") + ".center")
-        } else if (
-          a.at("virtual_h", default: false) and
-          str(i) in vh-parent and
+        let (badge-x, badge-y, badge-target) = if (
+          not atom.at("virtual_h", default: false) and
+          str(atom-index) in virtual-hydrogen-child and
           _has-label(
-            layout.atoms.at(vh-parent.at(str(i))),
+            atom,
             show-all-h: show-all-h,
-            force: forced-h(vh-parent.at(str(i))),
+            force: forced-hydrogen(atom-index),
           )
         ) {
-          (0.0, 0.0, index-marker-name(i, "-h") + ".center")
+          (0.0, 0.0, index-marker-name(atom-index, "-sym") + ".center")
+        } else if (
+          atom.at("virtual_h", default: false) and
+          str(atom-index) in virtual-hydrogen-parent and
+          _has-label(
+            layout.atoms.at(virtual-hydrogen-parent.at(str(atom-index))),
+            show-all-h: show-all-h,
+            force: forced-hydrogen(
+              virtual-hydrogen-parent.at(str(atom-index)),
+            ),
+          )
+        ) {
+          (0.0, 0.0, index-marker-name(atom-index, "-h") + ".center")
         } else {
-          (ax, ay, none)
+          (atom-x, atom-y, none)
         }
 
         content(
-          if btarget == none { (bx, by) } else { btarget },
+          if badge-target == none { (badge-x, badge-y) } else { badge-target },
           box(
             fill: badge-bg,
             inset: 0.4pt,
-            text(size: badge-size, fill: rgb("#C81E6E"), weight: "bold", str(i)),
+            text(
+              size: badge-size,
+              fill: rgb("#C81E6E"),
+              weight: "bold",
+              str(atom-index),
+            ),
           ),
           anchor: "center",
           padding: 0pt,
@@ -1564,48 +1760,62 @@
 // ── Reference resolution and annotation drawing ─────────────────────────────────
 
 // Screen-space position of layout coordinate (x, y) under `rotation`.
-#let _rot(x, y, rotation) = (
-  x * calc.cos(rotation) - y * calc.sin(rotation),
-  x * calc.sin(rotation) + y * calc.cos(rotation),
+#let _rotate-point(coordinate-x, coordinate-y, rotation) = (
+  coordinate-x * calc.cos(rotation) - coordinate-y * calc.sin(rotation),
+  coordinate-x * calc.sin(rotation) + coordinate-y * calc.cos(rotation),
 )
 
-// Absolute canvas position of atom `i` in a placed species. Label references use
+// Absolute canvas position of an atom in a placed species. Label references use
 // the rendered atom glyph center rather than the full label box.
-#let _atom-pos(sp, i) = {
+#let _atom-position(placed-species, atom-index) = {
   // `mol-scale` shrinks or grows one species around its own origin; layout
   // coordinates are stored unscaled, so every read multiplies by it.
-  let ms = sp.at("mol-scale", default: 1.0)
-  let a = sp.layout.atoms.at(i)
-  let (rxv, ryv) = _rot(a.pos.x * ms, a.pos.y * ms, sp.rotation)
-  let base = (sp.origin.at(0) + rxv, sp.origin.at(1) + ryv)
+  let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+  let atom = placed-species.layout.atoms.at(atom-index)
+  let (rotated-position-x, rotated-position-y) = _rotate-point(
+    atom.pos.x * molecule-scale,
+    atom.pos.y * molecule-scale,
+    placed-species.rotation,
+  )
+  let base = (placed-species.origin.at(0) + rotated-position-x, placed-species.origin.at(1) + rotated-position-y)
 
-  let cs = sp.at("canvas-scale", default: 30pt)
-  let fs = sp.at("actual-font-size", default: 11pt)
-  let font = sp.at("font", default: "New Computer Modern")
-  let show-h-state = _normalize-show-h(sp.at("show-h", default: ()))
+  let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+  let font-size = placed-species.at("actual-font-size", default: 11pt)
+  let font = placed-species.at("font", default: "New Computer Modern")
+  let show-h-state = _normalize-show-h(placed-species.at("show-h", default: ()))
   let show-all-h = show-h-state.all
-  let label-margin = calc.max(0.27 * ms, fs / cs * 0.70)
-  let subscript-size = fs * 1.00
-  let superscript-size = fs * 1.00
-  let atom-label(body, size: fs) = text(
+  let label-margin = calc.max(0.27 * molecule-scale, font-size / canvas-scale * 0.70)
+  let subscript-size = font-size * 1.00
+  let superscript-size = font-size * 1.00
+  let atom-label(body, size: font-size) = text(
     size: size,
     font: font,
     style: "normal",
     weight: "regular",
     body,
   )
-  let content-width(body) = measure(body).width / cs
-  let content-height(body) = measure(body).height / cs
-  let real-bonds = sp.layout.bonds.filter(b => not b.at("virtual_bond", default: false))
-  let atom-degree(j) = real-bonds.filter(b => b.from == j or b.to == j).len()
-  let first-neighbor(j) = {
-    let result = none
-    for b in real-bonds {
-      if result == none and (b.from == j or b.to == j) {
-        result = if b.from == j { b.to } else { b.from }
+  let content-width(body) = measure(body).width / canvas-scale
+  let content-height(body) = measure(body).height / canvas-scale
+  let structural-bonds = placed-species.layout.bonds.filter(
+    bond-output => not bond-output.at("virtual_bond", default: false),
+  )
+  let atom-degree(index) = structural-bonds.filter(
+    bond-output => bond-output.from == index or bond-output.to == index,
+  ).len()
+  let first-neighbor(index) = {
+    let neighbor-index = none
+    for bond-output in structural-bonds {
+      if neighbor-index == none and (
+        bond-output.from == index or bond-output.to == index
+      ) {
+        neighbor-index = if bond-output.from == index {
+          bond-output.to
+        } else {
+          bond-output.from
+        }
       }
     }
-    result
+    neighbor-index
   }
   let charge-content(atom) = {
     let charge-str = if atom.charge == 1        { "+" }
@@ -1620,8 +1830,8 @@
     }
   }
   let show-h-list = show-h-state.indices
-  let h-text(atom, idx) = {
-    let force = show-h-list.contains(idx)
+  let hydrogen-label(atom, index) = {
+    let force = show-h-list.contains(index)
     let count = atom.hcount + _visible-implicit-h(atom, show-all-h: show-all-h, force: force)
     if atom.at("abbrev", default: "") != "" or count == 0 or (_is-carbon(atom) and not (show-all-h or force)) {
       []
@@ -1633,214 +1843,283 @@
   }
   let virtual-child(parent) = {
     let child = none
-    for b in sp.layout.bonds {
-      if child == none and b.at("virtual_bond", default: false) and b.from == parent {
-        child = b.to
+    for bond-output in placed-species.layout.bonds {
+      if (
+        child == none
+          and bond-output.at("virtual_bond", default: false)
+          and bond-output.from == parent
+      ) {
+        child = bond-output.to
       }
     }
     child
   }
   let virtual-parent(child) = {
     let parent = none
-    for b in sp.layout.bonds {
-      if parent == none and b.at("virtual_bond", default: false) and b.to == child {
-        parent = b.from
+    for bond-output in placed-species.layout.bonds {
+      if (
+        parent == none
+          and bond-output.at("virtual_bond", default: false)
+          and bond-output.to == child
+      ) {
+        parent = bond-output.from
       }
     }
     parent
   }
 
-  let label-fragment-pos(parent, fragment) = {
-    let atom = sp.layout.atoms.at(parent)
-    let (pxr, pyr) = _rot(atom.pos.x * ms, atom.pos.y * ms, sp.rotation)
-    let px = sp.origin.at(0) + pxr
-    let py = sp.origin.at(1) + pyr
-    let deg = atom-degree(parent)
-    let sym-text = atom-label(atom.symbol)
-    let ht = h-text(atom, parent)
+  let label-fragment-position(parent, fragment) = {
+    let atom = placed-species.layout.atoms.at(parent)
+    let (rotated-parent-x, rotated-parent-y) = _rotate-point(atom.pos.x * molecule-scale, atom.pos.y * molecule-scale, placed-species.rotation)
+    let px = placed-species.origin.at(0) + rotated-parent-x
+    let py = placed-species.origin.at(1) + rotated-parent-y
+    let degree = atom-degree(parent)
+    let symbol-text = atom-label(atom.symbol)
+    let hydrogen-text = hydrogen-label(atom, parent)
     let charge = charge-content(atom)
 
-    if atom.at("abbrev", default: "") != "" or ht == [] {
+    if atom.at("abbrev", default: "") != "" or hydrogen-text == [] {
       return (px, py)
     }
 
-    let hetero-inline = deg == 1 and not _is-carbon(atom)
+    let hetero-inline = degree == 1 and not _is-carbon(atom)
     if hetero-inline {
-      let ni = first-neighbor(parent)
-      if ni == none { return (px, py) }
-      let nb = sp.layout.atoms.at(ni)
-      let (nbx, nby) = _rot(nb.pos.x * ms, nb.pos.y * ms, sp.rotation)
-      let dx = nbx - pxr
-      let dy = nby - pyr
-      let pad-u = 1pt / cs
-      let sym-w = content-width(sym-text)
-      let h-w = content-width(atom-label("H"))
-      let (sym-anchor, h-at) = if calc.abs(dx) >= calc.abs(dy) {
-        if dx > 0 { ("east", "west") } else { ("west", "east") }
-      } else if dy > 0 {
+      let neighbor-index = first-neighbor(parent)
+      if neighbor-index == none { return (px, py) }
+      let neighbor-atom = placed-species.layout.atoms.at(neighbor-index)
+      let (nbx, nby) = _rotate-point(neighbor-atom.pos.x * molecule-scale, neighbor-atom.pos.y * molecule-scale, placed-species.rotation)
+      let neighbor-offset-x = nbx - rotated-parent-x
+      let neighbor-offset-y = nby - rotated-parent-y
+      let padding-units = 1pt / canvas-scale
+      let symbol-width = content-width(symbol-text)
+      let hydrogen-width = content-width(atom-label("H"))
+      let (symbol-anchor, hydrogen-side) = if calc.abs(neighbor-offset-x) >= calc.abs(neighbor-offset-y) {
+        if neighbor-offset-x > 0 { ("east", "west") } else { ("west", "east") }
+      } else if neighbor-offset-y > 0 {
         ("north", "east")
       } else {
         ("south", "east")
       }
 
-      let sym-center = if sym-anchor == "east" {
-        (px - pad-u - content-width(if h-at == "west" { charge } else { [] }) - sym-w / 2, py)
-      } else if sym-anchor == "west" {
-        (px + pad-u + sym-w / 2, py)
-      } else if sym-anchor == "north" {
-        (px, py - content-height(sym-text) / 2)
+      let symbol-center = if symbol-anchor == "east" {
+        (
+          px
+            - padding-units
+            - content-width(if hydrogen-side == "west" { charge } else { [] })
+            - symbol-width / 2,
+          py,
+        )
+      } else if symbol-anchor == "west" {
+        (px + padding-units + symbol-width / 2, py)
+      } else if symbol-anchor == "north" {
+        (px, py - content-height(symbol-text) / 2)
       } else {
-        (px, py + content-height(sym-text) / 2)
+        (px, py + content-height(symbol-text) / 2)
       }
 
       if fragment == "sym" {
-        return sym-center
+        return symbol-center
       }
 
-      let hx = if h-at == "west" {
-        sym-center.at(0) - sym-w / 2 - h-w / 2
+      let hydrogen-x = if hydrogen-side == "west" {
+        symbol-center.at(0) - symbol-width / 2 - hydrogen-width / 2
       } else {
-        sym-center.at(0) + sym-w / 2 + h-w / 2
+        symbol-center.at(0) + symbol-width / 2 + hydrogen-width / 2
       }
-      return (hx, sym-center.at(1))
+      return (hydrogen-x, symbol-center.at(1))
     }
 
-    let stacked-h = deg >= 2 and not _is-carbon(atom)
+    let stacked-h = degree >= 2 and not _is-carbon(atom)
     if stacked-h {
       if fragment == "h" {
         return (px, py + label-margin * 0.95)
       }
-      let label-content = sym-text + charge
+      let label-content = symbol-text + charge
       return (
-        px - content-width(label-content) / 2 + content-width(sym-text) / 2,
+        px - content-width(label-content) / 2 + content-width(symbol-text) / 2,
         py,
       )
     }
 
-    let reverse-inline = if deg != 1 {
+    let reverse-inline = if degree != 1 {
       false
     } else {
-      let ni = first-neighbor(parent)
-      if ni == none {
+      let neighbor-index = first-neighbor(parent)
+      if neighbor-index == none {
         false
       } else {
-        let neighbor = sp.layout.atoms.at(ni)
-        let (nx, _) = _rot(neighbor.pos.x * ms, neighbor.pos.y * ms, sp.rotation)
-        nx - pxr > 0.05
+        let neighbor = placed-species.layout.atoms.at(neighbor-index)
+        let (nx, _) = _rotate-point(neighbor.pos.x * molecule-scale, neighbor.pos.y * molecule-scale, placed-species.rotation)
+        nx - rotated-parent-x > 0.05
       }
     }
     let label-content = if reverse-inline {
-      ht + sym-text + charge
+      hydrogen-text + symbol-text + charge
     } else {
-      sym-text + ht + charge
+      symbol-text + hydrogen-text + charge
     }
     let left = px - content-width(label-content) / 2
     if fragment == "sym" {
-      let prefix = if reverse-inline { ht } else { [] }
-      (left + content-width(prefix) + content-width(sym-text) / 2, py)
+      let prefix = if reverse-inline { hydrogen-text } else { [] }
+      (left + content-width(prefix) + content-width(symbol-text) / 2, py)
     } else {
-      let prefix = if reverse-inline { [] } else { sym-text }
+      let prefix = if reverse-inline { [] } else { symbol-text }
       (left + content-width(prefix) + content-width(atom-label("H")) / 2, py)
     }
   }
 
-  if a.at("virtual_h", default: false) {
-    let parent = virtual-parent(i)
+  if atom.at("virtual_h", default: false) {
+    let parent = virtual-parent(atom-index)
     if parent == none { return base }
-    return label-fragment-pos(parent, "h")
+    return label-fragment-position(parent, "h")
   }
 
-  if not _has-label(a, show-all-h: show-all-h, force: show-h-list.contains(i)) { return base }
-  let child = virtual-child(i)
+  if not _has-label(
+    atom,
+    show-all-h: show-all-h,
+    force: show-h-list.contains(atom-index),
+  ) {
+    return base
+  }
+  let child = virtual-child(atom-index)
   if child == none { return base }
-  label-fragment-pos(i, "sym")
+  label-fragment-position(atom-index, "sym")
 }
 
-// Find the bond record joining atoms i and j in a species' layout.
-#let _find-bond(sp, i, j) = {
-  for b in sp.layout.bonds {
-    if (b.from == i and b.to == j) or (b.from == j and b.to == i) { return b }
+// Find the bond record joining two atoms in a species' layout.
+#let _find-bond-output(placed-species, first-atom-index, second-atom-index) = {
+  for bond-output in placed-species.layout.bonds {
+    if (
+      bond-output.from == first-atom-index and bond-output.to == second-atom-index
+    ) or (
+      bond-output.from == second-atom-index and bond-output.to == first-atom-index
+    ) {
+      return bond-output
+    }
   }
-  panic("no bond between atoms " + str(i) + " and " + str(j))
+  panic(
+    "no bond between atoms "
+      + str(first-atom-index)
+      + " and "
+      + str(second-atom-index),
+  )
 }
 
 // Resolve a reference dictionary to an absolute canvas coordinate.
-// `species` is the list of placed species records; `lp-offset` is the radial
+// `placed-species-list` contains the placed species records; `lone-pair-offset`
+// is the radial
 // distance of a lone pair from its atom (in bond-length units).
-#let _resolve(ref, species, lp-offset) = {
-  let nudge(p) = {
-    let o = ref.at("offset", default: (0, 0))
-    (p.at(0) + o.at(0), p.at(1) + o.at(1))
+#let _resolve-reference(reference, placed-species-list, lone-pair-offset) = {
+  let apply-reference-offset(point) = {
+    let offset = reference.at("offset", default: (0, 0))
+    (point.at(0) + offset.at(0), point.at(1) + offset.at(1))
   }
-  let kind = ref.__ref__
+  let kind = reference.__ref__
   if kind == "atom" {
-    nudge(_atom-pos(species.at(ref.species), ref.index))
+    apply-reference-offset(_atom-position(
+      placed-species-list.at(reference.species),
+      reference.index,
+    ))
   } else if kind == "bond" {
-    let sp = species.at(ref.species)
-    let pa = _atom-pos(sp, ref.i)
-    let pb = _atom-pos(sp, ref.j)
-    nudge(((pa.at(0) + pb.at(0)) / 2, (pa.at(1) + pb.at(1)) / 2))
+    let placed-species = placed-species-list.at(reference.species)
+    let first-position = _atom-position(placed-species, reference.i)
+    let second-position = _atom-position(placed-species, reference.j)
+    apply-reference-offset((
+      (first-position.at(0) + second-position.at(0)) / 2,
+      (first-position.at(1) + second-position.at(1)) / 2,
+    ))
   } else if kind == "lp" {
-    let sp = species.at(ref.species)
-    let ms = sp.at("mol-scale", default: 1.0)
-    let a = sp.layout.atoms.at(ref.atom)
-    let base = _atom-pos(sp, ref.atom)
-    let abbrev = a.at("abbrev", default: "")
-    if abbrev != "" {
+    let placed-species = placed-species-list.at(reference.species)
+    let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+    let atom = placed-species.layout.atoms.at(reference.atom)
+    let atom-position = _atom-position(placed-species, reference.atom)
+    let abbreviation = atom.at("abbrev", default: "")
+    if abbreviation != "" {
       // Custom labels compute pair positions in screen space; mirror the
       // drawing pass exactly by calling the shared helper with the same
       // (mol-scale-free) units, then apply mol-scale once at the end.
-      let cs = sp.at("canvas-scale", default: 30pt)
-      let fs = sp.at("actual-font-size", default: 11pt) / ms
-      let font = sp.at("font", default: "New Computer Modern")
-      let ax = a.pos.x
-      let ay = a.pos.y
-      let (arx, ary) = _rot(ax, ay, sp.rotation)
-      let bond-dirs = ()
-      for b in sp.layout.bonds {
-        if b.at("virtual_bond", default: false) { continue }
-        let other = if b.from == ref.atom { b.to } else if b.to == ref.atom { b.from } else { none }
-        if other != none {
-          let na = sp.layout.atoms.at(other)
-          let (nx, ny) = _rot(na.pos.x, na.pos.y, sp.rotation)
-          let vx = nx - arx
-          let vy = ny - ary
-          let l = calc.sqrt(vx * vx + vy * vy)
-          if l > 0.001 { bond-dirs.push((x: vx / l, y: vy / l)) }
+      let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+      let font-size = placed-species.at("actual-font-size", default: 11pt) / molecule-scale
+      let font = placed-species.at("font", default: "New Computer Modern")
+      let (rotated-atom-x, rotated-atom-y) = _rotate-point(
+        atom.pos.x,
+        atom.pos.y,
+        placed-species.rotation,
+      )
+      let bond-directions = ()
+      for bond-output in placed-species.layout.bonds {
+        if bond-output.at("virtual_bond", default: false) { continue }
+        let other-index = if bond-output.from == reference.atom {
+          bond-output.to
+        } else if bond-output.to == reference.atom {
+          bond-output.from
+        } else {
+          none
+        }
+        if other-index != none {
+          let neighbor = placed-species.layout.atoms.at(other-index)
+          let (neighbor-x, neighbor-y) = _rotate-point(
+            neighbor.pos.x,
+            neighbor.pos.y,
+            placed-species.rotation,
+          )
+          let offset-x = neighbor-x - rotated-atom-x
+          let offset-y = neighbor-y - rotated-atom-y
+          let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
+          if distance > 0.001 {
+            bond-directions.push((
+              x: offset-x / distance,
+              y: offset-y / distance,
+            ))
+          }
         }
       }
-      let margin = calc.max(0.08, fs / cs * 0.34)
-      let placements = _abbrev-lp-dirs(
-        abbrev,
-        a.at("abbrev_anchor", default: 0),
-        a.at("abbrev_anchor_len", default: 0),
-        a.at("lone_pairs", default: 1),
-        bond-dirs,
-        cs,
-        fs,
+      let margin = calc.max(0.08, font-size / canvas-scale * 0.34)
+      let placements = _abbreviation-lone-pair-directions(
+        abbreviation,
+        atom.at("abbrev_anchor", default: 0),
+        atom.at("abbrev_anchor_len", default: 0),
+        atom.at("lone_pairs", default: 1),
+        bond-directions,
+        canvas-scale,
+        font-size,
         font,
         margin,
       )
       if placements.len() == 0 {
-        nudge(base)
+        apply-reference-offset(atom-position)
       } else {
-        let pl = placements.at(calc.min(ref.pair, placements.len() - 1))
-        nudge((base.at(0) + pl.dir.x * pl.offset * ms, base.at(1) + pl.dir.y * pl.offset * ms))
+        let placement = placements.at(
+          calc.min(reference.pair, placements.len() - 1),
+        )
+        apply-reference-offset((
+          atom-position.at(0) + placement.dir.x * placement.offset * molecule-scale,
+          atom-position.at(1) + placement.dir.y * placement.offset * molecule-scale,
+        ))
       }
     } else {
-      let dirs = a.at("lone_pair_dirs", default: ())
-      if dirs.len() == 0 {
-        nudge(base)
+      let directions = atom.at("lone_pair_dirs", default: ())
+      if directions.len() == 0 {
+        apply-reference-offset(atom-position)
       } else {
-        let d = dirs.at(calc.min(ref.pair, dirs.len() - 1))
-        let (dx, dy) = _rot(d.x, d.y, sp.rotation)
-        nudge((base.at(0) + dx * lp-offset * ms, base.at(1) + dy * lp-offset * ms))
+        let direction = directions.at(
+          calc.min(reference.pair, directions.len() - 1),
+        )
+        let (direction-x, direction-y) = _rotate-point(
+          direction.x,
+          direction.y,
+          placed-species.rotation,
+        )
+        apply-reference-offset((
+          atom-position.at(0) + direction-x * lone-pair-offset * molecule-scale,
+          atom-position.at(1) + direction-y * lone-pair-offset * molecule-scale,
+        ))
       }
     }
   } else if kind == "species" {
     // Bounding-box center of an opaque item; edge selection happens at draw time.
-    let sp = species.at(ref.index)
-    nudge(sp.origin)
+    let placed-species = placed-species-list.at(reference.index)
+    apply-reference-offset(placed-species.origin)
   } else {
     panic("unknown reference kind: " + kind)
   }
@@ -1852,30 +2131,56 @@
 /// inside `reaction()` where `s` is the species (molecule) index. `offset` nudges
 /// the point in bond-length units.
 #let atom(..a) = {
-  let p = a.pos()
-  let (s, i) = if p.len() == 1 { (0, p.at(0)) } else { (p.at(0), p.at(1)) }
-  (__ref__: "atom", species: s, index: i, offset: a.named().at("offset", default: (0, 0)))
+  let arguments = a
+  let positional = arguments.pos()
+  let (species-index, atom-index) = if positional.len() == 1 {
+    (0, positional.at(0))
+  } else {
+    (positional.at(0), positional.at(1))
+  }
+  (
+    __ref__: "atom",
+    species: species-index,
+    index: atom-index,
+    offset: arguments.named().at("offset", default: (0, 0)),
+  )
 }
 
 /// References the midpoint of the bond between two atoms: `bond(i, j)` or
 /// `bond(s, i, j)`.
 #let bond(..a) = {
-  let p = a.pos()
-  let (s, i, j) = if p.len() == 2 { (0, p.at(0), p.at(1)) } else { (p.at(0), p.at(1), p.at(2)) }
-  (__ref__: "bond", species: s, i: i, j: j, offset: a.named().at("offset", default: (0, 0)))
+  let arguments = a
+  let positional = arguments.pos()
+  let (species-index, first-atom-index, second-atom-index) = if positional.len() == 2 {
+    (0, positional.at(0), positional.at(1))
+  } else {
+    (positional.at(0), positional.at(1), positional.at(2))
+  }
+  (
+    __ref__: "bond",
+    species: species-index,
+    i: first-atom-index,
+    j: second-atom-index,
+    offset: arguments.named().at("offset", default: (0, 0)),
+  )
 }
 
 /// References a lone pair on an atom: `lp(i)` or `lp(s, i)`, with `pair:` selecting
 /// which pair (default 0) when an atom carries several.
 #let lp(..a) = {
-  let p = a.pos()
-  let (s, at) = if p.len() == 1 { (0, p.at(0)) } else { (p.at(0), p.at(1)) }
+  let arguments = a
+  let positional = arguments.pos()
+  let (species-index, atom-index) = if positional.len() == 1 {
+    (0, positional.at(0))
+  } else {
+    (positional.at(0), positional.at(1))
+  }
   (
     __ref__: "lp",
-    species: s,
-    atom: at,
-    pair: a.named().at("pair", default: 0),
-    offset: a.named().at("offset", default: (0, 0)),
+    species: species-index,
+    atom: atom-index,
+    pair: arguments.named().at("pair", default: 0),
+    offset: arguments.named().at("offset", default: (0, 0)),
   )
 }
 
@@ -1942,143 +2247,258 @@
 
 // Endpoint coordinate for an arrow; species references snap to the box edge facing
 // `toward`.
-#let _endpoint(ref, specs, cfg, toward) = {
-  let p = _resolve(ref, specs, cfg.lp-offset)
-  if ref.__ref__ != "species" { return p }
-  let sp = specs.at(ref.index)
+#let _arrow-endpoint(reference, placed-species-list, configuration, toward) = {
+  let reference-position = _resolve-reference(
+    reference,
+    placed-species-list,
+    configuration.lp-offset,
+  )
+  if reference.__ref__ != "species" { return reference-position }
+  let placed-species = placed-species-list.at(reference.index)
   // Intersect the ray from the origin toward the target with the molecule's
   // actual, possibly asymmetric bounds rather than a symmetric half-box.
-  let b = sp.at("bounds", default: (
-    left: sp.size.at(0) / 2, right: sp.size.at(0) / 2,
-    bottom: sp.size.at(1) / 2, top: sp.size.at(1) / 2,
+  let bounds = placed-species.at("bounds", default: (
+    left: placed-species.size.at(0) / 2, right: placed-species.size.at(0) / 2,
+    bottom: placed-species.size.at(1) / 2, top: placed-species.size.at(1) / 2,
   ))
-  let dx = toward.at(0) - p.at(0)
-  let dy = toward.at(1) - p.at(1)
-  if dx == 0 and dy == 0 { return p }
-  let tx = if dx > 0 { b.right / dx } else if dx < 0 { b.left / (-dx) } else { 1e9 }
-  let ty = if dy > 0 { b.top / dy } else if dy < 0 { b.bottom / (-dy) } else { 1e9 }
-  let t = calc.min(tx, ty)
-  (p.at(0) + dx * t, p.at(1) + dy * t)
+  let offset-x = toward.at(0) - reference-position.at(0)
+  let offset-y = toward.at(1) - reference-position.at(1)
+  if offset-x == 0 and offset-y == 0 { return reference-position }
+  let horizontal-intersection = if offset-x > 0 {
+    bounds.right / offset-x
+  } else if offset-x < 0 {
+    bounds.left / (-offset-x)
+  } else {
+    1e9
+  }
+  let vertical-intersection = if offset-y > 0 {
+    bounds.top / offset-y
+  } else if offset-y < 0 {
+    bounds.bottom / (-offset-y)
+  } else {
+    1e9
+  }
+  let intersection = calc.min(horizontal-intersection, vertical-intersection)
+  (
+    reference-position.at(0) + offset-x * intersection,
+    reference-position.at(1) + offset-y * intersection,
+  )
 }
 
-#let _draw-highlight(h, specs, cfg) = {
+#let _draw-highlight(highlight-specification, placed-species-list, configuration) = {
   import cetz.draw: *
-  let refs = if type(h.ref) == array { h.ref } else { (h.ref,) }
-  for ref in refs {
-    if ref.__ref__ == "bond" {
-      let sp = specs.at(ref.species)
-      let ms = sp.at("mol-scale", default: 1.0)
-      let pa = _atom-pos(sp, ref.i)
-      let pb = _atom-pos(sp, ref.j)
-      let dx = pb.at(0) - pa.at(0)
-      let dy = pb.at(1) - pa.at(1)
-      let len = calc.max(1e-6, calc.sqrt(dx * dx + dy * dy))
-      let trim = if h.include-atoms { 0.0 } else { calc.min(cfg.bond-trim * ms, len * 0.45) }
-      let ux = dx / len
-      let uy = dy / len
-      line(
-        (pa.at(0) + ux * trim, pa.at(1) + uy * trim),
-        (pb.at(0) - ux * trim, pb.at(1) - uy * trim),
-        stroke: (paint: h.fill, thickness: cfg.bond-thickness * ms, cap: "round"),
+  let references = if type(highlight-specification.ref) == array {
+    highlight-specification.ref
+  } else {
+    (highlight-specification.ref,)
+  }
+  for reference in references {
+    if reference.__ref__ == "bond" {
+      let placed-species = placed-species-list.at(reference.species)
+      let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+      let first-position = _atom-position(placed-species, reference.i)
+      let second-position = _atom-position(placed-species, reference.j)
+      let offset-x = second-position.at(0) - first-position.at(0)
+      let offset-y = second-position.at(1) - first-position.at(1)
+      let distance = calc.max(
+        1e-6,
+        calc.sqrt(offset-x * offset-x + offset-y * offset-y),
       )
-      if h.include-atoms {
-        let r = if h.radius == auto { cfg.atom-radius * ms } else { h.radius }
-        circle(pa, radius: r, fill: h.fill, stroke: h.stroke)
-        circle(pb, radius: r, fill: h.fill, stroke: h.stroke)
+      let trim = if highlight-specification.include-atoms {
+        0.0
+      } else {
+        calc.min(configuration.bond-trim * molecule-scale, distance * 0.45)
+      }
+      let direction-x = offset-x / distance
+      let direction-y = offset-y / distance
+      line(
+        (
+          first-position.at(0) + direction-x * trim,
+          first-position.at(1) + direction-y * trim,
+        ),
+        (
+          second-position.at(0) - direction-x * trim,
+          second-position.at(1) - direction-y * trim,
+        ),
+        stroke: (
+          paint: highlight-specification.fill,
+          thickness: configuration.bond-thickness * molecule-scale,
+          cap: "round",
+        ),
+      )
+      if highlight-specification.include-atoms {
+        let radius = if highlight-specification.radius == auto {
+          configuration.atom-radius * molecule-scale
+        } else {
+          highlight-specification.radius
+        }
+        circle(
+          first-position,
+          radius: radius,
+          fill: highlight-specification.fill,
+          stroke: highlight-specification.stroke,
+        )
+        circle(
+          second-position,
+          radius: radius,
+          fill: highlight-specification.fill,
+          stroke: highlight-specification.stroke,
+        )
       }
     } else {
-      let p = _resolve(ref, specs, cfg.lp-offset)
-      let sp = specs.at(ref.species)
-      let ms = sp.at("mol-scale", default: 1.0)
-      let atom = sp.layout.atoms.at(ref.index)
-      let abbrev = atom.at("abbrev", default: "")
-      if ref.__ref__ == "atom" and abbrev != "" {
-        let cs = sp.at("canvas-scale", default: 30pt)
-        let fs = sp.at("actual-font-size", default: 11pt)
-        let font = sp.at("font", default: "New Computer Modern")
-        let atom-label = (body, size: fs) => text(
+      let reference-position = _resolve-reference(
+        reference,
+        placed-species-list,
+        configuration.lp-offset,
+      )
+      let placed-species = placed-species-list.at(reference.species)
+      let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+      let atom = placed-species.layout.atoms.at(reference.index)
+      let abbreviation = atom.at("abbrev", default: "")
+      if reference.__ref__ == "atom" and abbreviation != "" {
+        let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+        let font-size = placed-species.at("actual-font-size", default: 11pt)
+        let font = placed-species.at("font", default: "New Computer Modern")
+        let atom-label = (body, size: font-size) => text(
           size: size, font: font, style: "normal", weight: "regular", body,
         )
-        let label = _abbrev-label(abbrev, atom-label, fs, fs)
-        let w = measure(label).width / cs
-        let label-width = body => measure(_abbrev-label(body, atom-label, fs, fs)).width / cs
-        let center-x = p.at(0) - _label-anchor-offset(
-          abbrev,
+        let label = _abbreviation-label(abbreviation, atom-label, font-size, font-size)
+        let label-width-units = measure(label).width / canvas-scale
+        let label-width = body => measure(_abbreviation-label(body, atom-label, font-size, font-size)).width / canvas-scale
+        let center-x = reference-position.at(0) - _label-anchor-offset(
+          abbreviation,
           atom.at("abbrev_anchor", default: 0),
           atom.at("abbrev_anchor_len", default: 0),
           label-width,
         )
-        let h-units = measure(label).height / cs
-        let pad-x = calc.max(0.08 * ms, fs / cs * 0.16)
-        let thick = cs * calc.max(h-units + fs / cs * 0.55, cfg.atom-radius * ms * 1.7)
+        let label-height-units = measure(label).height / canvas-scale
+        let horizontal-padding = calc.max(
+          0.08 * molecule-scale,
+          font-size / canvas-scale * 0.16,
+        )
+        let thickness = canvas-scale * calc.max(
+          label-height-units + font-size / canvas-scale * 0.55,
+          configuration.atom-radius * molecule-scale * 1.7,
+        )
         line(
-          (center-x - w / 2 - pad-x, p.at(1)),
-          (center-x + w / 2 + pad-x, p.at(1)),
-          stroke: (paint: h.fill, thickness: thick, cap: "round"),
+          (
+            center-x - label-width-units / 2 - horizontal-padding,
+            reference-position.at(1),
+          ),
+          (
+            center-x + label-width-units / 2 + horizontal-padding,
+            reference-position.at(1),
+          ),
+          stroke: (
+            paint: highlight-specification.fill,
+            thickness: thickness,
+            cap: "round",
+          ),
         )
       } else {
-        let r = if h.radius == auto { cfg.atom-radius * ms } else { h.radius }
-        circle(p, radius: r, fill: h.fill, stroke: h.stroke)
+        let radius = if highlight-specification.radius == auto {
+          configuration.atom-radius * molecule-scale
+        } else {
+          highlight-specification.radius
+        }
+        circle(
+          reference-position,
+          radius: radius,
+          fill: highlight-specification.fill,
+          stroke: highlight-specification.stroke,
+        )
       }
     }
   }
 }
 
-#let _draw-arrow(a, specs, cfg) = {
+#let _draw-arrow(arrow-specification, placed-species-list, configuration) = {
   import cetz.draw: *
-  let heads = a.at("heads", default: "end")
+  let heads = arrow-specification.at("heads", default: "end")
   if heads not in ("end", "both", "none") {
     panic("arrow heads must be \"end\", \"both\", or \"none\"")
   }
-  let style = a.at("style", default: "solid")
+  let style = arrow-specification.at("style", default: "solid")
   if style not in ("solid", "dashed", "wavy") {
     panic("arrow style must be \"solid\", \"dashed\", or \"wavy\"")
   }
-  let raw0 = _resolve(a.from, specs, cfg.lp-offset)
-  let raw1 = _resolve(a.to, specs, cfg.lp-offset)
-  let p0 = _endpoint(a.from, specs, cfg, raw1)
-  let p1 = _endpoint(a.to, specs, cfg, raw0)
+  let raw-start = _resolve-reference(
+    arrow-specification.from,
+    placed-species-list,
+    configuration.lp-offset,
+  )
+  let raw-end = _resolve-reference(
+    arrow-specification.to,
+    placed-species-list,
+    configuration.lp-offset,
+  )
+  let start = _arrow-endpoint(
+    arrow-specification.from,
+    placed-species-list,
+    configuration,
+    raw-end,
+  )
+  let end = _arrow-endpoint(
+    arrow-specification.to,
+    placed-species-list,
+    configuration,
+    raw-start,
+  )
 
-  let dx = p1.at(0) - p0.at(0)
-  let dy = p1.at(1) - p0.at(1)
-  let len = calc.max(1e-6, calc.sqrt(dx * dx + dy * dy))
-  let ux = dx / len
-  let uy = dy / len
+  let offset-x = end.at(0) - start.at(0)
+  let offset-y = end.at(1) - start.at(1)
+  let distance = calc.max(
+    1e-6,
+    calc.sqrt(offset-x * offset-x + offset-y * offset-y),
+  )
+  let direction-x = offset-x / distance
+  let direction-y = offset-y / distance
 
   // Pull both ends in slightly so the tail clears its source glyph and the head
   // stops just short of the target.
-  let ins = calc.min(cfg.inset, len * 0.3)
-  let q0 = (p0.at(0) + ux * ins, p0.at(1) + uy * ins)
-  let q1 = (p1.at(0) - ux * ins, p1.at(1) - uy * ins)
-
-  let sign = if a.bend == "right" { -1.0 } else if a.bend == "left" { 1.0 } else { 0.0 }
-  let nx = -uy
-  let ny = ux
-  let mx = (q0.at(0) + q1.at(0)) / 2
-  let my = (q0.at(1) + q1.at(1)) / 2
-  let mag = (len / 2) * calc.tan(a.angle) * sign
-  let apex = (mx + nx * mag, my + ny * mag)
-
-  let mark-opts = (
-    fill: a.color,
-    scale: cfg.arrow-scale,
-    harpoon: a.half,
-    length: a.at("head-length", default: 0.11),
-    width: a.at("head-width", default: 0.07),
+  let inset = calc.min(configuration.inset, distance * 0.3)
+  let inset-start = (
+    start.at(0) + direction-x * inset,
+    start.at(1) + direction-y * inset,
   )
-  let mk = if heads == "none" { none }
-           else if heads == "both" { (..mark-opts, start: ">", end: ">") }
-           else { (..mark-opts, end: ">") }
-  let arrow-thickness = if a.at("stroke", default: auto) == auto {
-    cfg.arrow-thickness
+  let inset-end = (
+    end.at(0) - direction-x * inset,
+    end.at(1) - direction-y * inset,
+  )
+
+  let sign = if arrow-specification.bend == "right" { -1.0 } else if arrow-specification.bend == "left" { 1.0 } else { 0.0 }
+  let normal-x = -direction-y
+  let normal-y = direction-x
+  let midpoint-x = (inset-start.at(0) + inset-end.at(0)) / 2
+  let midpoint-y = (inset-start.at(1) + inset-end.at(1)) / 2
+  let bend-magnitude = (
+    distance / 2 * calc.tan(arrow-specification.angle) * sign
+  )
+  let apex = (
+    midpoint-x + normal-x * bend-magnitude,
+    midpoint-y + normal-y * bend-magnitude,
+  )
+
+  let arrowhead-options = (
+    fill: arrow-specification.color,
+    scale: configuration.arrow-scale,
+    harpoon: arrow-specification.half,
+    length: arrow-specification.at("head-length", default: 0.11),
+    width: arrow-specification.at("head-width", default: 0.07),
+  )
+  let arrowheads = if heads == "none" { none }
+           else if heads == "both" { (..arrowhead-options, start: ">", end: ">") }
+           else { (..arrowhead-options, end: ">") }
+  let arrow-thickness = if arrow-specification.at("stroke", default: auto) == auto {
+    configuration.arrow-thickness
   } else {
-    a.stroke * cfg.arrow-scale
+    arrow-specification.stroke * configuration.arrow-scale
   }
-  let strk = if style == "dashed" {
-    (paint: a.color, thickness: arrow-thickness,
-     dash: (array: (3pt * cfg.arrow-scale, 2.2pt * cfg.arrow-scale), phase: 0pt))
+  let arrow-stroke = if style == "dashed" {
+    (paint: arrow-specification.color, thickness: arrow-thickness,
+     dash: (array: (3pt * configuration.arrow-scale, 2.2pt * configuration.arrow-scale), phase: 0pt))
   } else {
-    (paint: a.color, thickness: arrow-thickness)
+    (paint: arrow-specification.color, thickness: arrow-thickness)
   }
 
   if style == "wavy" {
@@ -2086,69 +2506,118 @@
     // through the apex — and lay a sine wave along its normals. The wave spans
     // a whole number of half-periods so it meets the ends flat, and each drawn
     // head sits on a short straight lead pointing along the travel direction.
-    let ctrl = (
-      2 * apex.at(0) - (q0.at(0) + q1.at(0)) / 2,
-      2 * apex.at(1) - (q0.at(1) + q1.at(1)) / 2,
+    let control-point = (
+      2 * apex.at(0) - (inset-start.at(0) + inset-end.at(0)) / 2,
+      2 * apex.at(1) - (inset-start.at(1) + inset-end.at(1)) / 2,
     )
-    let pt(t) = if sign == 0 {
-      (q0.at(0) + (q1.at(0) - q0.at(0)) * t, q0.at(1) + (q1.at(1) - q0.at(1)) * t)
-    } else {
-      let u = 1 - t
+    let point-on-shaft(position) = if sign == 0 {
       (
-        u * u * q0.at(0) + 2 * t * u * ctrl.at(0) + t * t * q1.at(0),
-        u * u * q0.at(1) + 2 * t * u * ctrl.at(1) + t * t * q1.at(1),
+        inset-start.at(0) + (inset-end.at(0) - inset-start.at(0)) * position,
+        inset-start.at(1) + (inset-end.at(1) - inset-start.at(1)) * position,
+      )
+    } else {
+      let remaining = 1 - position
+      (
+        remaining * remaining * inset-start.at(0)
+          + 2 * position * remaining * control-point.at(0)
+          + position * position * inset-end.at(0),
+        remaining * remaining * inset-start.at(1)
+          + 2 * position * remaining * control-point.at(1)
+          + position * position * inset-end.at(1),
       )
     }
-    let tangent(t) = if sign == 0 {
-      (q1.at(0) - q0.at(0), q1.at(1) - q0.at(1))
-    } else {
-      let u = 1 - t
+    let tangent(position) = if sign == 0 {
       (
-        2 * u * (ctrl.at(0) - q0.at(0)) + 2 * t * (q1.at(0) - ctrl.at(0)),
-        2 * u * (ctrl.at(1) - q0.at(1)) + 2 * t * (q1.at(1) - ctrl.at(1)),
+        inset-end.at(0) - inset-start.at(0),
+        inset-end.at(1) - inset-start.at(1),
+      )
+    } else {
+      let remaining = 1 - position
+      (
+        2 * remaining * (control-point.at(0) - inset-start.at(0))
+          + 2 * position * (inset-end.at(0) - control-point.at(0)),
+        2 * remaining * (control-point.at(1) - inset-start.at(1))
+          + 2 * position * (inset-end.at(1) - control-point.at(1)),
       )
     }
-    let lead = calc.min(0.3, len * 0.25)
-    let t-start = if heads == "both" { lead / len } else { 0.0 }
-    let t-end = if heads == "none" { 1.0 } else { 1.0 - lead / len }
-    let span-t = t-end - t-start
-    let amp = 0.075
-    let n-half = calc.max(2, int(calc.round(len * span-t / 0.25)))
-    let n-seg = calc.max(24, n-half * 6)
-    let pts = range(n-seg + 1).map(k => {
-      let s = k / n-seg
-      let t = t-start + span-t * s
-      let p = pt(t)
-      let d = tangent(t)
-      let dl = calc.max(1e-6, calc.sqrt(d.at(0) * d.at(0) + d.at(1) * d.at(1)))
-      let off = calc.sin(s * n-half * 180deg) * amp
-      (p.at(0) - d.at(1) / dl * off, p.at(1) + d.at(0) / dl * off)
+    let lead-length = calc.min(0.3, distance * 0.25)
+    let wave-start = if heads == "both" { lead-length / distance } else { 0.0 }
+    let wave-end = if heads == "none" { 1.0 } else { 1.0 - lead-length / distance }
+    let wave-span = wave-end - wave-start
+    let amplitude = 0.075
+    let half-wave-count = calc.max(
+      2,
+      int(calc.round(distance * wave-span / 0.25)),
+    )
+    let segment-count = calc.max(24, half-wave-count * 6)
+    let wave-points = range(segment-count + 1).map(segment-index => {
+      let progress = segment-index / segment-count
+      let shaft-position = wave-start + wave-span * progress
+      let shaft-point = point-on-shaft(shaft-position)
+      let tangent-vector = tangent(shaft-position)
+      let tangent-length = calc.max(
+        1e-6,
+        calc.sqrt(
+          tangent-vector.at(0) * tangent-vector.at(0)
+            + tangent-vector.at(1) * tangent-vector.at(1),
+        ),
+      )
+      let wave-offset = calc.sin(
+        progress * half-wave-count * 180deg,
+      ) * amplitude
+      (
+        shaft-point.at(0) - tangent-vector.at(1) / tangent-length * wave-offset,
+        shaft-point.at(1) + tangent-vector.at(0) / tangent-length * wave-offset,
+      )
     })
-    line(..pts, stroke: (..strk, cap: "round", join: "round"))
+    line(..wave-points, stroke: (..arrow-stroke, cap: "round", join: "round"))
     if heads == "end" or heads == "both" {
-      line(pt(t-end), q1, stroke: strk, mark: (..mark-opts, end: ">"))
+      line(
+        point-on-shaft(wave-end),
+        inset-end,
+        stroke: arrow-stroke,
+        mark: (..arrowhead-options, end: ">"),
+      )
     }
     if heads == "both" {
-      line(pt(t-start), q0, stroke: strk, mark: (..mark-opts, end: ">"))
+      line(
+        point-on-shaft(wave-start),
+        inset-start,
+        stroke: arrow-stroke,
+        mark: (..arrowhead-options, end: ">"),
+      )
     }
   } else if sign == 0 {
-    line(q0, q1, stroke: strk, mark: mk)
+    line(inset-start, inset-end, stroke: arrow-stroke, mark: arrowheads)
   } else {
-    bezier-through(q0, apex, q1, stroke: strk, mark: mk)
+    bezier-through(
+      inset-start,
+      apex,
+      inset-end,
+      stroke: arrow-stroke,
+      mark: arrowheads,
+    )
   }
 
-  if a.label != none {
-    let g = if sign == 0 { cfg.label-gap } else { mag + sign * cfg.label-gap }
+  if arrow-specification.label != none {
+    let label-offset = if sign == 0 {
+      configuration.label-gap
+    } else {
+      bend-magnitude + sign * configuration.label-gap
+    }
     content(
-      (mx + nx * g, my + ny * g),
-      text(size: cfg.label-size, fill: a.color, a.label),
+      (
+        midpoint-x + normal-x * label-offset,
+        midpoint-y + normal-y * label-offset,
+      ),
+      text(size: configuration.label-size, fill: arrow-specification.color, arrow-specification.label),
       anchor: "center",
     )
   }
 }
 
 // Annotation styling derived from the shared canvas scale and font size.
-#let _annotation-cfg(canvas-scale, font-size, scale, bond-stroke: none) = (
+#let _annotation-configuration(canvas-scale, font-size, scale, bond-stroke: none) = (
   lp-offset: calc.max(0.1, font-size / canvas-scale * 0.6),
   atom-radius: calc.max(0.12, font-size / canvas-scale * 0.5),
   bond-thickness: canvas-scale * 0.42,
@@ -2256,12 +2725,12 @@
   )}
   let font = if font == auto { "New Computer Modern" } else { font }
 
-  let (fg, theme) = _resolve-fg-theme(fg, theme)
-  let layout = _mirror-layout(_layout(smiles-str), mirror, rotation: rotation)
+  let (fg, theme) = _resolve-foreground-theme(fg, theme)
+  let layout = _mirror-layout(_compute-layout(smiles-str), mirror, rotation: rotation)
   let canvas-scale = _canvas-scale(scale, bond-length)
   let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
-  let ann = annotations.pos()
-  let specs = ((
+  let annotation = annotations.pos()
+  let placed-species-list = ((
     kind: "mol",
     layout: layout,
     rotation: rotation,
@@ -2272,14 +2741,14 @@
     font: font,
     show-h: show-h,
   ),)
-  let cfg = _annotation-cfg(canvas-scale, actual-font-size, scale, bond-stroke: bond-stroke)
+  let configuration = _annotation-configuration(canvas-scale, actual-font-size, scale, bond-stroke: bond-stroke)
   let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
 
   cetz.canvas(length: canvas-scale, {
     import cetz.draw: *
-    for h in ann {
+    for h in annotation {
       if type(h) == dictionary and h.at("__highlight__", default: false) {
-        _draw-highlight(h, specs, cfg)
+        _draw-highlight(h, placed-species-list, configuration)
       }
     }
     _draw-molecule(
@@ -2302,9 +2771,9 @@
       opacity: opacity,
       bond-customizations: bond-customizations,
     )
-    for ar in ann {
+    for ar in annotation {
       if type(ar) == dictionary and ar.at("__arrow__", default: false) {
-        _draw-arrow(ar, specs, cfg)
+        _draw-arrow(ar, placed-species-list, configuration)
       }
     }
   })
@@ -2329,20 +2798,31 @@
 /// -> content
 #let smiles-inline(smiles-str, height: 1.4em, baseline: auto, ..args) = context {
   let body = smiles(smiles-str, ..args)
-  let m = measure(body)
-  if m.height <= 0pt { return body }
-  let target = height.to-absolute()
+  let measured-body = measure(body)
+  if measured-body.height <= 0pt { return body }
+  let target-height = height.to-absolute()
   // Fit the drawing into the target height, but cap the scale so one bond
   // never exceeds most of that height: a flat, mostly horizontal molecule
   // measures almost no height and would otherwise blow up to fill it.
-  let unit = _canvas-scale(
+  let canvas-unit = _canvas-scale(
     args.named().at("scale", default: 1.0),
     args.named().at("bond-length", default: none),
   )
-  let f = calc.min(target / m.height, target * 0.9 / unit)
-  let scaled = _typst-scale(x: f * 100%, y: f * 100%, reflow: true, body)
+  let scale-factor = calc.min(
+    target-height / measured-body.height,
+    target-height * 0.9 / canvas-unit,
+  )
+  let scaled = _typst-scale(
+    x: scale-factor * 100%,
+    y: scale-factor * 100%,
+    reflow: true,
+    body,
+  )
   let center-above = if baseline == auto { 0.30em.to-absolute() } else { baseline.to-absolute() }
-  box(baseline: m.height * f / 2 - center-above, scaled)
+  box(
+    baseline: measured-body.height * scale-factor / 2 - center-above,
+    scaled,
+  )
 }
 
 /// Draws a molecule as CeTZ elements inside an existing #cetz.canvas and
@@ -2370,49 +2850,58 @@
 /// -> none  (emits CeTZ draw elements)
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
-  let opts = opts.named()
+  let options = opts.named()
   let fg = if fg == auto { black } else { fg }
   let theme = if theme == auto { "light" } else { theme }
-  let mirror = opts.at("mirror", default: none)
-  let rotation = opts.at("rotation", default: 0deg)
-  let layout = _mirror-layout(_layout(smiles-str), mirror, rotation: rotation)
+  let mirror = options.at("mirror", default: none)
+  let rotation = options.at("rotation", default: 0deg)
+  let layout = _mirror-layout(_compute-layout(smiles-str), mirror, rotation: rotation)
   let allowed = (
     "scale", "font-size", "font", "bond-stroke", "color", "rotation",
     "show-h", "lone-pairs", "atom-colors", "show-indices", "aromatic",
     "atom-annotations", "opacity", "bond-customizations",
   )
-  let draw-opts = (:)
-  for (k, v) in opts {
-    if k in allowed {
-      draw-opts.insert(k, v)
-    } else if k != "mirror" {
-      panic("smiles-cetz does not accept option \"" + k + "\"")
+  let drawing-options = (:)
+  for (option-name, option-value) in options {
+    if option-name in allowed {
+      drawing-options.insert(option-name, option-value)
+    } else if option-name != "mirror" {
+      panic("smiles-cetz does not accept option \"" + option-name + "\"")
     }
   }
-  if draw-opts.at("font", default: none) == auto {
-    draw-opts.insert("font", "New Computer Modern")
+  if drawing-options.at("font", default: none) == auto {
+    drawing-options.insert("font", "New Computer Modern")
   }
-  let cos-a = calc.cos(rotation)
-  let sin-a = calc.sin(rotation)
+  let rotation-cosine = calc.cos(rotation)
+  let rotation-sine = calc.sin(rotation)
   group(name: name, {
     translate(origin)
-    _draw-molecule(layout, fg: fg, theme: theme, ..draw-opts)
-    for i in range(layout.atoms.len()) {
-      let a = layout.atoms.at(i)
+    _draw-molecule(layout, fg: fg, theme: theme, ..drawing-options)
+    for atom-index in range(layout.atoms.len()) {
+      let atom = layout.atoms.at(atom-index)
       anchor(
-        "atom-" + str(i),
-        (a.pos.x * cos-a - a.pos.y * sin-a, a.pos.x * sin-a + a.pos.y * cos-a),
+        "atom-" + str(atom-index),
+        (
+          atom.pos.x * rotation-cosine - atom.pos.y * rotation-sine,
+          atom.pos.x * rotation-sine + atom.pos.y * rotation-cosine,
+        ),
       )
     }
-    for b in layout.bonds {
-      if not b.at("virtual_bond", default: false) {
-        let p = layout.atoms.at(b.from).pos
-        let q = layout.atoms.at(b.to).pos
-        let mx = (p.x + q.x) / 2
-        let my = (p.y + q.y) / 2
+    for bond-output in layout.bonds {
+      if not bond-output.at("virtual_bond", default: false) {
+        let from-position = layout.atoms.at(bond-output.from).pos
+        let to-position = layout.atoms.at(bond-output.to).pos
+        let midpoint-x = (from-position.x + to-position.x) / 2
+        let midpoint-y = (from-position.y + to-position.y) / 2
         anchor(
-          "bond-" + str(calc.min(b.from, b.to)) + "-" + str(calc.max(b.from, b.to)),
-          (mx * cos-a - my * sin-a, mx * sin-a + my * cos-a),
+          "bond-"
+            + str(calc.min(bond-output.from, bond-output.to))
+            + "-"
+            + str(calc.max(bond-output.from, bond-output.to)),
+          (
+            midpoint-x * rotation-cosine - midpoint-y * rotation-sine,
+            midpoint-x * rotation-sine + midpoint-y * rotation-cosine,
+          ),
         )
       }
     }
@@ -2477,41 +2966,49 @@
 )
 
 // Render a mol() item to standalone content (scheme/grid path).
-#let _render-mol(m, show-indices-default: false, offset-unit: 30pt) = context {
-  let opts = m.opts
-  if type(m.spec) == str and not ("show-indices" in opts) {
-    opts.insert("show-indices", show-indices-default)
+#let _render-molecule-item(molecule-item, show-indices-default: false, offset-unit: 30pt) = context {
+  let options = molecule-item.opts
+  if type(molecule-item.spec) == str and not ("show-indices" in options) {
+    options.insert("show-indices", show-indices-default)
   }
-  let body = if type(m.spec) == str { smiles(m.spec, ..opts) } else { m.spec }
-  let rendered = if m.label == none { body } else { stack(spacing: 4pt, body, align(center, m.label)) }
-  if m.offset == (0, 0) {
+  let body = if type(molecule-item.spec) == str {
+    smiles(molecule-item.spec, ..options)
+  } else {
+    molecule-item.spec
+  }
+  let rendered = if molecule-item.label == none {
+    body
+  } else {
+    stack(spacing: 4pt, body, align(center, molecule-item.label))
+  }
+  if molecule-item.offset == (0, 0) {
     rendered
   } else {
-    let dx = m.offset.at(0) * offset-unit
-    let dy = -m.offset.at(1) * offset-unit
+    let horizontal-offset = molecule-item.offset.at(0) * offset-unit
+    let vertical-offset = -molecule-item.offset.at(1) * offset-unit
     let size = measure(rendered)
     // Keep the visual nudge while shrinking or expanding its layout box by the
     // same amount. A surrounding layout consequently tracks the moved edge.
     box(
-      width: calc.max(0pt, size.width + dx),
-      height: calc.max(0pt, size.height + dy),
-      move(dx: dx, dy: dy, rendered),
+      width: calc.max(0pt, size.width + horizontal-offset),
+      height: calc.max(0pt, size.height + vertical-offset),
+      move(dx: horizontal-offset, dy: vertical-offset, rendered),
     )
   }
 }
 
 // An arrow label slot accepts plain content (rendered as small text) or a
 // mol() item (rendered as a molecule).
-#let _arrow-label-content(x) = {
-  if type(x) == dictionary and x.at("__mol__", default: false) {
-    _render-mol(x)
+#let _arrow-label-content(label) = {
+  if type(label) == dictionary and label.at("__mol__", default: false) {
+    _render-molecule-item(label)
   } else {
-    text(size: 8pt, x)
+    text(size: 8pt, label)
   }
 }
 
 // Uniformly scales an arrow component while preserving its layout dimensions.
-#let _scale-rxn-arrow(body, factor) = {
+#let _scale-reaction-arrow(body, factor) = {
   if factor <= 0 { panic("rxn-arrow scale must be positive") }
   if factor == 1.0 {
     body
@@ -2521,61 +3018,61 @@
 }
 
 // Render a horizontal reaction arrow.
-#let _horiz-arrow(above, below, dir, kind, clr, stroke, arrow-scale: 1.0) = context {
-  let clr = if clr == auto {
+#let _horizontal-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0) = context {
+  let arrow-color = if arrow-color == auto {
     if type(text.fill) == color { text.fill } else { black }
-  } else { clr }
+  } else { arrow-color }
   let stroke-width = if stroke == auto { 0.9pt } else { stroke }
   let span = 52
-  let (sx, ex) = if dir == "left" { (span, 0) } else { (0, span) }
+  let (start-x, end-x) = if direction == "left" { (span, 0) } else { (0, span) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
     if kind == "single" {
-      line((sx, 0), (ex, 0), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
+      line((start-x, 0), (end-x, 0), mark: (end: ">", fill: arrow-color, size: 5), stroke: stroke-width + arrow-color)
     } else if kind == "dashed" {
       line(
-        (sx, 0), (ex, 0),
-        mark: (end: ">", fill: clr, size: 5),
-        stroke: (paint: clr, thickness: stroke-width, dash: (array: (3pt, 2.2pt), phase: 0pt)),
+        (start-x, 0), (end-x, 0),
+        mark: (end: ">", fill: arrow-color, size: 5),
+        stroke: (paint: arrow-color, thickness: stroke-width, dash: (array: (3pt, 2.2pt), phase: 0pt)),
       )
     } else if kind == "wavy" {
       // Sine wave over most of the shaft, then a short straight lead-out so
       // the arrowhead points along the travel direction.
-      let sign = if ex > sx { 1 } else { -1 }
+      let sign = if end-x > start-x { 1 } else { -1 }
       let lead = 8
-      let wave-end = ex - sign * lead
-      let n-seg = 28
-      let pts = range(n-seg + 1).map(i => {
-        let t = i / n-seg
-        (sx + (wave-end - sx) * t, calc.sin(t * 3.0 * 2.0 * calc.pi) * 2.4)
+      let wave-end = end-x - sign * lead
+      let segment-count = 28
+      let points = range(segment-count + 1).map(i => {
+        let t = i / segment-count
+        (start-x + (wave-end - start-x) * t, calc.sin(t * 3.0 * 2.0 * calc.pi) * 2.4)
       })
-      line(..pts, stroke: (paint: clr, thickness: stroke-width, cap: "round", join: "round"))
-      line((wave-end, 0), (ex, 0), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
+      line(..points, stroke: (paint: arrow-color, thickness: stroke-width, cap: "round", join: "round"))
+      line((wave-end, 0), (end-x, 0), mark: (end: ">", fill: arrow-color, size: 5), stroke: stroke-width + arrow-color)
     } else if kind == "equilibrium" or kind == "equilibrium-filled" {
-      let sign = if ex > sx { 1 } else { -1 }
-      let head-len = 7
+      let sign = if end-x > start-x { 1 } else { -1 }
+      let arrowhead-length = 7
       let head-rise = 3.5
       if kind == "equilibrium-filled" {
-        let top-base = ex - sign * head-len
-        line((sx, 2.2), (ex, 2.2), stroke: stroke-width + clr)
+        let top-base = end-x - sign * arrowhead-length
+        line((start-x, 2.2), (end-x, 2.2), stroke: stroke-width + arrow-color)
         line(
-          (ex, 2.2), (top-base, 2.2), (top-base, 2.2 + head-rise),
-          close: true, fill: clr, stroke: none,
+          (end-x, 2.2), (top-base, 2.2), (top-base, 2.2 + head-rise),
+          close: true, fill: arrow-color, stroke: none,
         )
       } else {
-        line((sx, 2.2), (ex, 2.2), stroke: stroke-width + clr)
-        line((ex, 2.2), (ex - sign * head-len, 2.2 + head-rise), stroke: stroke-width + clr)
+        line((start-x, 2.2), (end-x, 2.2), stroke: stroke-width + arrow-color)
+        line((end-x, 2.2), (end-x - sign * arrowhead-length, 2.2 + head-rise), stroke: stroke-width + arrow-color)
       }
       if kind == "equilibrium-filled" {
-        let bottom-base = sx + sign * head-len
-        line((ex, -2.2), (sx, -2.2), stroke: stroke-width + clr)
+        let bottom-base = start-x + sign * arrowhead-length
+        line((end-x, -2.2), (start-x, -2.2), stroke: stroke-width + arrow-color)
         line(
-          (sx, -2.2), (bottom-base, -2.2), (bottom-base, -2.2 - head-rise),
-          close: true, fill: clr, stroke: none,
+          (start-x, -2.2), (bottom-base, -2.2), (bottom-base, -2.2 - head-rise),
+          close: true, fill: arrow-color, stroke: none,
         )
       } else {
-        line((ex, -2.2), (sx, -2.2), stroke: stroke-width + clr)
-        line((sx, -2.2), (sx + sign * head-len, -2.2 - head-rise), stroke: stroke-width + clr)
+        line((end-x, -2.2), (start-x, -2.2), stroke: stroke-width + arrow-color)
+        line((start-x, -2.2), (start-x + sign * arrowhead-length, -2.2 - head-rise), stroke: stroke-width + arrow-color)
       }
     } else {
       panic("rxn-arrow kind must be \"single\", \"equilibrium\", \"equilibrium-filled\", \"dashed\", or \"wavy\"")
@@ -2589,72 +3086,72 @@
     let above-size = if above != none { measure(above-label) } else { (width: 0pt, height: 0pt) }
     let below-size = if below != none { measure(below-label) } else { (width: 0pt, height: 0pt) }
     let arrow-size = measure(arrow-canvas)
-    let label-h = calc.max(above-size.height, below-size.height)
-    let row-w = calc.max(arrow-size.width, calc.max(above-size.width, below-size.width))
+    let label-height = calc.max(above-size.height, below-size.height)
+    let row-width = calc.max(arrow-size.width, calc.max(above-size.width, below-size.width))
     align(center + horizon, stack(
       spacing: 3pt,
-      box(width: row-w, height: label-h, align(center + bottom, above-label)),
-      box(width: row-w, align(center + horizon, arrow-canvas)),
-      box(width: row-w, height: label-h, align(center + top, below-label)),
+      box(width: row-width, height: label-height, align(center + bottom, above-label)),
+      box(width: row-width, align(center + horizon, arrow-canvas)),
+      box(width: row-width, height: label-height, align(center + top, below-label)),
     ))
   }
-  _scale-rxn-arrow(body, arrow-scale)
+  _scale-reaction-arrow(body, arrow-scale)
 }
 
 // Render a vertical reaction arrow. `above` is shown to the right, `below` to the left.
-#let _vert-arrow(above, below, dir, kind, clr, stroke, arrow-scale: 1.0) = context {
-  let clr = if clr == auto {
+#let _vertical-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0) = context {
+  let arrow-color = if arrow-color == auto {
     if type(text.fill) == color { text.fill } else { black }
-  } else { clr }
+  } else { arrow-color }
   let stroke-width = if stroke == auto { 0.9pt } else { stroke }
   let span = 52
-  let (from-y, to-y) = if dir == "up" { (0, span) } else { (span, 0) }
+  let (from-y, to-y) = if direction == "up" { (0, span) } else { (span, 0) }
   let arrow-canvas = cetz.canvas(length: 1pt, {
     import cetz.draw: *
     if kind == "single" {
-      line((0, from-y), (0, to-y), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
+      line((0, from-y), (0, to-y), mark: (end: ">", fill: arrow-color, size: 5), stroke: stroke-width + arrow-color)
     } else if kind == "dashed" {
       line(
         (0, from-y), (0, to-y),
-        mark: (end: ">", fill: clr, size: 5),
-        stroke: (paint: clr, thickness: stroke-width, dash: (array: (3pt, 2.2pt), phase: 0pt)),
+        mark: (end: ">", fill: arrow-color, size: 5),
+        stroke: (paint: arrow-color, thickness: stroke-width, dash: (array: (3pt, 2.2pt), phase: 0pt)),
       )
     } else if kind == "wavy" {
       let sign = if to-y > from-y { 1 } else { -1 }
       let lead = 8
       let wave-end = to-y - sign * lead
-      let n-seg = 28
-      let pts = range(n-seg + 1).map(i => {
-        let t = i / n-seg
+      let segment-count = 28
+      let points = range(segment-count + 1).map(i => {
+        let t = i / segment-count
         (calc.sin(t * 3.0 * 2.0 * calc.pi) * 2.4, from-y + (wave-end - from-y) * t)
       })
-      line(..pts, stroke: (paint: clr, thickness: stroke-width, cap: "round", join: "round"))
-      line((0, wave-end), (0, to-y), mark: (end: ">", fill: clr, size: 5), stroke: stroke-width + clr)
+      line(..points, stroke: (paint: arrow-color, thickness: stroke-width, cap: "round", join: "round"))
+      line((0, wave-end), (0, to-y), mark: (end: ">", fill: arrow-color, size: 5), stroke: stroke-width + arrow-color)
     } else if kind == "equilibrium" or kind == "equilibrium-filled" {
       let sign = if to-y > from-y { 1 } else { -1 }
-      let head-len = 7
+      let arrowhead-length = 7
       let head-rise = 3.5
       if kind == "equilibrium-filled" {
-        let left-base = to-y - sign * head-len
-        line((-2.2, from-y), (-2.2, to-y), stroke: stroke-width + clr)
+        let left-base = to-y - sign * arrowhead-length
+        line((-2.2, from-y), (-2.2, to-y), stroke: stroke-width + arrow-color)
         line(
           (-2.2, to-y), (-2.2, left-base), (-2.2 - head-rise, left-base),
-          close: true, fill: clr, stroke: none,
+          close: true, fill: arrow-color, stroke: none,
         )
       } else {
-        line((-2.2, from-y), (-2.2, to-y), stroke: stroke-width + clr)
-        line((-2.2, to-y), (-2.2 - head-rise, to-y - sign * head-len), stroke: stroke-width + clr)
+        line((-2.2, from-y), (-2.2, to-y), stroke: stroke-width + arrow-color)
+        line((-2.2, to-y), (-2.2 - head-rise, to-y - sign * arrowhead-length), stroke: stroke-width + arrow-color)
       }
       if kind == "equilibrium-filled" {
-        let right-base = from-y + sign * head-len
-        line((2.2, to-y), (2.2, from-y), stroke: stroke-width + clr)
+        let right-base = from-y + sign * arrowhead-length
+        line((2.2, to-y), (2.2, from-y), stroke: stroke-width + arrow-color)
         line(
           (2.2, from-y), (2.2, right-base), (2.2 + head-rise, right-base),
-          close: true, fill: clr, stroke: none,
+          close: true, fill: arrow-color, stroke: none,
         )
       } else {
-        line((2.2, to-y), (2.2, from-y), stroke: stroke-width + clr)
-        line((2.2, from-y), (2.2 + head-rise, from-y + sign * head-len), stroke: stroke-width + clr)
+        line((2.2, to-y), (2.2, from-y), stroke: stroke-width + arrow-color)
+        line((2.2, from-y), (2.2 + head-rise, from-y + sign * arrowhead-length), stroke: stroke-width + arrow-color)
       }
     } else {
       panic("rxn-arrow kind must be \"single\", \"equilibrium\", \"equilibrium-filled\", \"dashed\", or \"wavy\"")
@@ -2665,19 +3162,19 @@
   } else {
     let right-label = if above != none { _arrow-label-content(above) } else { [] }
     let left-label = if below != none { _arrow-label-content(below) } else { [] }
-    let right-w = if above != none { measure(right-label).width } else { 0pt }
-    let left-w = if below != none { measure(left-label).width } else { 0pt }
-    let side-w = calc.max(left-w, right-w)
+    let right-width = if above != none { measure(right-label).width } else { 0pt }
+    let left-width = if below != none { measure(left-label).width } else { 0pt }
+    let side-width = calc.max(left-width, right-width)
     grid(
-      columns: (side-w, auto, side-w),
+      columns: (side-width, auto, side-width),
       column-gutter: 4pt,
       align: center + horizon,
-      box(width: side-w, align(right + horizon, left-label)),
+      box(width: side-width, align(right + horizon, left-label)),
       arrow-canvas,
-      box(width: side-w, align(left + horizon, right-label)),
+      box(width: side-width, align(left + horizon, right-label)),
     )
   }
-  _scale-rxn-arrow(body, arrow-scale)
+  _scale-reaction-arrow(body, arrow-scale)
 }
 
 /// Lays out a reaction scheme or an electron-pushing mechanism.
@@ -2706,29 +3203,61 @@
 // padding beyond the skeleton is shared evenly around the origin. Because layout
 // coordinates are centroid-centered, the origin is generally off the box center,
 // so the returned extents are asymmetric.
-#let _mol-bounds(lay, rotation, ms, measured-w, measured-h) = {
-  let atoms = lay.atoms.filter(a => not a.at("virtual_h", default: false))
+#let _molecule-bounds(
+  molecule-layout,
+  rotation,
+  molecule-scale,
+  measured-width,
+  measured-height,
+) = {
+  let atoms = molecule-layout.atoms.filter(
+    atom => not atom.at("virtual_h", default: false),
+  )
   if atoms.len() == 0 {
     return (
-      left: measured-w / 2, right: measured-w / 2,
-      bottom: measured-h / 2, top: measured-h / 2,
+      left: measured-width / 2,
+      right: measured-width / 2,
+      bottom: measured-height / 2,
+      top: measured-height / 2,
     )
   }
-  let cos-a = calc.cos(rotation)
-  let sin-a = calc.sin(rotation)
-  let xs = atoms.map(a => (a.pos.x * cos-a - a.pos.y * sin-a) * ms)
-  let ys = atoms.map(a => (a.pos.x * sin-a + a.pos.y * cos-a) * ms)
-  let amin-x = xs.fold(xs.first(), calc.min)
-  let amax-x = xs.fold(xs.first(), calc.max)
-  let amin-y = ys.fold(ys.first(), calc.min)
-  let amax-y = ys.fold(ys.first(), calc.max)
-  let pad-x = calc.max(0.0, measured-w - (amax-x - amin-x)) / 2
-  let pad-y = calc.max(0.0, measured-h - (amax-y - amin-y)) / 2
+  let rotation-cosine = calc.cos(rotation)
+  let rotation-sine = calc.sin(rotation)
+  let atom-x-coordinates = atoms.map(atom => (
+    (atom.pos.x * rotation-cosine - atom.pos.y * rotation-sine) * molecule-scale
+  ))
+  let atom-y-coordinates = atoms.map(atom => (
+    (atom.pos.x * rotation-sine + atom.pos.y * rotation-cosine) * molecule-scale
+  ))
+  let minimum-atom-x = atom-x-coordinates.fold(
+    atom-x-coordinates.first(),
+    calc.min,
+  )
+  let maximum-atom-x = atom-x-coordinates.fold(
+    atom-x-coordinates.first(),
+    calc.max,
+  )
+  let minimum-atom-y = atom-y-coordinates.fold(
+    atom-y-coordinates.first(),
+    calc.min,
+  )
+  let maximum-atom-y = atom-y-coordinates.fold(
+    atom-y-coordinates.first(),
+    calc.max,
+  )
+  let horizontal-padding = calc.max(
+    0.0,
+    measured-width - (maximum-atom-x - minimum-atom-x),
+  ) / 2
+  let vertical-padding = calc.max(
+    0.0,
+    measured-height - (maximum-atom-y - minimum-atom-y),
+  ) / 2
   (
-    left: -amin-x + pad-x,
-    right: amax-x + pad-x,
-    bottom: -amin-y + pad-y,
-    top: amax-y + pad-y,
+    left: -minimum-atom-x + horizontal-padding,
+    right: maximum-atom-x + horizontal-padding,
+    bottom: -minimum-atom-y + vertical-padding,
+    top: maximum-atom-y + vertical-padding,
   )
 }
 
@@ -2745,129 +3274,213 @@
     panic("reaction flow must be \"right\", \"left\", \"up\", or \"down\"")
   }
   let steps = items.pos()
-  let is-rxn-arrow(it) = type(it) == dictionary and it.at("__rxn_arrow__", default: false)
-  let is-curly(it)     = type(it) == dictionary and it.at("__arrow__", default: false)
-  let is-highlight(it) = type(it) == dictionary and it.at("__highlight__", default: false)
-  let is-mol(it)       = type(it) == dictionary and it.at("__mol__", default: false)
+  let is-reaction-arrow(item) = (
+    type(item) == dictionary and item.at("__rxn_arrow__", default: false)
+  )
+  let is-electron-arrow(item) = (
+    type(item) == dictionary and item.at("__arrow__", default: false)
+  )
+  let is-highlight(item) = (
+    type(item) == dictionary and item.at("__highlight__", default: false)
+  )
+  let is-molecule-item(item) = (
+    type(item) == dictionary and item.at("__mol__", default: false)
+  )
 
   // An `auto` arrow follows the flow: horizontal flows lay out with rightward
   // arrows (mirrored to point left below), vertical flows with downward ones.
-  let base-dir = if flow == "right" or flow == "left" { "right" } else { "down" }
-  steps = steps.map(it => {
-    if is-rxn-arrow(it) and it.at("dir", default: auto) == auto {
-      it + (dir: base-dir)
-    } else { it }
+  let base-direction = if flow == "right" or flow == "left" { "right" } else { "down" }
+  steps = steps.map(item => {
+    if is-reaction-arrow(item) and item.at("dir", default: auto) == auto {
+      item + (dir: base-direction)
+    } else {
+      item
+    }
   })
 
-  let mechanism = steps.any(it => is-curly(it) or is-highlight(it))
+  let mechanism = steps.any(
+    item => is-electron-arrow(item) or is-highlight(item),
+  )
 
   if not mechanism {
     // ── Scheme (grid) path ──────────────────────────────────────────────────
     // Phase 1: assign each item a (grid-row, grid-col) position.
     // Grid mapping: mol at (lr,lc) → grid (2*lr, 2*lc); arrows slot into gaps.
-    let lr = 0
-    let lc = 0
+    let logical-row = 0
+    let logical-column = 0
     let needs-advance = false
     let placed = ()
 
-    let next-pos(r, c, dir) = {
-      if dir == "right"      { (r, c + 1) }
-      else if dir == "left"  { (r, c - 1) }
-      else if dir == "down"  { (r + 1, c) }
-      else                   { (r - 1, c) }
+    let next-logical-position(row, column, direction) = {
+      if direction == "right" { (row, column + 1) }
+      else if direction == "left" { (row, column - 1) }
+      else if direction == "down" { (row + 1, column) }
+      else { (row - 1, column) }
     }
 
     for item in steps {
-      if is-rxn-arrow(item) {
-        let dir = item.at("dir", default: "right")
-        let (gr, gc) = if dir == "right"     { (2 * lr,     2 * lc + 1) }
-                       else if dir == "left"  { (2 * lr,     2 * lc - 1) }
-                       else if dir == "down"  { (2 * lr + 1, 2 * lc) }
-                       else                   { (2 * lr - 1, 2 * lc) }
-        placed.push((gr: gr, gc: gc, kind: "arrow", data: item))
-        let pos = next-pos(lr, lc, dir)
-        lr = pos.at(0)
-        lc = pos.at(1)
+      if is-reaction-arrow(item) {
+        let direction = item.at("dir", default: "right")
+        let (grid-row, grid-column) = if direction == "right" {
+          (2 * logical-row, 2 * logical-column + 1)
+        } else if direction == "left" {
+          (2 * logical-row, 2 * logical-column - 1)
+        } else if direction == "down" {
+          (2 * logical-row + 1, 2 * logical-column)
+        } else {
+          (2 * logical-row - 1, 2 * logical-column)
+        }
+        placed.push((
+          gr: grid-row,
+          gc: grid-column,
+          kind: "arrow",
+          data: item,
+        ))
+        let next-position = next-logical-position(
+          logical-row,
+          logical-column,
+          direction,
+        )
+        logical-row = next-position.at(0)
+        logical-column = next-position.at(1)
         needs-advance = false
       } else {
         if needs-advance {
-          let pos = next-pos(lr, lc, base-dir)
-          lr = pos.at(0)
-          lc = pos.at(1)
+          let next-position = next-logical-position(
+            logical-row,
+            logical-column,
+            base-direction,
+          )
+          logical-row = next-position.at(0)
+          logical-column = next-position.at(1)
         }
-        placed.push((gr: 2 * lr, gc: 2 * lc, kind: "mol", data: item))
+        placed.push((
+          gr: 2 * logical-row,
+          gc: 2 * logical-column,
+          kind: "mol",
+          data: item,
+        ))
         needs-advance = true
       }
     }
 
     if placed.len() == 0 { return [] }
 
-    let min-gr = placed.fold(placed.first().gr, (m, c) => calc.min(m, c.gr))
-    let min-gc = placed.fold(placed.first().gc, (m, c) => calc.min(m, c.gc))
-    let max-gr = placed.fold(placed.first().gr, (m, c) => calc.max(m, c.gr))
-    let max-gc = placed.fold(placed.first().gc, (m, c) => calc.max(m, c.gc))
+    let minimum-grid-row = placed.fold(
+      placed.first().gr,
+      (minimum, item) => calc.min(minimum, item.gr),
+    )
+    let minimum-grid-column = placed.fold(
+      placed.first().gc,
+      (minimum, item) => calc.min(minimum, item.gc),
+    )
+    let maximum-grid-row = placed.fold(
+      placed.first().gr,
+      (maximum, item) => calc.max(maximum, item.gr),
+    )
+    let maximum-grid-column = placed.fold(
+      placed.first().gc,
+      (maximum, item) => calc.max(maximum, item.gc),
+    )
 
-    let n-rows = max-gr - min-gr + 1
-    let n-cols = max-gc - min-gc + 1
+    let row-count = maximum-grid-row - minimum-grid-row + 1
+    let column-count = maximum-grid-column - minimum-grid-column + 1
 
     // A "left" or "up" flow lays the scheme out normally, then reflects it along
     // the flow axis and flips the affected arrowheads. The written order then
     // reads leaves-toward the reflected side — natural for a branch that grows
     // out of the left or bottom of a cycle.
     if flow == "left" or flow == "up" {
-      let flip-h = ("right": "left", "left": "right")
-      let flip-v = ("down": "up", "up": "down")
-      placed = placed.map(p => {
-        let np = p
+      let horizontal-direction-flips = ("right": "left", "left": "right")
+      let vertical-direction-flips = ("down": "up", "up": "down")
+      placed = placed.map(placed-item => {
+        let reflected-item = placed-item
         if flow == "left" {
-          np.gc = min-gc + max-gc - p.gc
+          reflected-item.gc = (
+            minimum-grid-column + maximum-grid-column - placed-item.gc
+          )
         } else {
-          np.gr = min-gr + max-gr - p.gr
+          reflected-item.gr = (
+            minimum-grid-row + maximum-grid-row - placed-item.gr
+          )
         }
-        if p.kind == "arrow" {
-          let d = p.data.at("dir", default: "right")
-          let nd = if flow == "left" { flip-h.at(d, default: d) } else { flip-v.at(d, default: d) }
-          np.data = p.data
-          np.data.dir = nd
+        if placed-item.kind == "arrow" {
+          let direction = placed-item.data.at("dir", default: "right")
+          let reflected-direction = if flow == "left" {
+            horizontal-direction-flips.at(direction, default: direction)
+          } else {
+            vertical-direction-flips.at(direction, default: direction)
+          }
+          reflected-item.data = placed-item.data
+          reflected-item.data.dir = reflected-direction
         }
-        np
+        reflected-item
       })
     }
 
     let lookup = (:)
-    for p in placed {
-      lookup.insert(str(p.gr - min-gr) + "," + str(p.gc - min-gc), p)
+    for placed-item in placed {
+      lookup.insert(
+        str(placed-item.gr - minimum-grid-row)
+          + ","
+          + str(placed-item.gc - minimum-grid-column),
+        placed-item,
+      )
     }
 
     let flat-cells = ()
-    for gr in range(n-rows) {
-      for gc in range(n-cols) {
-        let p = lookup.at(str(gr) + "," + str(gc), default: none)
-        if p == none {
+    for grid-row in range(row-count) {
+      for grid-column in range(column-count) {
+        let placed-item = lookup.at(
+          str(grid-row) + "," + str(grid-column),
+          default: none,
+        )
+        if placed-item == none {
           flat-cells.push([])
-        } else if p.kind == "mol" {
-          let c = if is-mol(p.data) {
-            _render-mol(p.data, show-indices-default: show-indices)
-          } else { p.data }
-          flat-cells.push(align(center + horizon, c))
+        } else if placed-item.kind == "mol" {
+          let content-item = if is-molecule-item(placed-item.data) {
+            _render-molecule-item(
+              placed-item.data,
+              show-indices-default: show-indices,
+            )
+          } else {
+            placed-item.data
+          }
+          flat-cells.push(align(center + horizon, content-item))
         } else {
-          let item = p.data
-          let d = item.at("dir", default: "right")
-          let k = item.at("kind", default: "single")
+          let item = placed-item.data
+          let direction = item.at("dir", default: "right")
+          let kind = item.at("kind", default: "single")
           flat-cells.push(
-            if d == "right" or d == "left" {
-              _horiz-arrow(item.above, item.below, d, k, item.at("color", default: auto), item.at("stroke", default: auto), arrow-scale: item.at("scale", default: 1.0))
+            if direction == "right" or direction == "left" {
+              _horizontal-reaction-arrow(
+                item.above,
+                item.below,
+                direction,
+                kind,
+                item.at("color", default: auto),
+                item.at("stroke", default: auto),
+                arrow-scale: item.at("scale", default: 1.0),
+              )
             } else {
-              _vert-arrow(item.above, item.below, d, k, item.at("color", default: auto), item.at("stroke", default: auto), arrow-scale: item.at("scale", default: 1.0))
+              _vertical-reaction-arrow(
+                item.above,
+                item.below,
+                direction,
+                kind,
+                item.at("color", default: auto),
+                item.at("stroke", default: auto),
+                arrow-scale: item.at("scale", default: 1.0),
+              )
             }
           )
         }
       }
     }
 
-    let result = grid(
-      columns: (auto,) * n-cols,
-      rows:    (auto,) * n-rows,
+    let reaction-grid = grid(
+      columns: (auto,) * column-count,
+      rows: (auto,) * row-count,
       column-gutter: gap-h / 2,
       row-gutter:    gap-v / 2,
       align: center + horizon,
@@ -2875,9 +3488,14 @@
     )
 
     let scaled = if scale == 1.0 {
-      result
+      reaction-grid
     } else {
-      _typst-scale(x: scale * 100%, y: scale * 100%, reflow: true, result)
+      _typst-scale(
+        x: scale * 100%,
+        y: scale * 100%,
+        reflow: true,
+        reaction-grid,
+      )
     }
 
     block(breakable: breakable, scaled)
@@ -2885,210 +3503,314 @@
     // ── Mechanism (shared canvas) path ──────────────────────────────────────
     let canvas-scale = scale * 30pt
     let font-size = 11pt * scale
-    let cfg = _annotation-cfg(canvas-scale, font-size, scale)
+    let configuration = _annotation-configuration(canvas-scale, font-size, scale)
     let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
     let gap = 1.0 // bond-length units between species
 
     context {
-      let specs = ()       // referenceable items (mol/content), in species-index order
-      let flow = ()        // positioned but non-referenceable content (rxn-arrows)
+      let placed-species-list = ()       // referenceable items (mol/content), in species-index order
+      let reaction-arrow-items = () // positioned but non-referenceable content
       let annotations = () // curly arrows and highlights
-      let cursor = 0.0
-      let lift-pad = 0.15  // gap between an arrow and a species lifted from its label slot
+      let layout-cursor = 0.0
+      let lift-clearance = 0.15  // gap between an arrow and a species lifted from its label slot
 
       // Build a placed-species record for a mol() item, centered at (0, 0) plus
-      // its own offset. `place-spec` shifts it to its final canvas position.
-      let make-spec(m) = {
-        if type(m.spec) == str {
-          let mol-scale = float(m.opts.at("scale", default: 1.0))
-          if mol-scale <= 0 { panic("mol scale must be positive") }
-          let lay = _mirror-layout(
-            _layout(m.spec),
-            m.opts.at("mirror", default: none),
-            rotation: m.opts.at("rotation", default: 0deg),
+      // its own offset. `position-species` shifts it to its final canvas position.
+      let build-placed-species(molecule-item) = {
+        if type(molecule-item.spec) == str {
+          let molecule-scale = float(
+            molecule-item.opts.at("scale", default: 1.0),
           )
-          let mol-fs = m.opts.at("font-size", default: none)
-          let rotation = m.opts.at("rotation", default: 0deg)
+          if molecule-scale <= 0 { panic("mol scale must be positive") }
+          let molecule-layout = _mirror-layout(
+            _compute-layout(molecule-item.spec),
+            molecule-item.opts.at("mirror", default: none),
+            rotation: molecule-item.opts.at("rotation", default: 0deg),
+          )
+          let molecule-font-size = molecule-item.opts.at(
+            "font-size",
+            default: none,
+          )
+          let rotation = molecule-item.opts.at("rotation", default: 0deg)
           // Measure the rotated/mirrored/scaled molecule the same way the grid
           // path does, so wide-after-rotation species get accurate extents.
           // Combine that total with the exact rotated-atom asymmetry so the
           // bounds are stored relative to the molecular origin, not its box
           // center (layout coordinates are centroid-centered).
-          let mopts = m.opts
-          mopts.insert("scale", the-scale * mol-scale)
-          let meas = measure(smiles(m.spec, ..mopts))
-          let bounds = _mol-bounds(
-            lay,
+          let measurement-options = molecule-item.opts
+          measurement-options.insert("scale", the-scale * molecule-scale)
+          let measured-molecule = measure(
+            smiles(molecule-item.spec, ..measurement-options),
+          )
+          let bounds = _molecule-bounds(
+            molecule-layout,
             rotation,
-            mol-scale,
-            meas.width / canvas-scale,
-            meas.height / canvas-scale,
+            molecule-scale,
+            measured-molecule.width / canvas-scale,
+            measured-molecule.height / canvas-scale,
           )
           (
             kind: "mol-smiles",
-            layout: lay,
-            mol-scale: mol-scale,
+            layout: molecule-layout,
+            mol-scale: molecule-scale,
             rotation: rotation,
-            origin: (m.offset.at(0), m.offset.at(1)),
+            origin: (
+              molecule-item.offset.at(0),
+              molecule-item.offset.at(1),
+            ),
             bounds: bounds,
             size: (bounds.left + bounds.right, bounds.top + bounds.bottom),
-            label: m.label,
-            opts: m.opts,
+            label: molecule-item.label,
+            opts: molecule-item.opts,
             canvas-scale: canvas-scale,
-            actual-font-size: if mol-fs == none { 11pt * the-scale * mol-scale } else { mol-fs },
-            font: m.opts.at("font", default: "New Computer Modern"),
-            show-h: m.opts.at("show-h", default: ()),
+            actual-font-size: if molecule-font-size == none {
+              11pt * the-scale * molecule-scale
+            } else {
+              molecule-font-size
+            },
+            font: molecule-item.opts.at(
+              "font",
+              default: "New Computer Modern",
+            ),
+            show-h: molecule-item.opts.at("show-h", default: ()),
           )
         } else {
-          let meas = measure(m.spec)
-          let w = meas.width / canvas-scale
-          let h = meas.height / canvas-scale
+          let measured-content = measure(molecule-item.spec)
+          let width = measured-content.width / canvas-scale
+          let height = measured-content.height / canvas-scale
           (
             kind: "content",
-            body: m.spec,
+            body: molecule-item.spec,
             rotation: 0deg,
-            origin: (m.offset.at(0), m.offset.at(1)),
-            bounds: (left: w / 2, right: w / 2, bottom: h / 2, top: h / 2),
-            size: (w, h),
-            label: m.label,
+            origin: (
+              molecule-item.offset.at(0),
+              molecule-item.offset.at(1),
+            ),
+            bounds: (
+              left: width / 2,
+              right: width / 2,
+              bottom: height / 2,
+              top: height / 2,
+            ),
+            size: (width, height),
+            label: molecule-item.label,
           )
         }
       }
-      let place-spec(sp, cx, cy) = sp + (origin: (sp.origin.at(0) + cx, sp.origin.at(1) + cy))
+      let position-species(placed-species, center-x, center-y) = (
+        placed-species
+          + (
+            origin: (
+              placed-species.origin.at(0) + center-x,
+              placed-species.origin.at(1) + center-y,
+            ),
+          )
+      )
 
-      for it in steps {
-        if is-curly(it) or is-highlight(it) {
-          annotations.push(it)
-        } else if is-rxn-arrow(it) {
+      for item in steps {
+        if is-electron-arrow(item) or is-highlight(item) {
+          annotations.push(item)
+        } else if is-reaction-arrow(item) {
           // mol() items in the arrow's above/below slots are lifted out of the
           // arrow body and registered as species of their own (above before
           // below), so their atoms stay addressable; any other label content
           // stays part of the arrow.
-          let lift-above = if is-mol(it.above) { make-spec(it.above) } else { none }
-          let lift-below = if is-mol(it.below) { make-spec(it.below) } else { none }
-          let above = if lift-above == none { it.above } else { none }
-          let below = if lift-below == none { it.below } else { none }
-          let horizontal = it.dir == "right" or it.dir == "left"
-          let body = if horizontal {
-            _horiz-arrow(above, below, it.dir, it.kind, it.at("color", default: auto), it.at("stroke", default: auto), arrow-scale: it.at("scale", default: 1.0))
+          let lift-above = if is-molecule-item(item.above) {
+            build-placed-species(item.above)
           } else {
-            _vert-arrow(above, below, it.dir, it.kind, it.at("color", default: auto), it.at("stroke", default: auto), arrow-scale: it.at("scale", default: 1.0))
+            none
           }
-          let aw = measure(body).width / canvas-scale
-          let ah = measure(body).height / canvas-scale
+          let lift-below = if is-molecule-item(item.below) {
+            build-placed-species(item.below)
+          } else {
+            none
+          }
+          let above = if lift-above == none { item.above } else { none }
+          let below = if lift-below == none { item.below } else { none }
+          let horizontal = item.dir == "right" or item.dir == "left"
+          let body = if horizontal {
+            _horizontal-reaction-arrow(
+              above,
+              below,
+              item.dir,
+              item.kind,
+              item.at("color", default: auto),
+              item.at("stroke", default: auto),
+              arrow-scale: item.at("scale", default: 1.0),
+            )
+          } else {
+            _vertical-reaction-arrow(
+              above,
+              below,
+              item.dir,
+              item.kind,
+              item.at("color", default: auto),
+              item.at("stroke", default: auto),
+              arrow-scale: item.at("scale", default: 1.0),
+            )
+          }
+          let arrow-width = measure(body).width / canvas-scale
+          let arrow-height = measure(body).height / canvas-scale
           if horizontal {
             // Lifted species sit above/below the arrow inside a slot wide
             // enough for all three.
-            let slot-w = calc.max(
-              aw,
+            let slot-width = calc.max(
+              arrow-width,
               if lift-above == none { 0.0 } else { lift-above.size.at(0) },
               if lift-below == none { 0.0 } else { lift-below.size.at(0) },
             )
-            let cx = cursor + slot-w / 2
-            flow.push((body: body, origin: (cx, 0)))
+            let center-x = layout-cursor + slot-width / 2
+            reaction-arrow-items.push((body: body, origin: (center-x, 0)))
             // Center each lifted box horizontally on the arrow; its bottom/top
-            // edge clears the arrow by `lift-pad`, using the rotated extents.
+            // edge clears the arrow by `lift-clearance`, using the rotated extents.
             if lift-above != none {
-              let ox = cx + (lift-above.bounds.left - lift-above.bounds.right) / 2
-              specs.push(place-spec(lift-above, ox, ah / 2 + lift-pad + lift-above.bounds.bottom))
+              let origin-x = (
+                center-x
+                  + (lift-above.bounds.left - lift-above.bounds.right) / 2
+              )
+              placed-species-list.push(position-species(
+                lift-above,
+                origin-x,
+                arrow-height / 2 + lift-clearance + lift-above.bounds.bottom,
+              ))
             }
             if lift-below != none {
-              let ox = cx + (lift-below.bounds.left - lift-below.bounds.right) / 2
-              specs.push(place-spec(lift-below, ox, -(ah / 2 + lift-pad + lift-below.bounds.top)))
+              let origin-x = (
+                center-x
+                  + (lift-below.bounds.left - lift-below.bounds.right) / 2
+              )
+              placed-species-list.push(position-species(
+                lift-below,
+                origin-x,
+                -(arrow-height / 2 + lift-clearance + lift-below.bounds.top),
+              ))
             }
-            cursor += slot-w + gap
+            layout-cursor += slot-width + gap
           } else {
             // A vertical arrow shows `above` on its right and `below` on its left.
-            let left-w = if lift-below == none { 0.0 } else { lift-below.size.at(0) + lift-pad }
-            let right-w = if lift-above == none { 0.0 } else { lift-above.size.at(0) + lift-pad }
-            let cx = cursor + left-w + aw / 2
-            flow.push((body: body, origin: (cx, 0)))
+            let left-width = if lift-below == none { 0.0 } else { lift-below.size.at(0) + lift-clearance }
+            let right-width = if lift-above == none { 0.0 } else { lift-above.size.at(0) + lift-clearance }
+            let center-x = layout-cursor + left-width + arrow-width / 2
+            reaction-arrow-items.push((body: body, origin: (center-x, 0)))
             if lift-above != none {
-              specs.push(place-spec(lift-above, cx + aw / 2 + lift-pad + lift-above.bounds.left, 0))
+              placed-species-list.push(position-species(
+                lift-above,
+                center-x
+                  + arrow-width / 2
+                  + lift-clearance
+                  + lift-above.bounds.left,
+                0,
+              ))
             }
             if lift-below != none {
-              specs.push(place-spec(lift-below, cx - aw / 2 - lift-pad - lift-below.bounds.right, 0))
+              placed-species-list.push(position-species(
+                lift-below,
+                center-x
+                  - arrow-width / 2
+                  - lift-clearance
+                  - lift-below.bounds.right,
+                0,
+              ))
             }
-            cursor += left-w + aw + right-w + gap
+            layout-cursor += left-width + arrow-width + right-width + gap
           }
         } else {
-          let m = if is-mol(it) {
-            it
+          let molecule-item = if is-molecule-item(item) {
+            item
           } else {
-            (__mol__: true, spec: it, label: none, offset: (0, 0), opts: (:))
+            (__mol__: true, spec: item, label: none, offset: (0, 0), opts: (:))
           }
-          let sp = make-spec(m)
+          let placed-species = build-placed-species(molecule-item)
           // Place the origin so the molecule's actual left edge lands at the
-          // cursor, then advance by its full rotated width plus the gap.
-          specs.push(place-spec(sp, cursor + sp.bounds.left, 0))
-          cursor += sp.bounds.left + sp.bounds.right + gap
+          // layout-cursor, then advance by its full rotated width plus the gap.
+          placed-species-list.push(position-species(placed-species, layout-cursor + placed-species.bounds.left, 0))
+          layout-cursor += placed-species.bounds.left + placed-species.bounds.right + gap
         }
       }
 
       let canvas = cetz.canvas(length: canvas-scale, {
         import cetz.draw: *
 
-        for a in annotations {
-          if a.at("__highlight__", default: false) { _draw-highlight(a, specs, cfg) }
+        for annotation in annotations {
+          if annotation.at("__highlight__", default: false) {
+            _draw-highlight(
+              annotation,
+              placed-species-list,
+              configuration,
+            )
+          }
         }
 
-        for sp-idx in range(specs.len()) {
-          let sp = specs.at(sp-idx)
-          if sp.kind == "mol-smiles" {
+        for placed-species-index in range(placed-species-list.len()) {
+          let placed-species = placed-species-list.at(placed-species-index)
+          if placed-species.kind == "mol-smiles" {
             // A per-species scale is a canvas transform around the species
             // origin plus a matching factor on the drawing scale, so strokes
             // and labels (which transforms leave untouched) shrink in step
             // with the geometry.
-            let ms = sp.at("mol-scale", default: 1.0)
+            let molecule-scale = placed-species.at("mol-scale", default: 1.0)
             group({
-              translate((sp.origin.at(0), sp.origin.at(1)))
-              if ms != 1.0 { scale(ms) }
-              let (mol-fg, mol-theme) = _resolve-fg-theme(
-                sp.opts.at("fg", default: auto),
-                sp.opts.at("theme", default: auto),
+              translate((placed-species.origin.at(0), placed-species.origin.at(1)))
+              if molecule-scale != 1.0 { scale(molecule-scale) }
+              let (molecule-foreground, molecule-theme) = _resolve-foreground-theme(
+                placed-species.opts.at("fg", default: auto),
+                placed-species.opts.at("theme", default: auto),
               )
               _draw-molecule(
-                sp.layout,
-                scale: the-scale * ms,
-                font-size: sp.opts.at("font-size", default: none),
-                font: sp.opts.at("font", default: "New Computer Modern"),
-                bond-stroke: sp.opts.at("bond-stroke", default: none),
-                color: sp.opts.at("color", default: true),
-                rotation: sp.rotation,
-                show-h: sp.opts.at("show-h", default: ()),
-                lone-pairs: sp.opts.at("lone-pairs", default: none),
-                atom-colors: sp.opts.at("atom-colors", default: (:)),
-                show-indices: sp.opts.at("show-indices", default: show-indices),
-                index-prefix: "species-" + str(sp-idx) + "-",
-                fg: mol-fg,
-                theme: mol-theme,
-                aromatic: sp.opts.at("aromatic", default: "kekule"),
-                atom-annotations: sp.opts.at("atom-annotations", default: ()),
-                opacity: sp.opts.at("opacity", default: 100%),
-                bond-customizations: sp.opts.at("bond-customizations", default: ()),
+                placed-species.layout,
+                scale: the-scale * molecule-scale,
+                font-size: placed-species.opts.at("font-size", default: none),
+                font: placed-species.opts.at("font", default: "New Computer Modern"),
+                bond-stroke: placed-species.opts.at("bond-stroke", default: none),
+                color: placed-species.opts.at("color", default: true),
+                rotation: placed-species.rotation,
+                show-h: placed-species.opts.at("show-h", default: ()),
+                lone-pairs: placed-species.opts.at("lone-pairs", default: none),
+                atom-colors: placed-species.opts.at("atom-colors", default: (:)),
+                show-indices: placed-species.opts.at("show-indices", default: show-indices),
+                index-prefix: "species-" + str(placed-species-index) + "-",
+                fg: molecule-foreground,
+                theme: molecule-theme,
+                aromatic: placed-species.opts.at("aromatic", default: "kekule"),
+                atom-annotations: placed-species.opts.at("atom-annotations", default: ()),
+                opacity: placed-species.opts.at("opacity", default: 100%),
+                bond-customizations: placed-species.opts.at("bond-customizations", default: ()),
               )
             })
           } else {
-            content((sp.origin.at(0), sp.origin.at(1)), sp.body, anchor: "center")
+            content((placed-species.origin.at(0), placed-species.origin.at(1)), placed-species.body, anchor: "center")
           }
         }
 
-        for f in flow {
-          content((f.origin.at(0), f.origin.at(1)), f.body, anchor: "center")
+        for reaction-arrow-item in reaction-arrow-items {
+          content(
+            (
+              reaction-arrow-item.origin.at(0),
+              reaction-arrow-item.origin.at(1),
+            ),
+            reaction-arrow-item.body,
+            anchor: "center",
+          )
         }
 
-        for sp in specs {
-          if sp.label != none {
+        for placed-species in placed-species-list {
+          if placed-species.label != none {
             content(
-              (sp.origin.at(0), sp.origin.at(1) - sp.bounds.bottom - 0.34),
-              sp.label,
+              (placed-species.origin.at(0), placed-species.origin.at(1) - placed-species.bounds.bottom - 0.34),
+              placed-species.label,
               anchor: "north",
             )
           }
         }
 
-        for a in annotations {
-          if a.at("__arrow__", default: false) { _draw-arrow(a, specs, cfg) }
+        for annotation in annotations {
+          if annotation.at("__arrow__", default: false) {
+            _draw-arrow(
+              annotation,
+              placed-species-list,
+              configuration,
+            )
+          }
         }
       })
 
@@ -3139,7 +3861,7 @@
 
 // Render a reagent spec (SMILES string or content) to content, for the small
 // molecules that feed into or out of a cycle arc.
-#let _cycle-reagent(spec, scale) = {
+#let _render-cycle-reagent(spec, scale) = {
   if spec == none { none }
   else if type(spec) == str { smiles(spec, scale: scale) }
   else { spec }
@@ -3149,11 +3871,11 @@
   if calc.cos(angle) < 0 { angle + 180deg } else { angle }
 }
 
-#let _cycle-label-rotation(rotation, mid-ang, dir) = {
+#let _cycle-label-rotation(rotation, midpoint-angle) = {
   if rotation == "straight" {
     0deg
   } else if rotation == "auto" {
-    _upright-angle(mid-ang)
+    _upright-angle(midpoint-angle)
   } else if type(rotation) == angle {
     rotation
   } else {
@@ -3204,115 +3926,195 @@
   breakable: false,
   ..items,
 ) = {
-  let steps-in = items.pos()
-  let is-step(it) = type(it) == dictionary and it.at("__cycle_step__", default: false)
-  let is-mol(it)  = type(it) == dictionary and it.at("__mol__", default: false)
+  let cycle-items = items.pos()
+  let is-step(item) = (
+    type(item) == dictionary and item.at("__cycle_step__", default: false)
+  )
+  let is-molecule-item(item) = (
+    type(item) == dictionary and item.at("__mol__", default: false)
+  )
 
   // Split into species (in ring order) and the step that follows each species.
   let species = ()
   let arc-steps = ()
-  for it in steps-in {
-    if is-step(it) {
+  for item in cycle-items {
+    if is-step(item) {
       if arc-steps.len() < species.len() {
-        arc-steps.push(it)
+        arc-steps.push(item)
       }
     } else {
       // Pad a missing step for the previous species before starting a new one.
       while arc-steps.len() < species.len() {
         arc-steps.push(step())
       }
-      species.push(it)
+      species.push(item)
     }
   }
   while arc-steps.len() < species.len() { arc-steps.push(step()) }
 
-  let n = species.len()
-  if n == 0 { return [] }
+  let species-count = species.len()
+  if species-count == 0 { return [] }
 
   let canvas-scale = scale * 30pt
-  let mol-scale = scale
-  let step-ang = 360deg / n
-  let dir = if clockwise { -1 } else { 1 }
-  let angle-of(i) = start + dir * i * step-ang
+  let molecule-scale = scale
+  let step-angle = 360deg / species-count
+  let direction = if clockwise { -1 } else { 1 }
+  let species-angle(index) = start + direction * index * step-angle
 
   context {
     // Measure each species so the ring can be sized and molecules centered.
     let placed = ()
-    let max-diag = 0.0
-    for sp in species {
-      let m = if is-mol(sp) { sp } else { (__mol__: true, spec: sp, label: none, offset: (0, 0), opts: (:)) }
-      let (w, h, kind, payload) = if type(m.spec) == str {
-        let lay = _mirror-layout(
-          _layout(m.spec),
-          m.opts.at("mirror", default: none),
-          rotation: m.opts.at("rotation", default: 0deg),
-        )
-        (lay.bbox_width, lay.bbox_height, "mol", lay)
+    let maximum-diagonal = 0.0
+    for species-item in species {
+      let molecule-item = if is-molecule-item(species-item) {
+        species-item
       } else {
-        let meas = measure(m.spec)
-        (meas.width / canvas-scale, meas.height / canvas-scale, "content", m.spec)
+        (
+          __mol__: true,
+          spec: species-item,
+          label: none,
+          offset: (0, 0),
+          opts: (:),
+        )
       }
-      max-diag = calc.max(max-diag, calc.sqrt(w * w + h * h))
-      placed.push((m: m, w: w, h: h, kind: kind, payload: payload))
+      let (width, height, kind, payload) = if type(molecule-item.spec) == str {
+        let molecule-layout = _mirror-layout(
+          _compute-layout(molecule-item.spec),
+          molecule-item.opts.at("mirror", default: none),
+          rotation: molecule-item.opts.at("rotation", default: 0deg),
+        )
+        (molecule-layout.bbox_width, molecule-layout.bbox_height, "mol", molecule-layout)
+      } else {
+        let measured-content = measure(molecule-item.spec)
+        (
+          measured-content.width / canvas-scale,
+          measured-content.height / canvas-scale,
+          "content",
+          molecule-item.spec,
+        )
+      }
+      maximum-diagonal = calc.max(
+        maximum-diagonal,
+        calc.sqrt(width * width + height * height),
+      )
+      placed.push((
+        m: molecule-item,
+        w: width,
+        h: height,
+        kind: kind,
+        payload: payload,
+      ))
     }
 
     // Fit the ring: adjacent species centers must clear their bounding boxes.
-    let r = if radius != auto {
+    let cycle-radius = if radius != auto {
       radius
-    } else if n == 1 {
+    } else if species-count == 1 {
       0.0
     } else {
-      calc.max(2.0, (max-diag + 1.1) / (2 * calc.sin(calc.pi / n)))
+      calc.max(
+        2.0,
+        (maximum-diagonal + 1.1)
+          / (2 * calc.sin(calc.pi / species-count)),
+      )
     }
 
-    let pt(ang, rad) = (rad * calc.cos(ang), rad * calc.sin(ang))
-    let shift(p, by) = (p.at(0) + by.at(0), p.at(1) + by.at(1))
+    let point-on-circle(angle, radial-distance) = (
+      radial-distance * calc.cos(angle),
+      radial-distance * calc.sin(angle),
+    )
+    let offset-point(point, offset) = (
+      point.at(0) + offset.at(0),
+      point.at(1) + offset.at(1),
+    )
     // Per-species angular clearance: an arc retreats from each molecule by that
     // molecule's own reach in the tangential (arc-approach) direction, plus
     // arc-gap. This keeps the visible gap uniform whether a wide molecule sits
     // at the top (approached across its width) or the side (across its height).
-    let clearance-at(i) = if r > 0.01 {
-      let p = placed.at(i)
-      let a = angle-of(i)
-      let reach = (p.w / 2) * calc.abs(calc.sin(a)) + (p.h / 2) * calc.abs(calc.cos(a))
-      calc.min(step-ang * 0.45, calc.max(0deg, 1.0rad * (reach + arc-gap) / r))
+    let angular-clearance(index) = if cycle-radius > 0.01 {
+      let placed-item = placed.at(index)
+      let angle = species-angle(index)
+      let tangential-reach = (
+        placed-item.w / 2 * calc.abs(calc.sin(angle))
+          + placed-item.h / 2 * calc.abs(calc.cos(angle))
+      )
+      calc.min(
+        step-angle * 0.45,
+        calc.max(
+          0deg,
+          1.0rad * (tangential-reach + arc-gap) / cycle-radius,
+        ),
+      )
     } else { 0deg }
 
     let canvas = cetz.canvas(length: canvas-scale, {
       import cetz.draw: *
 
       // Arc arrows between consecutive species, with labels and reagents.
-      for i in range(n) {
-        let a0 = angle-of(i)
-        let a1 = angle-of(i + 1)
-        let st = arc-steps.at(i)
-        let from-ang = a0 + dir * clearance-at(i)
-        let to-ang = a1 - dir * clearance-at(calc.rem(i + 1, n))
-        let n-seg = 24
-        let pts = range(n-seg + 1).map(k => {
-          let ang = from-ang + (to-ang - from-ang) * (k / n-seg)
-          pt(ang, r)
+      for step-index in range(species-count) {
+        let from-species-angle = species-angle(step-index)
+        let to-species-angle = species-angle(step-index + 1)
+        let cycle-step = arc-steps.at(step-index)
+        let from-angle = (
+          from-species-angle + direction * angular-clearance(step-index)
+        )
+        let to-angle = (
+          to-species-angle
+            - direction * angular-clearance(
+              calc.rem(step-index + 1, species-count),
+            )
+        )
+        let segment-count = 24
+        let points = range(segment-count + 1).map(segment-index => {
+          let angle = (
+            from-angle
+              + (to-angle - from-angle) * (segment-index / segment-count)
+          )
+          point-on-circle(angle, cycle-radius)
         })
         line(
-          ..pts,
+          ..points,
           mark: (end: ">", fill: arrow-color, size: 0.16),
           stroke: 0.9pt + arrow-color,
         )
 
-        let mid-ang = a0 + dir * step-ang / 2
-        let bend = if st.bend == auto { reagent-bend } else { st.bend }
+        let midpoint-angle = (
+          from-species-angle + direction * step-angle / 2
+        )
+        let bend = if cycle-step.bend == auto {
+          reagent-bend
+        } else {
+          cycle-step.bend
+        }
         // Unit tangent along the arc's travel direction at its midpoint.
-        let travel = (dir * -calc.sin(mid-ang), dir * calc.cos(mid-ang))
-        if st.label != none {
-          let has-reagent = st.into != none or st.out != none
-          let label-r = if has-reagent and r > 1.3 { calc.max(0.55, r - 1.05) } else { r + 0.95 }
-          let label-body = text(size: 9pt, fill: if label-color == auto { black } else { label-color }, st.label)
-          let label-rotation = _cycle-label-rotation(st.rotation, mid-ang, dir)
+        let travel-direction = (
+          direction * -calc.sin(midpoint-angle),
+          direction * calc.cos(midpoint-angle),
+        )
+        if cycle-step.label != none {
+          let has-reagent = cycle-step.into != none or cycle-step.out != none
+          let label-radius = if has-reagent and cycle-radius > 1.3 {
+            calc.max(0.55, cycle-radius - 1.05)
+          } else {
+            cycle-radius + 0.95
+          }
+          let label-body = text(
+            size: 9pt,
+            fill: if label-color == auto { black } else { label-color },
+            cycle-step.label,
+          )
+          let label-rotation = _cycle-label-rotation(
+            cycle-step.rotation,
+            midpoint-angle,
+          )
           if label-rotation != 0deg {
             label-body = _typst-rotate(label-rotation, reflow: false, label-body)
           }
           content(
-            shift(pt(mid-ang, label-r), st.label-offset),
+            offset-point(
+              point-on-circle(midpoint-angle, label-radius),
+              cycle-step.label-offset,
+            ),
             label-body,
             anchor: "center",
           )
@@ -3322,72 +4124,127 @@
         // arc, offset by its own measured extent so wide content (even a
         // nested reaction) clears the ring, then nudged by a per-step offset.
         // Pure: returns coords, draws nothing.
-        let reagent-metrics(spec, extra) = {
-          let body = _cycle-reagent(spec, mol-scale * reagent-scale)
+        let reagent-metrics(specification, extra-offset) = {
+          let body = _render-cycle-reagent(
+            specification,
+            molecule-scale * reagent-scale,
+          )
           if body == none {
             none
           } else {
-            let m = measure(body)
-            let w = m.width / canvas-scale
-            let h = m.height / canvas-scale
-            let half = 0.5 * (calc.abs(w * calc.cos(mid-ang)) + calc.abs(h * calc.sin(mid-ang)))
+            let measured-body = measure(body)
+            let width = measured-body.width / canvas-scale
+            let height = measured-body.height / canvas-scale
+            let radial-half-extent = 0.5 * (
+              calc.abs(width * calc.cos(midpoint-angle))
+                + calc.abs(height * calc.sin(midpoint-angle))
+            )
             // Floor keeps small reagents at a fixed clearance; large content
             // (e.g. a nested reaction) is pushed out by its own extent.
-            let dist = r + calc.max(2.05, 1.0 + half)
+            let distance = (
+              cycle-radius + calc.max(2.05, 1.0 + radial-half-extent)
+            )
             (
               body: body,
-              center: shift(pt(mid-ang, dist), extra),
-              w: w,
-              h: h,
+              center: offset-point(
+                point-on-circle(midpoint-angle, distance),
+                extra-offset,
+              ),
+              w: width,
+              h: height,
             )
           }
         }
 
-        let reagent-anchor-for(ang) = {
-          let ux = calc.cos(ang)
-          let uy = calc.sin(ang)
-          let eps = 0.12
-          let x = if ux > eps { "west" } else if ux < -eps { "east" } else { "" }
-          let y = if uy > eps { "south" } else if uy < -eps { "north" } else { "" }
-          if x != "" and y != "" { y + "-" + x }
-          else if x != "" { x }
-          else if y != "" { y }
+        let reagent-anchor-for(angle) = {
+          let direction-x = calc.cos(angle)
+          let direction-y = calc.sin(angle)
+          let axis-threshold = 0.12
+          let horizontal-anchor = if direction-x > axis-threshold {
+            "west"
+          } else if direction-x < -axis-threshold {
+            "east"
+          } else {
+            ""
+          }
+          let vertical-anchor = if direction-y > axis-threshold {
+            "south"
+          } else if direction-y < -axis-threshold {
+            "north"
+          } else {
+            ""
+          }
+          if horizontal-anchor != "" and vertical-anchor != "" {
+            vertical-anchor + "-" + horizontal-anchor
+          }
+          else if horizontal-anchor != "" { horizontal-anchor }
+          else if vertical-anchor != "" { vertical-anchor }
           else { "center" }
         }
 
-        let anchor-point(center, w, h, anchor) = {
-          let x = center.at(0)
-          let y = center.at(1)
-          if anchor == "west" { (x - w / 2, y) }
-          else if anchor == "east" { (x + w / 2, y) }
-          else if anchor == "north" { (x, y + h / 2) }
-          else if anchor == "south" { (x, y - h / 2) }
-          else if anchor == "north-west" { (x - w / 2, y + h / 2) }
-          else if anchor == "north-east" { (x + w / 2, y + h / 2) }
-          else if anchor == "south-west" { (x - w / 2, y - h / 2) }
-          else if anchor == "south-east" { (x + w / 2, y - h / 2) }
+        let anchor-point(center, width, height, anchor) = {
+          let center-x = center.at(0)
+          let center-y = center.at(1)
+          if anchor == "west" { (center-x - width / 2, center-y) }
+          else if anchor == "east" { (center-x + width / 2, center-y) }
+          else if anchor == "north" { (center-x, center-y + height / 2) }
+          else if anchor == "south" { (center-x, center-y - height / 2) }
+          else if anchor == "north-west" {
+            (center-x - width / 2, center-y + height / 2)
+          }
+          else if anchor == "north-east" {
+            (center-x + width / 2, center-y + height / 2)
+          }
+          else if anchor == "south-west" {
+            (center-x - width / 2, center-y - height / 2)
+          }
+          else if anchor == "south-east" {
+            (center-x + width / 2, center-y - height / 2)
+          }
           else { center }
         }
 
         // Reagent merging in: arrow from the reagent toward the arc. In merge
         // mode the arrow ends on the arc pointing along the travel direction,
         // so it fuses with the main cycle arrow; otherwise it points radially.
-        let into-m = reagent-metrics(st.into, st.into-offset)
-        if into-m != none {
-          let into-anchor = reagent-anchor-for(mid-ang)
-          let into-attach = anchor-point(into-m.center, into-m.w, into-m.h, into-anchor)
-          content(into-attach, into-m.body, anchor: into-anchor)
-          if st.merge {
+        let incoming-reagent = reagent-metrics(
+          cycle-step.into,
+          cycle-step.into-offset,
+        )
+        if incoming-reagent != none {
+          let incoming-anchor = reagent-anchor-for(midpoint-angle)
+          let incoming-attachment = anchor-point(
+            incoming-reagent.center,
+            incoming-reagent.w,
+            incoming-reagent.h,
+            incoming-anchor,
+          )
+          content(
+            incoming-attachment,
+            incoming-reagent.body,
+            anchor: incoming-anchor,
+          )
+          if cycle-step.merge {
             // Fuse smoothly into the main arc: the curve arrives tangent to the
             // arc with no arrowhead, so it reads as one continuous stroke.
-            let tip = pt(mid-ang, r)
+            let tip = point-on-circle(midpoint-angle, cycle-radius)
             bezier(
-              into-attach, tip, (tip.at(0) - travel.at(0) * 0.5, tip.at(1) - travel.at(1) * 0.5),
+              incoming-attachment,
+              tip,
+              (
+                tip.at(0) - travel-direction.at(0) * 0.5,
+                tip.at(1) - travel-direction.at(1) * 0.5,
+              ),
               stroke: 0.8pt + arrow-color,
             )
           } else {
             bezier(
-              into-attach, pt(mid-ang, r + 0.28), pt(mid-ang + dir * step-ang * bend, r + 1.05),
+              incoming-attachment,
+              point-on-circle(midpoint-angle, cycle-radius + 0.28),
+              point-on-circle(
+                midpoint-angle + direction * step-angle * bend,
+                cycle-radius + 1.05,
+              ),
               mark: (end: ">", fill: arrow-color, size: 0.14),
               stroke: 0.8pt + arrow-color,
             )
@@ -3396,23 +4253,45 @@
 
         // Product leaving: arrow from the arc outward to the reagent. In merge
         // mode it peels off the arc tangentially.
-        let out-m = reagent-metrics(st.out, st.out-offset)
-        if out-m != none {
-          let out-anchor = reagent-anchor-for(mid-ang)
-          let out-attach = anchor-point(out-m.center, out-m.w, out-m.h, out-anchor)
-          content(out-attach, out-m.body, anchor: out-anchor)
-          if st.merge {
+        let outgoing-reagent = reagent-metrics(
+          cycle-step.out,
+          cycle-step.out-offset,
+        )
+        if outgoing-reagent != none {
+          let outgoing-anchor = reagent-anchor-for(midpoint-angle)
+          let outgoing-attachment = anchor-point(
+            outgoing-reagent.center,
+            outgoing-reagent.w,
+            outgoing-reagent.h,
+            outgoing-anchor,
+          )
+          content(
+            outgoing-attachment,
+            outgoing-reagent.body,
+            anchor: outgoing-anchor,
+          )
+          if cycle-step.merge {
             // Peel off the arc tangentially, keeping the arrowhead on the
             // departing product.
-            let base = pt(mid-ang, r)
+            let arc-point = point-on-circle(midpoint-angle, cycle-radius)
             bezier(
-              base, out-attach, (base.at(0) + travel.at(0) * 0.5, base.at(1) + travel.at(1) * 0.5),
+              arc-point,
+              outgoing-attachment,
+              (
+                arc-point.at(0) + travel-direction.at(0) * 0.5,
+                arc-point.at(1) + travel-direction.at(1) * 0.5,
+              ),
               mark: (end: ">", fill: arrow-color, size: 0.14),
               stroke: 0.8pt + arrow-color,
             )
           } else {
             bezier(
-              pt(mid-ang, r + 0.28), out-attach, pt(mid-ang - dir * step-ang * bend, r + 1.05),
+              point-on-circle(midpoint-angle, cycle-radius + 0.28),
+              outgoing-attachment,
+              point-on-circle(
+                midpoint-angle - direction * step-angle * bend,
+                cycle-radius + 1.05,
+              ),
               mark: (end: ">", fill: arrow-color, size: 0.14),
               stroke: 0.8pt + arrow-color,
             )
@@ -3421,41 +4300,63 @@
       }
 
       // Species on the ring, drawn on top of the arcs.
-      for i in range(n) {
-        let p = placed.at(i)
-        let center = pt(angle-of(i), r)
-        if p.kind == "mol" {
+      for species-index in range(species-count) {
+        let placed-item = placed.at(species-index)
+        let center = point-on-circle(
+          species-angle(species-index),
+          cycle-radius,
+        )
+        if placed-item.kind == "mol" {
           group({
             translate(center)
-            let (mfg, mtheme) = _resolve-fg-theme(
-              p.m.opts.at("fg", default: auto),
-              p.m.opts.at("theme", default: auto),
+            let (molecule-foreground, molecule-theme) = _resolve-foreground-theme(
+              placed-item.m.opts.at("fg", default: auto),
+              placed-item.m.opts.at("theme", default: auto),
             )
             _draw-molecule(
-              p.payload,
-              scale: mol-scale,
-              font-size: p.m.opts.at("font-size", default: none),
-              font: p.m.opts.at("font", default: "New Computer Modern"),
-              bond-stroke: p.m.opts.at("bond-stroke", default: none),
-              color: p.m.opts.at("color", default: true),
-              rotation: p.m.opts.at("rotation", default: 0deg),
-              show-h: p.m.opts.at("show-h", default: ()),
-              lone-pairs: p.m.opts.at("lone-pairs", default: none),
-              atom-colors: p.m.opts.at("atom-colors", default: (:)),
-              show-indices: p.m.opts.at("show-indices", default: false),
-              fg: mfg,
-              theme: mtheme,
-              aromatic: p.m.opts.at("aromatic", default: "kekule"),
-              atom-annotations: p.m.opts.at("atom-annotations", default: ()),
-              opacity: p.m.opts.at("opacity", default: 100%),
-              bond-customizations: p.m.opts.at("bond-customizations", default: ()),
+              placed-item.payload,
+              scale: molecule-scale,
+              font-size: placed-item.m.opts.at("font-size", default: none),
+              font: placed-item.m.opts.at(
+                "font",
+                default: "New Computer Modern",
+              ),
+              bond-stroke: placed-item.m.opts.at("bond-stroke", default: none),
+              color: placed-item.m.opts.at("color", default: true),
+              rotation: placed-item.m.opts.at("rotation", default: 0deg),
+              show-h: placed-item.m.opts.at("show-h", default: ()),
+              lone-pairs: placed-item.m.opts.at("lone-pairs", default: none),
+              atom-colors: placed-item.m.opts.at("atom-colors", default: (:)),
+              show-indices: placed-item.m.opts.at(
+                "show-indices",
+                default: false,
+              ),
+              fg: molecule-foreground,
+              theme: molecule-theme,
+              aromatic: placed-item.m.opts.at("aromatic", default: "kekule"),
+              atom-annotations: placed-item.m.opts.at(
+                "atom-annotations",
+                default: (),
+              ),
+              opacity: placed-item.m.opts.at("opacity", default: 100%),
+              bond-customizations: placed-item.m.opts.at(
+                "bond-customizations",
+                default: (),
+              ),
             )
           })
         } else {
-          content(center, p.payload, anchor: "center")
+          content(center, placed-item.payload, anchor: "center")
         }
-        if p.m.label != none {
-          content((center.at(0), center.at(1) - p.h / 2 - 0.34), p.m.label, anchor: "north")
+        if placed-item.m.label != none {
+          content(
+            (
+              center.at(0),
+              center.at(1) - placed-item.h / 2 - 0.34,
+            ),
+            placed-item.m.label,
+            anchor: "north",
+          )
         }
       }
     })
@@ -3476,30 +4377,36 @@
 /// -> content
 #let brackets(body, sup: none, sub: none, stroke: 0.6pt + black, gap: 0.3em) = context {
   let body-height = measure(body).height
-  let gp = gap.to-absolute()
-  let tk = (0.18em).to-absolute()
-  let total = body-height + 2 * gp
-  let bstroke = stroke // cetz.draw exports `stroke`, which would shadow the argument
+  let absolute-gap = gap.to-absolute()
+  let bracket-tick-length = (0.18em).to-absolute()
+  let bracket-height = body-height + 2 * absolute-gap
+  let bracket-stroke = stroke // cetz.draw exports `stroke`, which would shadow the argument
   let bracket(left) = {
-    let dir = if left { 1 } else { -1 }
-    box(height: total, cetz.canvas(length: 1pt, {
+    let horizontal-direction = if left { 1 } else { -1 }
+    box(height: bracket-height, cetz.canvas(length: 1pt, {
       import cetz.draw: *
-      let hp = total / 1pt
-      let tp = tk / 1pt
-      line((dir * tp, 0), (0, 0), (0, hp), (dir * tp, hp), stroke: bstroke)
+      let height-units = bracket-height / 1pt
+      let tick-units = bracket-tick-length / 1pt
+      line(
+        (horizontal-direction * tick-units, 0),
+        (0, 0),
+        (0, height-units),
+        (horizontal-direction * tick-units, height-units),
+        stroke: bracket-stroke,
+      )
     }))
   }
   // Stack the marks against the closing bracket: sup pinned to the top corner,
   // sub to the bottom, by filling the bracket height.
-  let supsub = if sup == none and sub == none {
+  let script-content = if sup == none and sub == none {
     none
   } else {
-    box(height: total, stack(
+    box(height: bracket-height, stack(
       dir: ttb,
       spacing: 1fr,
       if sup != none { box(text(size: 0.85em, sup)) } else { box() },
       if sub != none { box(text(size: 0.85em, sub)) } else { box() },
     ))
   }
-  box(baseline: 50% + 0.3em)[#bracket(true)#h(gp)#box(baseline: 50% - body-height / 2, body)#h(gp)#bracket(false)#if supsub != none { h(0.12em); supsub }]
+  box(baseline: 50% + 0.3em)[#bracket(true)#h(absolute-gap)#box(baseline: 50% - body-height / 2, body)#h(absolute-gap)#bracket(false)#if script-content != none { h(0.12em); script-content }]
 }

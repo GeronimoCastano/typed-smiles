@@ -7,16 +7,16 @@ pub enum SmilesError {
 }
 
 impl fmt::Display for SmilesError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Parse(msg) => write!(f, "parse error: {msg}"),
-            Self::Layout(msg) => write!(f, "layout error: {msg}"),
+            Self::Parse(message) => write!(formatter, "parse error: {message}"),
+            Self::Layout(message) => write!(formatter, "layout error: {message}"),
         }
     }
 }
 
 impl From<SmilesError> for String {
-    fn from(e: SmilesError) -> Self {
-        e.to_string()
+    fn from(error: SmilesError) -> Self {
+        error.to_string()
     }
 }
