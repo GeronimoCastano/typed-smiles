@@ -993,7 +993,7 @@ A development aid: stamp each atom's writing-order index, then reference it in
      "OCC=O",
      highlight(atom(0), fill: rgb("#BBE1FA")),
      highlight(bond(2, 3), fill: rgb("#FFCAD4")),
-     highlight(atom(4)),
+     highlight(atom(3)),
      show-indices: true,
    )],
 )
@@ -1056,7 +1056,7 @@ A development aid: stamp each atom's writing-order index, then reference it in
    #text(size: 8pt, `highlight((bond(0, 1), bond(2, 3)))`) \
    #smiles(
      "CC(=O)OC",
-     highlight((bond(0, 1), bond(2, 3)), fill: rgb("#FFCAD4")),
+     highlight((bond(0, 1), bond(1, 2)), fill: rgb("#FFCAD4")),
      show-indices: true,
    )],
 
@@ -1103,7 +1103,7 @@ Indices count `mol()`/content items in written order.
 
 #reaction(
   mol("[OH-]", lone-pairs: "dots"),
-  mol("C(I)(C)C", offset: (-1, -1), angle : 10deg),
+  mol("C(I)(C)C", offset: (-1, -1)),
   arrow(from: lp(0, 0), to: atom(1, 0), bend: "left", label: text(size: 8pt)[attack]),
   // arrow(from: bond(1, 0, 1), to: atom(1, 1, offset: (0.8, 0)), bend: "left", color: red),
 )
@@ -1424,7 +1424,7 @@ rotations, large labels, and reaction-level index overlays.
      rotation: -35deg,
      lone-pairs: "dots",
      highlight((atom(0), atom(6)), fill: rgb("#FFE45C")),
-     highlight((bond(3, 4), bond(4, 5)), fill: rgb("#FFCAD4"), include-atoms: true),
+     highlight((bond(3, 4), bond(3, 5)), fill: rgb("#FFCAD4"), include-atoms: true),
      show-indices: true,
    )],
 
@@ -2163,7 +2163,7 @@ short next to bonds ending at a bare vertex.
 
   #smiles(
     "N1CCN(CC1)C(C(F)=C2)=CC(=C2C4=O)N(C3CC3)C=C4C(=O)O",
-    highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23), bond(23, 25)), fill : rgb("#96BF0D"), include-atoms:true),
+    highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23)), fill : rgb("#96BF0D"), include-atoms:true),
     highlight((bond(15, 16), bond(16, 18), bond(18, 17), bond(17, 16)), fill : rgb("#F29401"), include-atoms:  true),
     highlight((bond(3, 2), bond(2, 1), bond(1, 0)), fill : rgb("#89C7A8"), include-atoms: true),
     highlight((bond(6, 7), bond(7, 8), bond(7, 9), bond(9, 12)), fill : rgb("#C98F4B"), include-atoms: true),
@@ -3409,7 +3409,7 @@ another.
 
 
 
-#reaction(mol("CCO", rotate : 60deg))
+#reaction(mol("CCO", rotation: 60deg))
 
 #pagebreak()
 
@@ -3610,3 +3610,331 @@ three-bond junction.
   #text(size: 8pt, `CC(C)=CC(C)=CC(=O)OCC`) \
   #smiles("CC(C)=CC(C)=CC(=O)OCC", scale: 1.1)
 ]
+
+#pagebreak()
+
+= Uniform mechanism scaling
+
+The global reaction scale changes molecule bonds, reaction arrows, annotations,
+labels, and transparent bracket strokes together.
+
+#grid(
+  columns: (1fr,),
+  gutter: 2em,
+  align: center + horizon,
+  [*scale: 0.5* \
+    #reaction(
+      scale: 0.5,
+      mol("C=O"),
+      rxn-arrow(above: mol("[H+]")),
+      brackets(
+        mol("C=[OH+]"),
+        rxn-arrow(kind: "equilibrium"),
+        mol("{C^+}O"),
+      ),
+      arrow(from: atom(0, 1), to: atom(1, 0)),
+    )],
+  [*scale: 0.8* \
+    #reaction(
+      scale: 0.8,
+      mol("C=O"),
+      rxn-arrow(above: mol("[H+]")),
+      brackets(
+        mol("C=[OH+]"),
+        rxn-arrow(kind: "equilibrium"),
+        mol("{C^+}O"),
+      ),
+      arrow(from: atom(0, 1), to: atom(1, 0)),
+    )],
+)
+
+= Reference-transparent reaction brackets
+
+Molecules inside `brackets(..items)` stay on the outer reaction canvas. Their
+species indices follow ordinary written order, so arrows cross either bracket.
+
+#align(center)[
+  #reaction(
+    show-indices: true,
+    mol("N", lone-pairs: "dots"),
+    rxn-arrow(),
+    brackets(
+      mol("C=O"),
+      rxn-arrow(kind: "equilibrium"),
+      mol("{C^+}O"),
+    ),
+    arrow(from: atom(0, 0), to: atom(1, 0), bend: "right"),
+    arrow(from: atom(2, 0), to: atom(0, 0), bend: "left", color: blue),
+  )
+]
+
+= Molecule-local mechanism annotations
+
+Positional arrows inside `mol()` use local one-molecule references.
+
+#align(center)[
+  #reaction(
+    show-indices: true,
+    mol(
+      "C1({H})C(=[N+]2CCCC2)CCCC1",
+      arrow(from: bond(0, 1), to: bond(0, 2)),
+      arrow(from: bond(2, 3), to: atom(3), bend: "right", color: blue),
+    ),
+    rxn-arrow(below: [-#ce("H+")]),
+    mol("C1=C(N2CCCC2)CCCC1"),
+  )
+]
+
+= Left and right bends with heads at both ends
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 2em,
+  align: center + horizon,
+  [*left* \
+    #reaction(
+      mol("CC(=O)O",
+        arrow(
+          from: atom(3),
+          to: atom(2),
+          heads: "both",
+          bend: "left",
+          color: blue,
+          angle: 30deg,
+        ),
+      ),
+    )],
+  [*right* \
+    #reaction(
+      mol("CC(=O)O",
+        arrow(
+          from: atom(3),
+          to: atom(2),
+          heads: "both",
+          bend: "right",
+          color: blue,
+          angle: 30deg,
+        ),
+      ),
+    )],
+)
+
+#pagebreak()
+
+= Bond-reference arrow attachment
+
+Bond references use the midpoint of the visible, label-trimmed stroke. Curved
+arrows leave multiple bonds from the outer line facing the curve.
+
+#align(center)[
+  #reaction(
+    scale: 0.5,
+    show-indices: true,
+    mol("C1=C(N2CCCC2)CCCC1", rotation: 60deg),
+    [+],
+    mol("C=CC(=O)OCC"),
+    arrow(from: atom(0, 7), to: atom(2, 0), bend: "right"),
+    arrow(from: bond(2, 0, 1), to: bond(2, 1, 2), bend: "right"),
+    arrow(from: bond(2, 2, 3), to: atom(2, 3)),
+  )
+]
+
+#v(1em)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.6em,
+  align: center + horizon,
+  [*O-C / O-O visible spans* \
+    #smiles(
+      "COOC",
+      scale: 1.15,
+      arrow(
+        from: bond(0, 1),
+        to: bond(2, 3),
+        bend: "left",
+        color: blue,
+      ),
+    )],
+  [*Carbonyl outer line* \
+    #smiles(
+      "CC(=O)C",
+      scale: 1.15,
+      arrow(
+        from: bond(1, 2),
+        to: atom(0),
+        bend: "left",
+        color: blue,
+      ),
+    )],
+  [*Chain double bond* \
+    #smiles(
+      "C=CC",
+      scale: 1.15,
+      arrow(
+        from: bond(0, 1),
+        to: atom(2),
+        bend: "right",
+        color: blue,
+      ),
+    )],
+  [*Ring double bond* \
+    #smiles(
+      "C1=CCCCC1",
+      scale: 1.0,
+      arrow(
+        from: bond(0, 1),
+        to: atom(3),
+        bend: "left",
+        color: blue,
+      ),
+    )],
+  [*Triple bond* \
+    #smiles(
+      "CC#N",
+      scale: 1.15,
+      arrow(
+        from: bond(1, 2),
+        to: atom(0),
+        bend: "right",
+        color: blue,
+      ),
+    )],
+  [*Rotated carbonyl* \
+    #smiles(
+      "CC(=O)OC",
+      scale: 1.1,
+      rotation: 67deg,
+      arrow(
+        from: bond(1, 2),
+        to: bond(1, 3),
+        bend: "right",
+        color: blue,
+      ),
+    )],
+  [*Visible atom edge* \
+    #smiles(
+      "CC=O",
+      scale: 1.15,
+      arrow(
+        from: bond(0, 1),
+        to: atom(2),
+        bend: "left",
+        color: blue,
+      ),
+    )],
+)
+
+#pagebreak()
+
+= Custom-label rendering offsets
+
+The `offset=(x, y)` modifier moves only the rendered custom-label atom and its
+incident bond endpoints. Layout coordinates remain unchanged. Positive x moves
+right and positive y moves up in page space.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  row-gutter: 1.5em,
+  align: center + horizon,
+
+  [*Default* \
+    #text(size: 8pt, `C{H}`) \
+    #smiles("C{H}", show-indices: true)],
+
+  [*Label and bond shifted* \
+    #text(size: 7pt, `C{H|grey|offset=(0.25,0.3)}`) \
+    #smiles("C{H | grey | offset=(0.25, 0.3)}", show-indices: true)],
+
+  [*Rotation keeps page directions* \
+    #text(size: 7pt, `rotation: 70deg; offset=(0.3,0)`) \
+    #smiles(
+      "CC{H|blue|offset=(0.3,0)}",
+      rotation: 70deg,
+      show-indices: true,
+    )],
+
+  [*Every incident endpoint follows* \
+    #text(size: 7pt, `{N|offset=(0.3,0.2)}(C)(C)C`) \
+    #smiles(
+      "{N|offset=(0.3,0.2)}(C)(C)C",
+      show-indices: true,
+    )],
+
+  [*Style, lone pair, and offset* \
+    #text(size: 7pt, `{>O|O|lp=2|offset=(-0.2,0.25)}`) \
+    #smiles(
+      "C{>O|O|lp=2|offset=(-0.2,0.25)}",
+      lone-pairs: "dots",
+      show-indices: true,
+    )],
+
+  [*References follow the displacement* \
+    #reaction(
+      show-indices: true,
+      mol(
+        "C{>O|O|lp=2|offset=(0.25,0.25)}",
+        lone-pairs: "dots",
+        arrow(from: lp(1, pair: 0), to: bond(0, 1), bend: "right"),
+      ),
+    )],
+)
+
+
+
+#pagebreak()
+
+= Transparent brackets follow rendered content
+
+Bracket extents include asymmetric terminal labels, charges, rotation, and
+manual custom-label displacement.
+
+#grid(
+  columns: (1fr,),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Terminal OH overhang at scale 0.5* \
+    #reaction(
+      scale: 0.5,
+      brackets(
+        mol("C=[OH+]"),
+        rxn-arrow(kind: "equilibrium"),
+        mol("{C^+}O"),
+      ),
+    )],
+
+  [*Terminal OH overhang at scale 0.8* \
+    #reaction(
+      scale: 0.8,
+      brackets(
+        mol("C=[OH+]"),
+        rxn-arrow(kind: "equilibrium"),
+        mol("{C^+}O"),
+      ),
+    )],
+
+  [*Rotated terminal labels* \
+    #reaction(
+      scale: 0.75,
+      brackets(
+        mol("CCO", rotation: 68deg),
+        rxn-arrow(kind: "equilibrium"),
+        mol("C[NH2]", rotation: -62deg),
+      ),
+    )],
+
+  [*Rotated manual label displacement* \
+    #reaction(
+      scale: 0.75,
+      brackets(
+        mol("CC{H|grey|offset=(0.4,0.35)}", rotation: 42deg),
+        rxn-arrow(kind: "equilibrium"),
+        mol("{N|blue|offset=(-0.35,-0.3)}(C)(C)C", rotation: -25deg),
+      ),
+    )],
+)
+
+
+#v(2cm)

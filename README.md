@@ -15,7 +15,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.9.1": *
+#import "@preview/typed-smiles:0.10.0": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -30,7 +30,7 @@ Aromatic rings can be written either in lowercase aromatic notation
 on parse and both render identically.
 
 ```typst
-#import "@preview/typed-smiles:0.9.1": smiles
+#import "@preview/typed-smiles:0.10.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -150,6 +150,28 @@ with script sizing and placement matching `ce()` notation.
 ```
 
 ![Hydrogen and custom label examples](assets/readme/hydrogens-labels.png)
+
+### Manual custom-label offsets
+
+Use `offset=(x, y)` inside a `{label}` to nudge that one labelled atom after
+automatic layout. Values are in bond-length units and follow page directions:
+positive x moves right and positive y moves up, even on a rotated molecule.
+The label and every bond endpoint connected to it move together; the other
+automatically placed atoms remain unchanged.
+
+```typst
+#smiles("C{H|grey|offset=(0.1, 0.2)}")
+#smiles(
+  "C{>O|O|lp=2|offset=(-0.2, 0.15)}",
+  lone-pairs: "dots",
+)
+```
+
+Each named modifier has its own pipe-delimited field. To combine color, lone
+pairs, and displacement, write
+`{H|grey|lp=1|offset=(0.1, 0.1)}`. The optional style must come first; `lp=` and
+`offset=` may be placed in either order after it. Large offsets can
+intentionally create overlaps.
 
 ## Atom annotations and per-atom hydrogens
 
@@ -312,7 +334,7 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.9.1": ce
+#import "@preview/typed-smiles:0.10.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -337,7 +359,7 @@ explicit hydrogens. Dot-separated fragments (salts, hydrates) are summed
 together.
 
 ```typst
-#import "@preview/typed-smiles:0.9.1": mol-weight
+#import "@preview/typed-smiles:0.10.0": mol-weight
 
 Ethanol: #calc.round(mol-weight("CCO"), digits: 2) g/mol // 46.07
 Caffeine: #calc.round(mol-weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C"), digits: 2) g/mol // 194.19
@@ -356,7 +378,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.9.1": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.10.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -440,7 +462,7 @@ canvas — plain schemes are unaffected.
 ```typst
 #smiles(
   "N1CCN(CC1)C(C(F)=C2)=CC(=C2C4=O)N(C3CC3)C=C4C(=O)O",
-  highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23), bond(23, 25)), fill: rgb(150, 191, 13), include-atoms: true),
+  highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23)), fill: rgb(150, 191, 13), include-atoms: true),
   highlight((bond(15, 16), bond(16, 18), bond(18, 17), bond(17, 16)), fill: rgb(242, 148, 1), include-atoms: true),
   highlight((bond(3, 2), bond(2, 1), bond(1, 0)), fill: rgb(137, 199, 168), include-atoms: true),
   highlight((bond(6, 7), bond(7, 8), bond(7, 9), bond(9, 12)), fill: rgb(201, 143, 75), include-atoms: true),
@@ -459,9 +481,15 @@ canvas — plain schemes are unaffected.
         bend: "right", color : black),
 )
 
-#brackets(
-  [#reaction(smiles("CC(=O)C"), rxn-arrow(), smiles("O=C=O"), scale: 0.55)],
-  sup: [‡],
+#reaction(
+  mol("N", lone-pairs: "dots"),
+  brackets(
+    mol("C=O"),
+    rxn-arrow(kind: "equilibrium"),
+    mol("{C^+}O"),
+    sup: [+],
+  ),
+  arrow(from: atom(0, 0), to: atom(1, 0)),
 )
 ```
 
@@ -476,9 +504,10 @@ photochemical one. They default to a black shaft with a small, thin triangle tip
 
 ![Electron-pushing mechanism examples](assets/readme/mechanisms.png)
 
-In mechanism mode `reaction(scale:)` sets the shared canvas scale and each
-`mol(scale:)` multiplies it for its own species, so molecules in one mechanism
-can be sized individually. A `mol()` item placed in a `rxn-arrow(above:/below:)`
+In mechanism mode `reaction(scale:)` scales the complete canvas uniformly,
+including molecular bonds, reaction arrows, curly arrows, labels, bracket
+strokes, and lengths. Each `mol(scale:)` additionally resizes that species, so
+molecules in one mechanism can be sized individually. A `mol()` item placed in a `rxn-arrow(above:/below:)`
 slot draws a molecule over or under the arrow; in mechanism mode it also becomes
 a species of its own, counted in written order at the arrow's position (`above`
 before `below`), so curly arrows can connect it to any other species:
@@ -507,7 +536,7 @@ or an angle), and `label-offset:`/`into-offset:`/`out-offset:` nudge pieces like
 a `mol` offset.
 
 ```typst
-#import "@preview/typed-smiles:0.9.1": cycle, step, mol, ce
+#import "@preview/typed-smiles:0.10.0": cycle, step, mol, ce
 
 #let cplx(body) = box(inset: 2pt, body)
 
@@ -654,8 +683,11 @@ nudges it in page coordinates, in bond-length units: positive x moves right and
 positive y moves up regardless of `reaction(flow:)`. String molecules accept
 common drawing options such as `scale`, `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-h`,
 `lone-pairs`, `opacity`, `bond-customizations`, `atom-colors`, and
-`show-indices`; `reaction(scale: ...)` resizes a shared mechanism canvas, and
-each `mol(scale: ...)` multiplies it for that molecule alone. A `mol()` item
+`show-indices`; `reaction(scale: ...)` uniformly resizes the complete reaction,
+and each `mol(scale: ...)` additionally resizes that molecule. Positional
+`arrow()` and `highlight()` items inside `mol()` use local references, so
+`mol("C=O", arrow(from: bond(0, 1), to: atom(0)))` does not require a species
+index. A `mol()` item
 also works inside `rxn-arrow(above:/below:)` slots.
 In ordinary schemes, the offset also updates the reaction's layout bounds, so
 wrappers such as `brackets()` follow a shifted edge.
@@ -678,12 +710,13 @@ an explicit angle such as `rotation: 45deg` is also accepted.
 | Helper | Purpose |
 |---|---|
 | `atom(i)` / `atom(s, i)` | Atom center reference |
-| `bond(i, j)` / `bond(s, i, j)` | Bond-midpoint reference |
+| `bond(i, j)` / `bond(s, i, j)` | Midpoint of the visible, label-trimmed bond stroke; curved arrows attach outside the facing line of a multiple bond |
 | `lp(i)` / `lp(s, i)` | Lone-pair reference (`pair: n` to select) |
 | `species(k)` | Bounding-box edge of a whole item |
 | `arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, style:)` | Curly electron arrow; `stroke: auto` matches molecule bonds and scales with the drawing; `heads: "end"/"both"/"none"`, `style: "solid"/"dashed"/"wavy"` |
 | `highlight(ref, fill:, stroke:, radius:)` | Shade an atom (disk) or bond (capsule) |
-| `brackets(body, sup:, sub:)` | Square brackets with optional corner marks |
+| `brackets(body, sup:, sub:)` | Square brackets around content |
+| `brackets(..reaction-items, sup:, sub:)` | Reference-transparent brackets on an enclosing reaction canvas |
 
 All references accept an `offset: (dx, dy)` nudge.
 

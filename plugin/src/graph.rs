@@ -157,6 +157,10 @@ pub struct Atom {
     /// Explicit lone-pair count from an abbreviation `lp=N` modifier. Zero when
     /// none was declared; abbreviations never infer lone pairs from their text.
     pub abbrev_lone_pairs: u8,
+    /// Page-space rendering displacement for an abbreviation, in bond lengths.
+    /// The layout algorithm never reads these values.
+    pub abbrev_offset_x: f64,
+    pub abbrev_offset_y: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -197,12 +201,12 @@ impl MoleculeGraph {
     ) -> Result<Self, String> {
         // smiles_parser::chain takes &[u8] and returns IResult<&[u8], Chain>
         let (remaining, chain) = parse_chain(smiles.as_bytes())
-            .map_err(|error| format!("SMILES parse failed for {:?}: {error:?}", smiles))?;
+            .map_err(|error| format!("the parser could not read the expression ({error:?})"))?;
         if !remaining.is_empty() {
             let tail = std::str::from_utf8(remaining).unwrap_or("<invalid UTF-8>");
+            let byte_offset = smiles.len() - remaining.len();
             return Err(format!(
-                "SMILES parse stopped before trailing input {:?} in {:?}",
-                tail, smiles
+                "the parser stopped at byte {byte_offset} before trailing input {tail:?}"
             ));
         }
 
@@ -212,6 +216,19 @@ impl MoleculeGraph {
             ..GraphBuilder::default()
         };
         builder.walk_chain(&chain, None, None);
+        if !builder.open_rings.is_empty() {
+            let mut ring_numbers: Vec<u8> = builder.open_rings.keys().copied().collect();
+            ring_numbers.sort_unstable();
+            let listed_ring_numbers = ring_numbers
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(format!(
+                "ring closure {listed_ring_numbers} was opened but never closed; \
+                 repeat each ring number on the atom that closes the ring"
+            ));
+        }
 
         let neighbor_bonds = builder
             .neighbor_slots
@@ -530,6 +547,8 @@ fn atom_with_symbol(symbol: String) -> Atom {
         abbrev_anchor: 0,
         abbrev_anchor_len: 0,
         abbrev_lone_pairs: 0,
+        abbrev_offset_x: 0.0,
+        abbrev_offset_y: 0.0,
     }
 }
 
@@ -555,6 +574,8 @@ fn bracket_to_atom(bracket_atom: &BracketAtom) -> Atom {
         abbrev_anchor: 0,
         abbrev_anchor_len: 0,
         abbrev_lone_pairs: 0,
+        abbrev_offset_x: 0.0,
+        abbrev_offset_y: 0.0,
     }
 }
 

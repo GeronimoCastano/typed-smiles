@@ -8,7 +8,7 @@
 #import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 #import "@preview/cetz:0.5.2"
 
-#let version = "0.9.1"
+#let version = "0.10.0"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -171,13 +171,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.9.1": *
+#import "@preview/typed-smiles:0.10.0": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.9.1": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.10.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports these main symbols:
@@ -1068,12 +1068,12 @@ two highlighted groups, keep or set `color: true` and put everything else in
   text. Declare them explicitly with an inline #c("lp=N") modifier, where #c("N")
   is an integer from 1 to 4. The grammar of a label body is:
 
-  #align(center, c("{text[|style][|lp=N]}"))
+  #align(center, c("{text[|style][|modifier]...}"))
 
-  The style field, when present, must come before #c("lp="); a second field that
-  begins with #c("lp=") therefore means the label has no style. As with all lone
-  pairs, the #c("lone-pairs") argument controls whether they are drawn and
-  whether they appear as dots or lines — #c("lp=N") only supplies the count.
+  The optional style must come before named modifiers. Each modifier gets its
+  own pipe-delimited field. As with all lone pairs, the #c("lone-pairs")
+  argument controls whether they are drawn and whether they appear as dots or
+  lines — #c("lp=N") only supplies the count.
 
   When the label has a #c(">") attachment marker the pairs belong to the marked
   glyph; otherwise they surround the whole label. In both cases the pairs are
@@ -1092,6 +1092,34 @@ two highlighted groups, keep or set `color: true` and put everything else in
 inferred one, so an electron-pushing #c("arrow()") in a mechanism can start from
 it. The drawn pair and the arrow tail come from the same geometry, so they
 coincide.]
+
+== Manual label offsets
+
+#demo[
+  Add #c("offset=(x, y)") to move one custom-label atom after automatic
+  molecular layout. Values are measured in bond-length units. Positive x moves
+  right and positive y moves up on the page, even when #c("rotation") is set.
+
+  The label, every bond endpoint incident to that atom, its lone pairs, indices,
+  annotations, highlights, and mechanism references move together. Other atom
+  coordinates and the automatic layout remain unchanged, so a large manual
+  displacement can intentionally create overlaps.
+
+  #example(```typ
+  #smiles("C{H|grey|offset=(0.1, 0.2)}")
+  #smiles(
+    "C{>O|O|lp=2|offset=(-0.2, 0.15)}",
+    lone-pairs: "dots",
+  )
+  ```)
+
+  Combine style, lone pairs, and displacement by giving each one its own field:
+
+  #align(center, c("{H|grey|lp=1|offset=(0.1, 0.1)}"))
+
+  The named #c("lp=") and #c("offset=") fields may be exchanged; the optional
+  plain style field must remain before both.
+]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Chemical formulas: #raw("ce()")
@@ -1252,7 +1280,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 == #raw("mol()")
 
 #demo[
-  #c("mol(spec, label: none, offset: (0,0), ..opts)") is a reaction item. #c("spec")
+  #c("mol(spec, ..annotations, label: none, offset: (0,0), ..opts)") is a reaction item. #c("spec")
   is either any content (#c("smiles(...)"), #c("ce(...)"), text) or a SMILES *string*.
   Passing a string lets #c("reaction") render the molecule itself so its atoms become
   addressable by curly arrows (see #link(<sec-mech>)[Reaction mechanisms]). String
@@ -1261,15 +1289,25 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   #c("lone-pairs"), #c("opacity"), #c("bond-customizations"), #c("atom-colors"),
   and #c("show-indices"). #c("offset") nudges the molecule in page coordinates, in
   bond-length units: positive x moves right and positive y moves up regardless
-  of #c("reaction(flow:)"). In mechanism mode, #c("reaction(scale: ...)") sets
-  the shared canvas scale (and its offsets), and each #c("mol(scale: ...)")
-  multiplies it for that molecule alone. A #c("mol()") item can also be placed in
+  of #c("reaction(flow:)"). Positional #c("arrow()") and #c("highlight()")
+  annotations use local one-molecule references, so #c("atom(i)") and
+  #c("bond(i, j)") do not need a species prefix. In mechanism mode,
+  #c("reaction(scale: ...)") uniformly resizes the complete canvas, including
+  strokes and labels; each #c("mol(scale: ...)") additionally resizes that
+  molecule. A #c("mol()") item can also be placed in
   a #c("rxn-arrow(above:/below:)") slot to draw a molecule over or under the
   arrow. In ordinary schemes, an offset also changes the reaction's layout
   bounds, so #c("brackets()") encloses the shifted edge.
 
   #example(```typ
-  #reaction(mol(smiles("CCO"), label: [ethanol]))
+  #reaction(
+    mol(
+      "C1({H})C(=[N+]2CCCC2)CCCC1",
+      arrow(from: bond(0, 1), to: bond(0, 2)),
+    ),
+    rxn-arrow(below: [-#ce("H+")]),
+    mol("C1=C(N2CCCC2)CCCC1"),
+  )
   ```)
 ]
 
@@ -1492,7 +1530,9 @@ inside its grid cell.
 after rotation, mirroring, per-molecule scale, and labels. A molecule that
 becomes wider or taller once rotated therefore keeps a full gap from its
 neighbors and from the arrows at any angle, and a #c("species()") arrow endpoint
-snaps to the rotated visual edge.]
+snaps to the rotated visual edge. #c("reaction(scale:)") scales the completed
+canvas uniformly, so molecule bonds, reaction-arrow shafts, curly arrows,
+labels, bracket strokes, and all lengths stay proportional.]
 
 == Referencing atoms
 
@@ -1510,7 +1550,7 @@ arrow-label content, and annotations are not counted.
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Reference*], [*Resolves to*],
   [#c("atom(i)") / #c("atom(s, i)")], [Atom center.],
-  [#c("bond(i, j)") / #c("bond(s, i, j)")], [Midpoint of the bond between atoms i and j.],
+  [#c("bond(i, j)") / #c("bond(s, i, j)")], [Midpoint of the visible, label-trimmed bond stroke. Curved arrows attach outside the multiple-bond line facing the curve.],
   [#c("lp(i)") / #c("lp(s, i)")], [A lone pair on atom i (use #c("pair: n") to pick one).],
   [#c("species(k)")], [Bounding-box edge of a whole item (e.g. a #c("ce()") formula).],
 )
@@ -1557,7 +1597,7 @@ arrow-label content, and annotations are not counted.
   #example(```typ
   #smiles(
     "N1CCN(CC1)C(C(F)=C2)=CC(=C2C4=O)N(C3CC3)C=C4C(=O)O",
-    highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23), bond(23, 25)), fill: rgb(150, 191, 13), include-atoms: true),
+    highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23)), fill: rgb(150, 191, 13), include-atoms: true),
     highlight((bond(15, 16), bond(16, 18), bond(18, 17), bond(17, 16)), fill: rgb(242, 148, 1), include-atoms: true),
     highlight((bond(3, 2), bond(2, 1), bond(1, 0)), fill: rgb(137, 199, 168), include-atoms: true),
     highlight((bond(6, 7), bond(7, 8), bond(7, 9), bond(9, 12)), fill: rgb(201, 143, 75), include-atoms: true),
@@ -1588,17 +1628,35 @@ arrow-label content, and annotations are not counted.
 ]
 
 #demo[
+  Put mechanism annotations positionally inside #c("mol()") when every
+  reference belongs to that molecule. The short forms #c("atom(i)"),
+  #c("bond(i, j)"), and #c("lp(i)") are scoped to the containing molecule,
+  independent of its species index in the outer reaction.
+
+  #example(```typ
+  #reaction(
+    mol(
+      "C1({H})C(=[N+]2CCCC2)CCCC1",
+      arrow(from: bond(0, 1), to: bond(0, 2)),
+    ),
+    rxn-arrow(below: [-#ce("H+")]),
+    mol("C1=C(N2CCCC2)CCCC1"),
+  )
+  ```, side: false)
+]
+
+#demo[
   #c("heads") and #c("style") tune the arrow shape — for instance a
   double-headed dashed arrow for an interaction, or a wavy arrow for a
   photochemical or homolytic step.
 
   #example(```typ
   #smiles("CC(=O)O",
-    arrow(from: atom(3), to: atom(2), heads: "both", color: blue))
+    arrow(from: atom(3), to: atom(2), heads: "both", color: blue, bend : "right"))
   #smiles("CC(=O)O",
-    arrow(from: atom(3), to: atom(2), style: "dashed"))
+    arrow(from: atom(3), to: atom(2), style: "dashed", bend : "right"))
   #smiles("OCCCCO",
-    arrow(from: atom(0), to: atom(5), style: "wavy", heads: "both", half: true))
+    arrow(from: atom(0), to: atom(5), style: "wavy", heads: "none", half: true, bend : "right", angle : 30deg))
   ```)
 ]
 
@@ -1668,15 +1726,26 @@ arrow-label content, and annotations are not counted.
 == #raw("brackets()")
 
 #demo[
-  #c("brackets(body, sup: none, sub: none)") encloses any content in square
-  brackets including another reaction, with optional marks at the corners — a #c("[‡]") for a transition state
-  or a charge for a reactive intermediate.
+  #c("brackets(body, sup: none, sub: none)") encloses a single content value.
+  Inside #c("reaction()"), #c("brackets(..items, sup:, sub:)") also accepts the
+  same list of reaction items as its parent. Those items stay on the parent's
+  shared canvas: their ordinary written-order species indices remain available
+  to arrows inside or outside the brackets. The parent #c("reaction(scale:)")
+  scales the contents and bracket together.
 
   #example(```typ
-  #brackets(
-    [#reaction(smiles("CC(=O)C"), rxn-arrow(), smiles("O=C=O"), scale : 0.7)],
-    sup: [‡])
-  ```)
+  #reaction(
+    mol("N", lone-pairs: "dots"),
+    brackets(
+      mol("C=O"),
+      rxn-arrow(kind: "equilibrium"),
+      mol("{C^+}O"),
+      sup: [+],
+    ),
+    arrow(from: atom(0, 0), to: atom(1, 0)),
+    arrow(from: atom(2, 0), to: atom(0, 0), bend: "right"),
+  )
+  ```, side: false)
 ]
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1779,7 +1848,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.9.1": *
+#import "@preview/typed-smiles:0.10.0": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
@@ -1837,6 +1906,7 @@ parameter.
   [#c("{>label}")], [Abbreviated group anchored at the glyph after #c(">").],
   [#c("{label|style}")], [Colored abbreviated group.],
   [#c("{label|lp=N}")], [Declare N (1–4) lone pairs on a label (style optional before it).],
+  [#c("{label|offset=(x,y)}")], [Move one custom-label atom and its incident bond endpoints in page-space bond-length units.],
 )
 
 == #raw("smiles()") options
@@ -1918,13 +1988,13 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
-  [#c("mol(spec, label:, offset:, ..opts)")], [Reaction item; #c("spec") as a string is rendered with addressable atoms; #c("offset") nudges in page coordinates; per-molecule #c("scale") also works in mechanism mode.],
+  [#c("mol(spec, ..annotations, label:, offset:, ..opts)")], [Reaction item; string #c("spec") has addressable atoms; positional arrows/highlights use local references; #c("offset") nudges in page coordinates; per-molecule #c("scale") also works in mechanism mode.],
   [#c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
   [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
   [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
   [#c("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, head-length:, head-width:, style:)")], [Curly electron-pushing arrow (default #c("color: black")); #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("head-length") / #c("head-width") size the tip; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
   [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:)")], [Shade one atom/bond reference or an array of references.],
-  [#c("brackets(body, sup:, sub:)")], [Square brackets with optional corner marks.],
+  [#c("brackets(body, sup:, sub:)")], [Square brackets around content; inside #c("reaction()"), accepts reference-transparent reaction items too.],
 )
 
 == Label color names

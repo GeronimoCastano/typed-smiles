@@ -39,7 +39,7 @@ pub(crate) struct PreprocessedSmiles {
     pub aromatic_atom_markers: Vec<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AbbreviationLabel {
     pub text: String,
     pub style: String,
@@ -48,6 +48,9 @@ pub(crate) struct AbbreviationLabel {
     /// Explicit non-bonding electron-pair count from an inline `lp=N` modifier.
     /// `None` means the label declared no lone pairs.
     pub lone_pairs: Option<u8>,
+    /// Optional page-space displacement in bond-length units. Layout coordinates
+    /// remain unchanged; the Typst renderer applies this after molecular rotation.
+    pub offset: Option<(f64, f64)>,
 }
 
 pub(crate) fn preprocess_smiles(input: &str) -> Result<PreprocessedSmiles, String> {
@@ -71,7 +74,7 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<PreprocessedSmiles, Strin
 
         match character {
             '{' => {
-                let raw_label = collect_abbreviation_body(&mut characters);
+                let raw_label = collect_abbreviation_body(&mut characters)?;
                 abbreviation_labels.push(parse_abbreviation_label(&raw_label)?);
                 parser_compatible_smiles.push_str("[*]");
             }
@@ -87,6 +90,12 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<PreprocessedSmiles, Strin
             '[' => {
                 in_bracket = true;
                 parser_compatible_smiles.push(character);
+            }
+            ']' => {
+                return Err("unmatched `]`; bracket atoms must start with `[`".to_string());
+            }
+            '}' => {
+                return Err("unmatched `}`; custom labels must start with `{`".to_string());
             }
             '/' | '\\' => {
                 bond_markers.push(BondMarker {
@@ -107,6 +116,9 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<PreprocessedSmiles, Strin
             _ => parser_compatible_smiles.push(character),
         }
     }
+    if in_bracket {
+        return Err("unclosed bracket atom; add `]` after the atom specification".to_string());
+    }
 
     let smiles = normalize_post_branch_ring_bonds(&parser_compatible_smiles)?;
 
@@ -118,15 +130,15 @@ pub(crate) fn preprocess_smiles(input: &str) -> Result<PreprocessedSmiles, Strin
     })
 }
 
-fn collect_abbreviation_body(characters: &mut Peekable<Chars<'_>>) -> String {
+fn collect_abbreviation_body(characters: &mut Peekable<Chars<'_>>) -> Result<String, String> {
     let mut label = String::new();
     for character in characters.by_ref() {
         if character == '}' {
-            break;
+            return Ok(label);
         }
         label.push(character);
     }
-    label
+    Err("unclosed custom label; add `}` after the label".to_string())
 }
 
 fn parse_drawing_extension(characters: &mut Peekable<Chars<'_>>) -> Result<BondMarker, String> {
@@ -359,23 +371,25 @@ fn ring_bond_token_end(input: &str, start: usize, allow_directional: bool) -> Op
 }
 
 /// Parses one `{...}` abbreviation body into its displayed text, optional
-/// attachment marker, optional style, and optional lone-pair count.
+/// attachment marker, optional style, and named rendering modifiers.
 ///
 /// The body is split on `|` into fields:
 ///   - the first field is the displayed label, optionally carrying one `>`
 ///     attachment marker before the anchor glyph;
 ///   - an optional plain style field (a color or element token);
-///   - an optional named `lp=N` modifier giving an explicit lone-pair count.
+///   - named `lp=N` and `offset=(x,y)` modifiers.
 ///
 /// The plain style field, when present, must precede any named modifier. A
-/// second field that begins with `lp=` therefore means the label has no style.
+/// second field that begins with a named modifier therefore means the label has
+/// no style.
 fn parse_abbreviation_label(raw_label: &str) -> Result<AbbreviationLabel, String> {
     let mut fields = raw_label.split('|');
-    let raw_text = fields.next().unwrap_or("");
+    let raw_text = fields.next().unwrap_or("").trim();
 
     let mut style = String::new();
     let mut style_set = false;
     let mut lone_pairs: Option<u8> = None;
+    let mut offset: Option<(f64, f64)> = None;
     let mut seen_named = false;
     for field in fields {
         let trimmed = field.trim();
@@ -401,6 +415,14 @@ fn parse_abbreviation_label(raw_label: &str) -> Result<AbbreviationLabel, String
                     }
                     lone_pairs = Some(count);
                 }
+                "offset" => {
+                    if offset.is_some() {
+                        return Err(
+                            "abbreviation label has more than one `offset=` modifier".to_string()
+                        );
+                    }
+                    offset = Some(parse_abbreviation_offset(modifier_value)?);
+                }
                 other => {
                     return Err(format!("unknown abbreviation modifier `{other}=`"));
                 }
@@ -419,6 +441,7 @@ fn parse_abbreviation_label(raw_label: &str) -> Result<AbbreviationLabel, String
             style_set = true;
         }
     }
+    validate_abbreviation_style(&style)?;
 
     let marker_count = raw_text.chars().filter(|&ch| ch == '>').count();
     if marker_count > 1 {
@@ -470,7 +493,71 @@ fn parse_abbreviation_label(raw_label: &str) -> Result<AbbreviationLabel, String
         anchor,
         anchor_len,
         lone_pairs,
+        offset,
     })
+}
+
+fn validate_abbreviation_style(style: &str) -> Result<(), String> {
+    if style.is_empty() {
+        return Ok(());
+    }
+    const NAMED_COLORS: &[&str] = &[
+        "red", "blue", "green", "black", "gray", "grey", "silver", "white", "orange", "yellow",
+        "brown", "pink", "purple", "cyan", "lime", "teal", "maroon", "navy",
+    ];
+    let valid_hex = style.len() == 7
+        && style.starts_with('#')
+        && style[1..].bytes().all(|byte| byte.is_ascii_hexdigit());
+    if valid_hex || NAMED_COLORS.contains(&style) || Element::from_symbol(style).is_some() {
+        return Ok(());
+    }
+    Err(format!(
+        "unknown abbreviation style `{style}`; use an element symbol, a supported \
+         color name, or a #RRGGBB color"
+    ))
+}
+
+fn parse_abbreviation_offset(raw_offset: &str) -> Result<(f64, f64), String> {
+    let value = raw_offset.trim();
+    let Some(components) = value
+        .strip_prefix('(')
+        .and_then(|inner| inner.strip_suffix(')'))
+    else {
+        return Err(format!(
+            "abbreviation `offset=` needs `(x, y)`, got `{raw_offset}`"
+        ));
+    };
+
+    let mut coordinates = components.split(',').map(str::trim);
+    let Some(raw_x) = coordinates.next() else {
+        return Err(format!(
+            "abbreviation `offset=` needs two numbers, got `{raw_offset}`"
+        ));
+    };
+    let Some(raw_y) = coordinates.next() else {
+        return Err(format!(
+            "abbreviation `offset=` needs two numbers, got `{raw_offset}`"
+        ));
+    };
+    if coordinates.next().is_some() || raw_x.is_empty() || raw_y.is_empty() {
+        return Err(format!(
+            "abbreviation `offset=` needs exactly two numbers, got `{raw_offset}`"
+        ));
+    }
+
+    let parse_coordinate = |coordinate: &str| -> Result<f64, String> {
+        let parsed = coordinate.parse::<f64>().map_err(|_| {
+            format!("abbreviation `offset=` coordinates must be numbers, got `{coordinate}`")
+        })?;
+        if !parsed.is_finite() {
+            return Err(format!(
+                "abbreviation `offset=` coordinates must be finite, got `{coordinate}`"
+            ));
+        }
+        Ok(parsed)
+    };
+
+    Ok((parse_coordinate(raw_x)?, parse_coordinate(raw_y)?))
 }
 
 /// Apply collected abbreviation labels to the matching `*` atoms in the graph
@@ -486,16 +573,26 @@ fn assign_abbreviation_labels(molecule: &mut MoleculeGraph, labels: &[Abbreviati
         atom.abbrev_anchor = label.anchor;
         atom.abbrev_anchor_len = label.anchor_len;
         atom.abbrev_lone_pairs = label.lone_pairs.unwrap_or(0);
+        let (offset_x, offset_y) = label.offset.unwrap_or((0.0, 0.0));
+        atom.abbrev_offset_x = offset_x;
+        atom.abbrev_offset_y = offset_y;
     }
 }
 
 fn parse_molecule(smiles: &str) -> Result<MoleculeGraph, String> {
-    let preprocessed = preprocess_smiles(smiles)?;
+    if smiles.trim().is_empty() {
+        return Err(
+            "invalid SMILES: the expression is empty; provide at least one atom".to_string(),
+        );
+    }
+    let preprocessed =
+        preprocess_smiles(smiles).map_err(|error| format!("invalid SMILES {smiles:?}: {error}"))?;
     let mut molecule = MoleculeGraph::from_smiles(
         &preprocessed.smiles,
         preprocessed.forced_direction_markers,
         preprocessed.aromatic_atom_markers,
-    )?;
+    )
+    .map_err(|error| format!("invalid SMILES {smiles:?}: {error}"))?;
     assign_abbreviation_labels(&mut molecule, &preprocessed.abbrev_labels);
     Ok(molecule)
 }
@@ -1538,6 +1635,44 @@ mod tests {
     }
 
     #[test]
+    fn malformed_delimiters_report_actionable_errors() {
+        let unclosed_label = layout_native("C{OH").expect_err("unclosed label should fail");
+        assert!(unclosed_label.contains("unclosed custom label"));
+        assert!(unclosed_label.contains("add `}`"));
+
+        let unclosed_bracket = layout_native("C[NH2").expect_err("unclosed bracket should fail");
+        assert!(unclosed_bracket.contains("unclosed bracket atom"));
+        assert!(unclosed_bracket.contains("add `]`"));
+
+        let unmatched_label_end =
+            layout_native("COH}").expect_err("unmatched label end should fail");
+        assert!(unmatched_label_end.contains("unmatched `}`"));
+    }
+
+    #[test]
+    fn empty_smiles_reports_actionable_error() {
+        let error = layout_native("   ").expect_err("empty SMILES should fail");
+        assert!(error.contains("expression is empty"));
+        assert!(error.contains("at least one atom"));
+    }
+
+    #[test]
+    fn unclosed_ring_reports_ring_number_and_correction() {
+        let error = layout_native("C1CC").expect_err("unclosed ring should fail");
+        assert!(error.contains("ring closure 1"));
+        assert!(error.contains("never closed"));
+        assert!(error.contains("repeat each ring number"));
+    }
+
+    #[test]
+    fn unknown_abbreviation_style_reports_supported_forms() {
+        let error = layout_native("C{LG|chartreuse}").expect_err("unknown style should fail");
+        assert!(error.contains("unknown abbreviation style `chartreuse`"));
+        assert!(error.contains("element symbol"));
+        assert!(error.contains("#RRGGBB"));
+    }
+
+    #[test]
     fn preprocess_forced_wedge_markers() {
         let preprocessed = preprocess_smiles("C!wN!hO").expect("preprocess failed");
         assert_eq!(preprocessed.smiles, "C/N/O");
@@ -1740,6 +1875,49 @@ mod tests {
         // A fallback direction record is emitted per declared pair so lp()
         // references stay resolvable.
         assert_eq!(layout_output.atoms[0].lone_pair_dirs.len(), 3);
+    }
+
+    // ── Abbreviation rendering offset (`offset=(x,y)`) ─────────────────────
+
+    #[test]
+    fn abbrev_offset_parses_with_style_and_lone_pairs() {
+        let label = parse_abbreviation_label("H|grey|lp=1|offset=(0.1, -0.2)")
+            .expect("offset parse failed");
+        assert_eq!(label.text, "H");
+        assert_eq!(label.style, "grey");
+        assert_eq!(label.lone_pairs, Some(1));
+        assert_eq!(label.offset, Some((0.1, -0.2)));
+
+        let reversed = parse_abbreviation_label("H|offset=(-.25, .4)|lp=2")
+            .expect("reordered modifiers failed");
+        assert_eq!(reversed.style, "");
+        assert_eq!(reversed.lone_pairs, Some(2));
+        assert_eq!(reversed.offset, Some((-0.25, 0.4)));
+    }
+
+    #[test]
+    fn abbrev_offset_rejects_malformed_values() {
+        assert!(parse_abbreviation_label("H|offset=0.1,0.2").is_err());
+        assert!(parse_abbreviation_label("H|offset=(0.1)").is_err());
+        assert!(parse_abbreviation_label("H|offset=(0.1,0.2,0.3)").is_err());
+        assert!(parse_abbreviation_label("H|offset=(left,0.2)").is_err());
+        assert!(parse_abbreviation_label("H|offset=(NaN,0.2)").is_err());
+        assert!(parse_abbreviation_label("H|offset=(0.1,0.2)|offset=(0.3,0.4)").is_err());
+    }
+
+    #[test]
+    fn abbrev_offset_reaches_output_without_changing_layout_coordinates() {
+        let baseline = layout_native("C{H}").expect("baseline layout failed");
+        let displaced = layout_native("C{H|offset=(0.3,-0.2)}").expect("offset layout failed");
+
+        assert_eq!(baseline.atoms[0].pos.x, displaced.atoms[0].pos.x);
+        assert_eq!(baseline.atoms[0].pos.y, displaced.atoms[0].pos.y);
+        assert_eq!(baseline.atoms[1].pos.x, displaced.atoms[1].pos.x);
+        assert_eq!(baseline.atoms[1].pos.y, displaced.atoms[1].pos.y);
+        assert_eq!(baseline.bbox_width, displaced.bbox_width);
+        assert_eq!(baseline.bbox_height, displaced.bbox_height);
+        assert_eq!(displaced.atoms[1].abbrev_offset_x, 0.3);
+        assert_eq!(displaced.atoms[1].abbrev_offset_y, -0.2);
     }
 
     #[test]

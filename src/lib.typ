@@ -6,6 +6,144 @@
 #import "@preview/chemformula:0.1.3": ch
 
 #let smiles-plugin = plugin("../plugin/typst_smiles_plugin.wasm")
+#let _color-type = type(black)
+#let _length-type = type(1pt)
+#let _angle-type = type(1deg)
+#let _stroke-type = type(1pt + black)
+#let _content-type = type([])
+
+// Public input failures use one message shape so editor diagnostics state the
+// invalid value, the accepted form, and the correction at the call boundary.
+#let _invalid-input(input-context, problem, correction) = {
+  panic(
+    "typed-smiles: "
+      + input-context
+      + " is invalid: "
+      + problem
+      + ". "
+      + correction,
+  )
+}
+
+#let _is-number(value) = type(value) == int or type(value) == float
+
+#let _validate-number(value, input-context) = {
+  if not _is-number(value) {
+    _invalid-input(
+      input-context,
+      "expected a number, got " + repr(value),
+      "Pass an integer or float.",
+    )
+  }
+}
+
+#let _validate-positive-number(value, input-context) = {
+  _validate-number(value, input-context)
+  if value <= 0 {
+    _invalid-input(
+      input-context,
+      "expected a positive number, got " + repr(value),
+      "Pass a value greater than zero.",
+    )
+  }
+}
+
+#let _validate-nonnegative-number(value, input-context) = {
+  _validate-number(value, input-context)
+  if value < 0 {
+    _invalid-input(
+      input-context,
+      "expected a non-negative number, got " + repr(value),
+      "Pass zero or a positive value.",
+    )
+  }
+}
+
+#let _validate-positive-length(value, input-context, allow-auto: false, allow-none: false) = {
+  if (allow-auto and value == auto) or (allow-none and value == none) {
+    return
+  }
+  if type(value) != _length-type or value <= 0pt {
+    _invalid-input(
+      input-context,
+      "expected a positive length, got " + repr(value),
+      "Pass a length greater than 0pt.",
+    )
+  }
+}
+
+#let _validate-nonnegative-length(value, input-context) = {
+  if type(value) != _length-type or value < 0pt {
+    _invalid-input(
+      input-context,
+      "expected a non-negative length, got " + repr(value),
+      "Pass 0pt or a positive length.",
+    )
+  }
+}
+
+#let _validate-bool(value, input-context) = {
+  if type(value) != bool {
+    _invalid-input(
+      input-context,
+      "expected true or false, got " + repr(value),
+      "Pass a boolean value.",
+    )
+  }
+}
+
+#let _validate-offset(offset, input-context) = {
+  if type(offset) != array or offset.len() != 2 {
+    _invalid-input(
+      input-context,
+      "expected a two-number array, got " + repr(offset),
+      "Pass an offset such as (0.1, -0.2).",
+    )
+  }
+  for coordinate in offset {
+    if not _is-number(coordinate) {
+      _invalid-input(
+        input-context,
+        "expected two numbers, got " + repr(offset),
+        "Pass an offset such as (0.1, -0.2).",
+      )
+    }
+  }
+}
+
+#let _validate-index(index, input-context) = {
+  if type(index) != int or index < 0 {
+    _invalid-input(
+      input-context,
+      "expected a non-negative integer, got " + repr(index),
+      "Use an index shown by show-indices: true.",
+    )
+  }
+}
+
+#let _available-index-description(count) = {
+  if count == 0 {
+    "There are no valid indices."
+  } else if count == 1 {
+    "The only valid index is 0."
+  } else {
+    "Valid indices are 0 through " + str(count - 1) + "."
+  }
+}
+
+#let _validate-named-arguments(arguments, allowed, input-context) = {
+  for argument-name in arguments.named().keys() {
+    if argument-name not in allowed {
+      _invalid-input(
+        input-context + " argument " + repr(argument-name),
+        "the argument is not supported",
+        "Supported named arguments are "
+          + allowed.map(name => repr(name)).join(", ")
+          + ".",
+      )
+    }
+  }
+}
 
 // Re-export as ce so users only need one import line.
 // chemformula uses math mode internally, giving proper operator spacing.
@@ -60,15 +198,40 @@
   has-abbrev or has-hetero or has-isotope or has-explicit-h or has-implicit-h
 }
 
+// Rendered position of an atom after molecular rotation and an optional
+// page-space displacement declared by a custom abbreviation label. The
+// displacement lives outside the layout data so it cannot influence placement.
+#let _rendered-atom-position(atom, rotation, scale: 1.0) = {
+  let rotated-x = (
+    atom.pos.x * calc.cos(rotation) - atom.pos.y * calc.sin(rotation)
+  ) * scale
+  let rotated-y = (
+    atom.pos.x * calc.sin(rotation) + atom.pos.y * calc.cos(rotation)
+  ) * scale
+  (
+    x: rotated-x + atom.at("abbrev_offset_x", default: 0.0) * scale,
+    y: rotated-y + atom.at("abbrev_offset_y", default: 0.0) * scale,
+  )
+}
+
 #let _normalize-show-h(show-h) = {
   if show-h == "all" {
     (all: true, indices: ())
   } else if type(show-h) == array {
+    for atom-index in show-h {
+      _validate-index(atom-index, "show-h atom index")
+    }
     (all: false, indices: show-h)
   } else if type(show-h) == int {
+    _validate-index(show-h, "show-h atom index")
     (all: false, indices: (show-h,))
   } else {
-    panic("show-h must be \"all\", an atom index, or an array of atom indices")
+    _invalid-input(
+      "show-h",
+      "expected \"all\", an atom index, or an array of atom indices, got "
+        + repr(show-h),
+      "Use \"all\", 2, or (0, 2), for example.",
+    )
   }
 }
 
@@ -82,8 +245,9 @@
     if type(entry) != array or (entry.len() != 2 and entry.len() != 3) {
       panic("atom-annotations entries must be (index, content) or (index, content, offset)")
     }
-    if type(entry.at(0)) != int {
-      panic("atom-annotations index must be an integer")
+    _validate-index(entry.at(0), "atom-annotations atom index")
+    if entry.len() == 3 {
+      _validate-offset(entry.at(2), "atom-annotations offset")
     }
     normalized-annotations.push((
       index: entry.at(0),
@@ -97,19 +261,31 @@
 // An opacity value is a ratio (40%) or a number in 0..1; both normalize to a
 // ratio so color.transparentize can consume it.
 #let _opacity-ratio(opacity, what) = {
-  if type(opacity) == ratio {
+  let normalized = if type(opacity) == ratio {
     opacity
   } else if type(opacity) == int or type(opacity) == float {
     opacity * 100%
   } else {
-    panic(what + " must be a ratio (e.g. 40%) or a number between 0 and 1")
+    _invalid-input(
+      what,
+      "expected a ratio or a number from 0 to 1, got " + repr(opacity),
+      "Use a value such as 40% or 0.4.",
+    )
   }
+  if normalized < 0% or normalized > 100% {
+    _invalid-input(
+      what,
+      "expected a value from 0% to 100%, got " + repr(opacity),
+      "Use a ratio such as 40% or a number from 0 to 1.",
+    )
+  }
+  normalized
 }
 
 // Per-bond style overrides: a list of (bond(i, j), (..options..)) pairs, with
 // a plain (i, j) array accepted in place of the bond() reference. Normalizes
 // to a dictionary keyed by the sorted atom-index pair.
-#let _normalize-bond-customizations(bond-customizations) = {
+#let _normalize-bond-customizations(bond-customizations, layout: none) = {
   if type(bond-customizations) != array {
     panic("bond-customizations must be an array of (bond(i, j), (..options..)) pairs")
   }
@@ -126,6 +302,56 @@
     } else {
       panic("bond-customizations bonds must be bond(i, j) references or (i, j) pairs")
     }
+    _validate-index(first-atom-index, "bond-customizations first atom index")
+    _validate-index(second-atom-index, "bond-customizations second atom index")
+    if first-atom-index == second-atom-index {
+      _invalid-input(
+        "bond-customizations bond reference",
+        "both endpoints use atom index " + str(first-atom-index),
+        "Reference two different atoms joined by a visible bond.",
+      )
+    }
+    if layout != none {
+      let atom-count = layout.atoms.len()
+      if first-atom-index >= atom-count {
+        _invalid-input(
+          "bond-customizations first atom index",
+          str(first-atom-index) + " does not exist",
+          _available-index-description(atom-count),
+        )
+      }
+      if second-atom-index >= atom-count {
+        _invalid-input(
+          "bond-customizations second atom index",
+          str(second-atom-index) + " does not exist",
+          _available-index-description(atom-count),
+        )
+      }
+      let matching-bonds = layout.bonds.filter(bond-output => (
+        not bond-output.at("virtual_bond", default: false)
+          and (
+            (
+              bond-output.from == first-atom-index
+                and bond-output.to == second-atom-index
+            )
+              or (
+                bond-output.from == second-atom-index
+                  and bond-output.to == first-atom-index
+              )
+          )
+      ))
+      if matching-bonds.len() == 0 {
+        _invalid-input(
+          "bond-customizations bond reference",
+          "atoms "
+            + str(first-atom-index)
+            + " and "
+            + str(second-atom-index)
+            + " are not joined by a visible bond",
+          "Use show-indices: true and reference the two endpoints of an existing bond.",
+        )
+      }
+    }
     if type(options) != dictionary {
       panic("bond-customizations options must be a dictionary")
     }
@@ -134,23 +360,198 @@
         panic("unknown bond customization \"" + option-name + "\" (expected color, stroke, or opacity)")
       }
     }
-    if "color" in options and type(options.color) != color {
+    if "color" in options and type(options.color) != _color-type {
       panic("bond customization color must be a color")
     }
-    if "stroke" in options and type(options.stroke) != length {
+    if "stroke" in options and type(options.stroke) != _length-type {
       panic("bond customization stroke must be a length (the bond width)")
+    }
+    if "stroke" in options {
+      _validate-positive-length(options.stroke, "bond customization stroke")
     }
     if "opacity" in options {
       options.insert("opacity", _opacity-ratio(options.opacity, "bond customization opacity"))
     }
-    normalized-customizations.insert(
+    let customization-key = (
       str(calc.min(first-atom-index, second-atom-index))
         + "-"
-        + str(calc.max(first-atom-index, second-atom-index)),
-      options,
+        + str(calc.max(first-atom-index, second-atom-index))
     )
+    if customization-key in normalized-customizations {
+      _invalid-input(
+        "bond-customizations",
+        "bond "
+          + str(first-atom-index)
+          + "-"
+          + str(second-atom-index)
+          + " is customized more than once",
+        "Combine its color, stroke, and opacity into one entry.",
+      )
+    }
+    normalized-customizations.insert(customization-key, options)
   }
   normalized-customizations
+}
+
+#let _element-symbols = (
+  "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg",
+  "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr",
+  "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br",
+  "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd",
+  "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La",
+  "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er",
+  "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au",
+  "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th",
+  "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md",
+  "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn",
+  "Nh", "Fl", "Mc", "Lv", "Ts", "Og",
+)
+
+#let _validate-atom-colors(atom-colors) = {
+  if type(atom-colors) != dictionary {
+    _invalid-input(
+      "atom-colors",
+      "expected a dictionary, got " + repr(atom-colors),
+      "Use a dictionary such as (O: red, \"{PPh3}\": purple).",
+    )
+  }
+  for (key, paint) in atom-colors {
+    if type(paint) != _color-type {
+      _invalid-input(
+        "atom-colors entry " + repr(key),
+        "expected a color, got " + repr(paint),
+        "Assign a Typst color value.",
+      )
+    }
+    let label-key = key.starts-with("{") and key.ends-with("}") and key.len() > 2
+    if key not in _element-symbols and not label-key {
+      _invalid-input(
+        "atom-colors key " + repr(key),
+        "expected an element symbol or a brace-quoted custom label",
+        "Use a key such as O or \"{PPh3}\".",
+      )
+    }
+  }
+}
+
+#let _validate-molecule-options(
+  layout,
+  scale,
+  bond-length,
+  font-size,
+  font,
+  bond-stroke,
+  color,
+  rotation,
+  show-h,
+  lone-pairs,
+  atom-colors,
+  show-indices,
+  fg,
+  theme,
+  aromatic,
+  atom-annotations,
+  opacity,
+  bond-customizations,
+) = {
+  _validate-positive-number(scale, "smiles scale")
+  if bond-length != none {
+    _validate-positive-number(bond-length, "smiles bond-length")
+  }
+  _validate-positive-length(
+    font-size,
+    "smiles font-size",
+    allow-none: true,
+  )
+  if type(font) != str and type(font) != array {
+    _invalid-input(
+      "smiles font",
+      "expected a font name or array of font names, got " + repr(font),
+      "Pass a font such as \"New Computer Modern\".",
+    )
+  }
+  _validate-positive-length(
+    bond-stroke,
+    "smiles bond-stroke",
+    allow-none: true,
+  )
+  _validate-bool(color, "smiles color")
+  if type(rotation) != _angle-type {
+    _invalid-input(
+      "smiles rotation",
+      "expected an angle, got " + repr(rotation),
+      "Pass an angle such as 30deg.",
+    )
+  }
+  let show-h-state = _normalize-show-h(show-h)
+  for atom-index in show-h-state.indices {
+    if atom-index >= layout.atoms.len() {
+      _invalid-input(
+        "show-h atom index",
+        str(atom-index) + " does not exist",
+        _available-index-description(layout.atoms.len()),
+      )
+    }
+    if layout.atoms.at(atom-index).at("virtual_h", default: false) {
+      _invalid-input(
+        "show-h atom index",
+        str(atom-index) + " is an explicit bracket-hydrogen fragment",
+        "Reference its parent atom instead.",
+      )
+    }
+  }
+  if lone-pairs != none and lone-pairs not in ("dots", "lines") {
+    _invalid-input(
+      "lone-pairs",
+      "expected none, \"dots\", or \"lines\", got " + repr(lone-pairs),
+      "Choose one of the supported lone-pair styles.",
+    )
+  }
+  _validate-atom-colors(atom-colors)
+  _validate-bool(show-indices, "show-indices")
+  if type(fg) != _color-type {
+    _invalid-input(
+      "smiles foreground",
+      "expected a color, got " + repr(fg),
+      "Pass a Typst color or use fg: auto at the public call.",
+    )
+  }
+  if theme not in ("light", "dark") {
+    _invalid-input(
+      "smiles theme",
+      "expected \"light\" or \"dark\", got " + repr(theme),
+      "Choose one of the supported palette themes.",
+    )
+  }
+  if aromatic not in ("kekule", "circle") {
+    _invalid-input(
+      "aromatic",
+      "expected \"kekule\" or \"circle\", got " + repr(aromatic),
+      "Choose one of the supported aromatic rendering styles.",
+    )
+  }
+  let normalized-annotations = _normalize-atom-annotations(atom-annotations)
+  for annotation in normalized-annotations {
+    if annotation.index >= layout.atoms.len() {
+      _invalid-input(
+        "atom-annotations atom index",
+        str(annotation.index) + " does not exist",
+        _available-index-description(layout.atoms.len()),
+      )
+    }
+    if layout.atoms.at(annotation.index).at("virtual_h", default: false) {
+      _invalid-input(
+        "atom-annotations atom index",
+        str(annotation.index) + " is an explicit bracket-hydrogen fragment",
+        "Reference its parent atom instead.",
+      )
+    }
+  }
+  let _ = _opacity-ratio(opacity, "opacity")
+  let _ = _normalize-bond-customizations(
+    bond-customizations,
+    layout: layout,
+  )
 }
 
 // CPK hues bright enough to read on either background keep one value; the
@@ -197,11 +598,18 @@
 // text color (so molecules recolor with the slide theme), and an `auto`
 // theme picks the dark palette when the foreground is light.
 #let _resolve-foreground-theme(fg, theme) = {
+  if fg != auto and type(fg) != _color-type {
+    _invalid-input(
+      "foreground",
+      "expected auto or a color, got " + repr(fg),
+      "Use fg: auto or pass a Typst color.",
+    )
+  }
   let resolved-fg = if fg == auto {
-    if type(text.fill) == color { text.fill } else { black }
+    if type(text.fill) == _color-type { text.fill } else { black }
   } else { fg }
   let resolved-theme = if theme == auto {
-    if type(resolved-fg) == color and oklab(resolved-fg).components().at(0) > 60% {
+    if type(resolved-fg) == _color-type and oklab(resolved-fg).components().at(0) > 60% {
       "dark"
     } else {
       "light"
@@ -217,7 +625,23 @@
 // ── SMILES renderer ───────────────────────────────────────────────────────────
 
 // Parse a SMILES string into layout JSON via the WASM plugin.
-#let _compute-layout(smiles-str) = json(smiles-plugin.layout(bytes(smiles-str)))
+#let _compute-layout(smiles-str) = {
+  if type(smiles-str) != str {
+    _invalid-input(
+      "SMILES expression",
+      "expected a string, got " + repr(smiles-str),
+      "Pass a SMILES string such as \"CCO\".",
+    )
+  }
+  if smiles-str.trim() == "" {
+    _invalid-input(
+      "SMILES expression",
+      "the string is empty",
+      "Pass at least one atom, such as \"C\".",
+    )
+  }
+  json(smiles-plugin.layout(bytes(smiles-str)))
+}
 
 /// Computes the molecular weight of a SMILES string in g/mol, summing IUPAC
 /// standard atomic weights over all atoms including implicit and explicit
@@ -226,7 +650,23 @@
 ///
 /// - smiles-str (str): A valid SMILES string, e.g. "CCO".
 /// -> float
-#let mol-weight(smiles-str) = json(smiles-plugin.mol_weight(bytes(smiles-str)))
+#let mol-weight(smiles-str) = {
+  if type(smiles-str) != str {
+    _invalid-input(
+      "mol-weight SMILES expression",
+      "expected a string, got " + repr(smiles-str),
+      "Pass a SMILES string such as \"CCO\".",
+    )
+  }
+  if smiles-str.trim() == "" {
+    _invalid-input(
+      "mol-weight SMILES expression",
+      "the string is empty",
+      "Pass at least one atom, such as \"C\".",
+    )
+  }
+  json(smiles-plugin.mol_weight(bytes(smiles-str)))
+}
 
 // CeTZ canvas unit: one bond length is 30 pt at scale 1.
 #let _canvas-scale(scale, bond-length) = (
@@ -599,18 +1039,35 @@
   opacity: 100%,
   bond-customizations: (),
 ) = {
-  if lone-pairs != none and lone-pairs != "dots" and lone-pairs != "lines" {
-    panic("lone-pairs must be none, \"dots\", or \"lines\"")
-  }
-  if aromatic != "kekule" and aromatic != "circle" {
-    panic("aromatic must be \"kekule\" or \"circle\"")
-  }
+  _validate-molecule-options(
+    layout,
+    scale,
+    bond-length,
+    font-size,
+    font,
+    bond-stroke,
+    color,
+    rotation,
+    show-h,
+    lone-pairs,
+    atom-colors,
+    show-indices,
+    fg,
+    theme,
+    aromatic,
+    atom-annotations,
+    opacity,
+    bond-customizations,
+  )
   let show-h-state = _normalize-show-h(show-h)
   let show-all-h = show-h-state.all
   let show-h-list = show-h-state.indices
   let atom-annotations = _normalize-atom-annotations(atom-annotations)
   let opacity = _opacity-ratio(opacity, "opacity")
-  let bond-custom = _normalize-bond-customizations(bond-customizations)
+  let bond-custom = _normalize-bond-customizations(
+    bond-customizations,
+    layout: layout,
+  )
 
   // Molecule-level opacity fades every paint the drawing produces — bonds,
   // labels, lone pairs, annotations — so a faded molecule reads as a ghost.
@@ -684,6 +1141,10 @@
   let rotation-sine = calc.sin(rotation)
   let rotated-x(x, y) = x * rotation-cosine - y * rotation-sine
   let rotated-y(x, y) = x * rotation-sine + y * rotation-cosine
+  let atom-screen-position(atom) = _rendered-atom-position(
+    atom,
+    rotation,
+  )
 
   // cetz.draw exports a `scale` transform that would shadow the `scale` argument,
   // so import only after all scalar/style values above are computed.
@@ -705,14 +1166,10 @@
       virtual-hydrogen-child.insert(str(parent-index), hydrogen-index)
       let parent-atom = layout.atoms.at(parent-index)
       let hydrogen-atom = layout.atoms.at(hydrogen-index)
-      let offset-x = (
-        rotated-x(hydrogen-atom.pos.x, hydrogen-atom.pos.y)
-          - rotated-x(parent-atom.pos.x, parent-atom.pos.y)
-      )
-      let offset-y = (
-        rotated-y(hydrogen-atom.pos.x, hydrogen-atom.pos.y)
-          - rotated-y(parent-atom.pos.x, parent-atom.pos.y)
-      )
+      let parent-position = atom-screen-position(parent-atom)
+      let hydrogen-position = atom-screen-position(hydrogen-atom)
+      let offset-x = hydrogen-position.x - parent-position.x
+      let offset-y = hydrogen-position.y - parent-position.y
       let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
       let direction-x = if distance > 0.001 { offset-x / distance } else { 1.0 }
       let direction-y = if distance > 0.001 { offset-y / distance } else { 0.0 }
@@ -794,68 +1251,67 @@
       count
     }
   }
-    // How far a bond retreats from a labeled atom, in bond-length units.
-    // Bare element symbols centered on the atom trim to the measured glyph
-    // extent projected onto the bond direction, so a short label like "C"
-    // hugs its bonds instead of eating a fixed margin. Labels with inline
-    // hydrogens, charges, or isotopes keep the conservative fixed margin
-    // because their content extends off-center. Short abbreviations can use
-    // their measured box while longer groups keep the fixed guard.
   let label-trim(atom, atom-index, direction-x, direction-y) = {
-      let displays-hydrogen = visible-hydrogen-count(atom-index) > 0 and (
-        show-all-h or forced-hydrogen(atom-index) or not _is-carbon(atom)
+    let displays-hydrogen = visible-hydrogen-count(atom-index) > 0 and (
+      show-all-h or forced-hydrogen(atom-index) or not _is-carbon(atom)
+    )
+    if not has-label(atom-index) {
+      0.0
+    } else if (
+      displays-hydrogen
+        and atom-degree(atom-index) == 1
+        and not _is-carbon(atom)
+    ) {
+      0.06
+    } else if (
+      atom.at("abbrev", default: "") != ""
+        and not displays-hydrogen
+        and atom.charge == 0
+        and atom.at("isotope", default: 0) == 0
+    ) {
+      let label-size = measure(_abbreviation-label(
+        atom.at("abbrev", default: ""),
+        atom-label,
+        subscript-size,
+        superscript-size,
+      ))
+      let half-width = label-size.width / canvas-scale / 2
+      let half-height = label-size.height / canvas-scale / 2
+      let extent = (
+        half-width * calc.abs(direction-x)
+          + half-height * calc.abs(direction-y)
+          + 0.07
       )
-      if not has-label(atom-index) {
-        0.0
-      } else if displays-hydrogen and atom-degree(atom-index) == 1 and not _is-carbon(atom) {
-        0.06
-      } else if (
-        atom.at("abbrev", default: "") != ""
+      calc.min(label-margin, calc.max(0.14, extent))
+    } else if (
+      atom.at("abbrev", default: "") == ""
         and not displays-hydrogen
         and atom.charge == 0
         and atom.at("isotope", default: 0) == 0
-      ) {
-        let label-size = measure(_abbreviation-label(
-          atom.at("abbrev", default: ""),
-          atom-label,
-          subscript-size,
-          superscript-size,
-        ))
-        let half-width = label-size.width / canvas-scale / 2
-        let half-height = label-size.height / canvas-scale / 2
-        let extent = (
-          half-width * calc.abs(direction-x)
-            + half-height * calc.abs(direction-y)
-            + 0.07
-        )
-        calc.min(label-margin, calc.max(0.14, extent))
-      } else if (
-        atom.at("abbrev", default: "") == ""
-        and not displays-hydrogen
-        and atom.charge == 0
-        and atom.at("isotope", default: 0) == 0
-      ) {
-        let label-size = measure(atom-label(atom.symbol))
-        let half-width = label-size.width / canvas-scale / 2
-        let half-height = label-size.height / canvas-scale / 2
-        let extent = (
-          half-width * calc.abs(direction-x)
-            + half-height * calc.abs(direction-y)
-            + 0.07
-        )
-        calc.min(label-margin, calc.max(0.14, extent))
-      } else {
-        label-margin
-      }
+    ) {
+      let label-size = measure(atom-label(atom.symbol))
+      let half-width = label-size.width / canvas-scale / 2
+      let half-height = label-size.height / canvas-scale / 2
+      let extent = (
+        half-width * calc.abs(direction-x)
+          + half-height * calc.abs(direction-y)
+          + 0.07
+      )
+      calc.min(label-margin, calc.max(0.14, extent))
+    } else {
+      label-margin
+    }
   }
 
     for bond in structural-bonds {
       let from-atom = layout.atoms.at(bond.from)
       let to-atom = layout.atoms.at(bond.to)
-      let from-x = rotated-x(from-atom.pos.x, from-atom.pos.y)
-      let from-y = rotated-y(from-atom.pos.x, from-atom.pos.y)
-      let to-x = rotated-x(to-atom.pos.x, to-atom.pos.y)
-      let to-y = rotated-y(to-atom.pos.x, to-atom.pos.y)
+      let from-position = atom-screen-position(from-atom)
+      let to-position = atom-screen-position(to-atom)
+      let from-x = from-position.x
+      let from-y = from-position.y
+      let to-x = to-position.x
+      let to-y = to-position.y
       let from-color = display-color(from-atom)
       let to-color = display-color(to-atom)
 
@@ -908,8 +1364,9 @@
           if (b.from == atom-idx or b.to == atom-idx) and not (b.from == other-idx or b.to == other-idx) {
             let neighbor-index = if b.from == atom-idx { b.to } else { b.from }
             let na = layout.atoms.at(neighbor-index)
-            let vx = rotated-x(na.pos.x, na.pos.y) - px
-            let vy = rotated-y(na.pos.x, na.pos.y) - py
+            let neighbor-position = atom-screen-position(na)
+            let vx = neighbor-position.x - px
+            let vy = neighbor-position.y - py
             side = if vx * (-uy) + vy * ux >= 0.0 { 1.0 } else { -1.0 }
           }
         }
@@ -1124,16 +1581,12 @@
     // Unit vector in screen space pointing from one atom toward another,
     // or none when the two atoms coincide.
     let neighbor-screen-direction(atom-index, neighbor-index) = {
-      let atom-position = layout.atoms.at(atom-index).pos
-      let neighbor-position = layout.atoms.at(neighbor-index).pos
-      let offset-x = (
-        rotated-x(neighbor-position.x, neighbor-position.y)
-          - rotated-x(atom-position.x, atom-position.y)
+      let atom-position = atom-screen-position(layout.atoms.at(atom-index))
+      let neighbor-position = atom-screen-position(
+        layout.atoms.at(neighbor-index),
       )
-      let offset-y = (
-        rotated-y(neighbor-position.x, neighbor-position.y)
-          - rotated-y(atom-position.x, atom-position.y)
-      )
+      let offset-x = neighbor-position.x - atom-position.x
+      let offset-y = neighbor-position.y - atom-position.y
       let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
       if distance > 0.001 {
         (x: offset-x / distance, y: offset-y / distance)
@@ -1274,8 +1727,9 @@
         let count = atom.at("lone_pairs", default: 0)
         if count <= 0 { continue }
 
-        let px = rotated-x(atom.pos.x, atom.pos.y)
-        let py = rotated-y(atom.pos.x, atom.pos.y)
+        let atom-position = atom-screen-position(atom)
+        let px = atom-position.x
+        let py = atom-position.y
         let fill = display-color(atom)
         let abbrev = atom.at("abbrev", default: "")
 
@@ -1332,8 +1786,9 @@
       if atom.at("virtual_h", default: false) { continue }
       let stereo = atom.at("stereo_h", default: "none")
       if stereo != "none" {
-        let px = rotated-x(atom.pos.x, atom.pos.y)
-        let py = rotated-y(atom.pos.x, atom.pos.y)
+        let atom-position = atom-screen-position(atom)
+        let px = atom-position.x
+        let py = atom-position.y
         let dir = atom.at("stereo_h_dir", default: (x: 0.0, y: -1.0))
         let ux = rotated-x(dir.x, dir.y)
         let uy = rotated-y(dir.x, dir.y)
@@ -1382,8 +1837,9 @@
       if has-label(i) {
         let abbrev = atom.at("abbrev", default: "")
         let fill = display-color(atom)
-        let px = rotated-x(atom.pos.x, atom.pos.y)
-        let py = rotated-y(atom.pos.x, atom.pos.y)
+        let atom-position = atom-screen-position(atom)
+        let px = atom-position.x
+        let py = atom-position.y
         let degree = atom-degree(i)
         let h-count = visible-hydrogen-count(i)
 
@@ -1428,8 +1884,9 @@
         if hetero-inline {
           let neighbor-index = first-neighbor(i)
           let neighbor-atom = layout.atoms.at(neighbor-index)
-          let dx = rotated-x(neighbor-atom.pos.x, neighbor-atom.pos.y) - px
-          let dy = rotated-y(neighbor-atom.pos.x, neighbor-atom.pos.y) - py
+          let neighbor-position = atom-screen-position(neighbor-atom)
+          let dx = neighbor-position.x - px
+          let dy = neighbor-position.y - py
           // Anchor the symbol's bond-facing edge at the atom; the H hangs off the
           // opposite side. Pad only the bond-facing edge so the pair stays tight.
           let pad-bond = 1pt
@@ -1511,7 +1968,7 @@
                 false
               } else {
                 let neighbor = layout.atoms.at(neighbor-index)
-                let vx = rotated-x(neighbor.pos.x, neighbor.pos.y) - px
+                let vx = atom-screen-position(neighbor).x - px
                 vx > 0.05
               }
             }
@@ -1656,8 +2113,9 @@
       let body = annotation.body
       let atom = layout.atoms.at(atom-index)
       if not atom.at("virtual_h", default: false) {
-        let atom-x = rotated-x(atom.pos.x, atom.pos.y)
-        let atom-y = rotated-y(atom.pos.x, atom.pos.y)
+        let atom-position = atom-screen-position(atom)
+        let atom-x = atom-position.x
+        let atom-y = atom-position.y
         let neighbor-directions = atom-neighbor-indices(atom-index)
           .map(neighbor-index => (
             neighbor-screen-direction(atom-index, neighbor-index)
@@ -1709,8 +2167,9 @@
 
       for atom-index in range(layout.atoms.len()) {
         let atom = layout.atoms.at(atom-index)
-        let atom-x = rotated-x(atom.pos.x, atom.pos.y)
-        let atom-y = rotated-y(atom.pos.x, atom.pos.y)
+        let atom-position = atom-screen-position(atom)
+        let atom-x = atom-position.x
+        let atom-y = atom-position.y
 
         let (badge-x, badge-y, badge-target) = if (
           not atom.at("virtual_h", default: false) and
@@ -1772,12 +2231,15 @@
   // coordinates are stored unscaled, so every read multiplies by it.
   let molecule-scale = placed-species.at("mol-scale", default: 1.0)
   let atom = placed-species.layout.atoms.at(atom-index)
-  let (rotated-position-x, rotated-position-y) = _rotate-point(
-    atom.pos.x * molecule-scale,
-    atom.pos.y * molecule-scale,
+  let rendered-position = _rendered-atom-position(
+    atom,
     placed-species.rotation,
+    scale: molecule-scale,
   )
-  let base = (placed-species.origin.at(0) + rotated-position-x, placed-species.origin.at(1) + rotated-position-y)
+  let base = (
+    placed-species.origin.at(0) + rendered-position.x,
+    placed-species.origin.at(1) + rendered-position.y,
+  )
 
   let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
   let font-size = placed-species.at("actual-font-size", default: 11pt)
@@ -1870,7 +2332,13 @@
 
   let label-fragment-position(parent, fragment) = {
     let atom = placed-species.layout.atoms.at(parent)
-    let (rotated-parent-x, rotated-parent-y) = _rotate-point(atom.pos.x * molecule-scale, atom.pos.y * molecule-scale, placed-species.rotation)
+    let parent-position = _rendered-atom-position(
+      atom,
+      placed-species.rotation,
+      scale: molecule-scale,
+    )
+    let rotated-parent-x = parent-position.x
+    let rotated-parent-y = parent-position.y
     let px = placed-species.origin.at(0) + rotated-parent-x
     let py = placed-species.origin.at(1) + rotated-parent-y
     let degree = atom-degree(parent)
@@ -1887,9 +2355,13 @@
       let neighbor-index = first-neighbor(parent)
       if neighbor-index == none { return (px, py) }
       let neighbor-atom = placed-species.layout.atoms.at(neighbor-index)
-      let (nbx, nby) = _rotate-point(neighbor-atom.pos.x * molecule-scale, neighbor-atom.pos.y * molecule-scale, placed-species.rotation)
-      let neighbor-offset-x = nbx - rotated-parent-x
-      let neighbor-offset-y = nby - rotated-parent-y
+      let neighbor-position = _rendered-atom-position(
+        neighbor-atom,
+        placed-species.rotation,
+        scale: molecule-scale,
+      )
+      let neighbor-offset-x = neighbor-position.x - rotated-parent-x
+      let neighbor-offset-y = neighbor-position.y - rotated-parent-y
       let padding-units = 1pt / canvas-scale
       let symbol-width = content-width(symbol-text)
       let hydrogen-width = content-width(atom-label("H"))
@@ -1949,8 +2421,12 @@
         false
       } else {
         let neighbor = placed-species.layout.atoms.at(neighbor-index)
-        let (nx, _) = _rotate-point(neighbor.pos.x * molecule-scale, neighbor.pos.y * molecule-scale, placed-species.rotation)
-        nx - rotated-parent-x > 0.05
+        let neighbor-position = _rendered-atom-position(
+          neighbor,
+          placed-species.rotation,
+          scale: molecule-scale,
+        )
+        neighbor-position.x - rotated-parent-x > 0.05
       }
     }
     let label-content = if reverse-inline {
@@ -2005,6 +2481,517 @@
   )
 }
 
+// Geometry of the visible bond axis after atom-label trimming. Bond references
+// use this same segment as the renderer, so their midpoint follows the painted
+// line rather than the atom centers hidden behind labels.
+#let _visible-bond-geometry(placed-species, first-atom-index, second-atom-index) = {
+  let layout = placed-species.layout
+  let bond-output = _find-bond-output(
+    placed-species,
+    first-atom-index,
+    second-atom-index,
+  )
+  let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+  let rotation = placed-species.at("rotation", default: 0deg)
+  let origin = placed-species.at("origin", default: (0, 0))
+  let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+  let font-size = placed-species.at("actual-font-size", default: 11pt)
+  let font = placed-species.at("font", default: "New Computer Modern")
+  let show-h-state = _normalize-show-h(
+    placed-species.at("show-h", default: ()),
+  )
+  let show-all-h = show-h-state.all
+  let show-h-list = show-h-state.indices
+  let structural-bonds = layout.bonds.filter(
+    bond => not bond.at("virtual_bond", default: false),
+  )
+  let atom-degree(atom-index) = structural-bonds.filter(
+    bond => bond.from == atom-index or bond.to == atom-index,
+  ).len()
+  let force-linear-carbon-label(atom-index) = {
+    let atom = layout.atoms.at(atom-index)
+    if (
+      not _is-carbon(atom)
+        or atom.at("abbrev", default: "") != ""
+        or atom-degree(atom-index) != 2
+    ) {
+      false
+    } else {
+      structural-bonds.filter(bond => (
+        (bond.from == atom-index or bond.to == atom-index)
+          and bond.order == 2
+      )).len() == 2
+    }
+  }
+  let forced-hydrogen(atom-index) = show-h-list.contains(atom-index)
+  let has-label(atom-index) = {
+    _has-label(
+      layout.atoms.at(atom-index),
+      show-all-h: show-all-h,
+      force: forced-hydrogen(atom-index),
+    ) or force-linear-carbon-label(atom-index)
+  }
+  let visible-hydrogen-count(atom-index) = {
+    let atom = layout.atoms.at(atom-index)
+    let count = atom.hcount + _visible-implicit-h(
+      atom,
+      show-all-h: show-all-h,
+      force: forced-hydrogen(atom-index),
+    )
+    if atom.at("stereo_h", default: "none") != "none" {
+      calc.max(0, count - 1)
+    } else {
+      count
+    }
+  }
+  let atom-label(body, size: font-size) = text(
+    size: size,
+    font: font,
+    style: "normal",
+    weight: "regular",
+    body,
+  )
+  let label-margin = calc.max(
+    0.27 * molecule-scale,
+    font-size / canvas-scale * 0.70,
+  )
+  let label-trim(atom, atom-index, direction-x, direction-y) = {
+    let displays-hydrogen = visible-hydrogen-count(atom-index) > 0 and (
+      show-all-h or forced-hydrogen(atom-index) or not _is-carbon(atom)
+    )
+    if not has-label(atom-index) {
+      0.0
+    } else if (
+      displays-hydrogen
+        and atom-degree(atom-index) == 1
+        and not _is-carbon(atom)
+    ) {
+      0.06 * molecule-scale
+    } else if (
+      atom.at("abbrev", default: "") != ""
+        and not displays-hydrogen
+        and atom.charge == 0
+        and atom.at("isotope", default: 0) == 0
+    ) {
+      let label-size = measure(_abbreviation-label(
+        atom.at("abbrev", default: ""),
+        atom-label,
+        font-size,
+        font-size,
+      ))
+      let half-width = label-size.width / canvas-scale / 2
+      let half-height = label-size.height / canvas-scale / 2
+      let extent = (
+        half-width * calc.abs(direction-x)
+          + half-height * calc.abs(direction-y)
+          + 0.07 * molecule-scale
+      )
+      calc.min(
+        label-margin,
+        calc.max(0.14 * molecule-scale, extent),
+      )
+    } else if (
+      atom.at("abbrev", default: "") == ""
+        and not displays-hydrogen
+        and atom.charge == 0
+        and atom.at("isotope", default: 0) == 0
+    ) {
+      let label-size = measure(atom-label(atom.symbol))
+      let half-width = label-size.width / canvas-scale / 2
+      let half-height = label-size.height / canvas-scale / 2
+      let extent = (
+        half-width * calc.abs(direction-x)
+          + half-height * calc.abs(direction-y)
+          + 0.07 * molecule-scale
+      )
+      calc.min(
+        label-margin,
+        calc.max(0.14 * molecule-scale, extent),
+      )
+    } else {
+      label-margin
+    }
+  }
+
+  let from-atom = layout.atoms.at(bond-output.from)
+  let to-atom = layout.atoms.at(bond-output.to)
+  let from-local = _rendered-atom-position(
+    from-atom,
+    rotation,
+    scale: molecule-scale,
+  )
+  let to-local = _rendered-atom-position(
+    to-atom,
+    rotation,
+    scale: molecule-scale,
+  )
+  let from-position = (
+    origin.at(0) + from-local.x,
+    origin.at(1) + from-local.y,
+  )
+  let to-position = (
+    origin.at(0) + to-local.x,
+    origin.at(1) + to-local.y,
+  )
+  let offset-x = to-position.at(0) - from-position.at(0)
+  let offset-y = to-position.at(1) - from-position.at(1)
+  let atom-distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
+  let direction-x = if atom-distance > 0.001 {
+    offset-x / atom-distance
+  } else {
+    1.0
+  }
+  let direction-y = if atom-distance > 0.001 {
+    offset-y / atom-distance
+  } else {
+    0.0
+  }
+  let from-has-label = has-label(bond-output.from)
+  let to-has-label = has-label(bond-output.to)
+  let from-trim = label-trim(
+    from-atom,
+    bond-output.from,
+    direction-x,
+    direction-y,
+  )
+  let to-trim = label-trim(
+    to-atom,
+    bond-output.to,
+    direction-x,
+    direction-y,
+  )
+  let junction-overlap = 0.006 * molecule-scale
+  let from-extension = if (
+    not from-has-label and atom-degree(bond-output.from) > 1
+  ) {
+    junction-overlap
+  } else {
+    0.0
+  }
+  let to-extension = if (
+    not to-has-label and atom-degree(bond-output.to) > 1
+  ) {
+    junction-overlap
+  } else {
+    0.0
+  }
+  let start = (
+    from-position.at(0) + direction-x * (from-trim - from-extension),
+    from-position.at(1) + direction-y * (from-trim - from-extension),
+  )
+  let end = (
+    to-position.at(0) - direction-x * (to-trim - to-extension),
+    to-position.at(1) - direction-y * (to-trim - to-extension),
+  )
+  (
+    bond: bond-output,
+    start: start,
+    end: end,
+    midpoint: (
+      (start.at(0) + end.at(0)) / 2,
+      (start.at(1) + end.at(1)) / 2,
+    ),
+    direction: (direction-x, direction-y),
+    normal: (-direction-y, direction-x),
+    atom-distance: atom-distance,
+    from-position: from-position,
+    to-position: to-position,
+    from-degree: atom-degree(bond-output.from),
+    to-degree: atom-degree(bond-output.to),
+    from-has-label: from-has-label,
+    to-has-label: to-has-label,
+  )
+}
+
+// Point just outside the painted line selected by a curved arrow. Single bonds
+// stay on their visible axis; multiple bonds use the outer line on the side
+// facing the curve so the shaft never begins between parallel strokes.
+#let _bond-arrow-attachment(reference, placed-species, toward) = {
+  let geometry = _visible-bond-geometry(
+    placed-species,
+    reference.i,
+    reference.j,
+  )
+  let reference-offset = reference.at("offset", default: (0, 0))
+  let base = (
+    geometry.midpoint.at(0) + reference-offset.at(0),
+    geometry.midpoint.at(1) + reference-offset.at(1),
+  )
+  let bond-output = geometry.bond
+  let aromatic = placed-species.at("aromatic", default: "kekule")
+  if (
+    bond-output.order <= 1
+      or (
+        aromatic == "circle"
+          and bond-output.at("aromatic", default: false)
+      )
+  ) {
+    return base
+  }
+
+  let normal-x = geometry.normal.at(0)
+  let normal-y = geometry.normal.at(1)
+  let toward-side = (
+    (toward.at(0) - base.at(0)) * normal-x
+      + (toward.at(1) - base.at(1)) * normal-y
+  )
+  let side = if toward-side < 0 { -1.0 } else { 1.0 }
+  let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+  let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+  let bond-stroke = placed-species.at(
+    "actual-bond-stroke",
+    default: 0.9pt * molecule-scale,
+  )
+  let stroke-units = bond-stroke / canvas-scale
+  let double-gap = calc.max(
+    0.065 * molecule-scale,
+    stroke-units * 2.30,
+  )
+  let ring-double-gap = calc.max(
+    0.09 * molecule-scale,
+    stroke-units * 3.00,
+  )
+  let multiple-bond-trim = 0.10 * molecule-scale
+  let selected-line-offset = 0.0
+  let selected-axis-shift = 0.0
+
+  if bond-output.order == 2 {
+    let is-ring-bond = (
+      bond-output.inner_x != 0.0 or bond-output.inner_y != 0.0
+    )
+    if is-ring-bond {
+      let (inner-x, inner-y) = _rotate-point(
+        bond-output.inner_x * molecule-scale,
+        bond-output.inner_y * molecule-scale,
+        placed-species.at("rotation", default: 0deg),
+      )
+      let inner-projection = (
+        inner-x * normal-x + inner-y * normal-y
+      ) * ring-double-gap / molecule-scale
+      selected-line-offset = if side > 0 {
+        calc.max(0.0, inner-projection)
+      } else {
+        calc.min(0.0, inner-projection)
+      }
+    } else {
+      let has-hidden-simple-continuation = (
+        geometry.from-degree == 2 and not geometry.from-has-label
+      ) or (
+        geometry.to-degree == 2 and not geometry.to-has-label
+      )
+      if has-hidden-simple-continuation {
+        let structural-bonds = placed-species.layout.bonds.filter(
+          bond => not bond.at("virtual_bond", default: false),
+        )
+        let offset-side(atom-index, other-index, atom-position) = {
+          let result = 1.0
+          for neighboring-bond in structural-bonds {
+            if (
+              neighboring-bond.from == atom-index
+                or neighboring-bond.to == atom-index
+            ) and not (
+              neighboring-bond.from == other-index
+                or neighboring-bond.to == other-index
+            ) {
+              let neighbor-index = if neighboring-bond.from == atom-index {
+                neighboring-bond.to
+              } else {
+                neighboring-bond.from
+              }
+              let neighbor = placed-species.layout.atoms.at(neighbor-index)
+              let neighbor-position = _rendered-atom-position(
+                neighbor,
+                placed-species.at("rotation", default: 0deg),
+                scale: molecule-scale,
+              )
+              let vector-x = (
+                placed-species.origin.at(0) + neighbor-position.x
+                  - atom-position.at(0)
+              )
+              let vector-y = (
+                placed-species.origin.at(1) + neighbor-position.y
+                  - atom-position.at(1)
+              )
+              result = if (
+                vector-x * normal-x + vector-y * normal-y >= 0.0
+              ) {
+                1.0
+              } else {
+                -1.0
+              }
+            }
+          }
+          result
+        }
+        let inner-side = if (
+          geometry.from-degree == 2 and not geometry.from-has-label
+        ) {
+          offset-side(
+            bond-output.from,
+            bond-output.to,
+            geometry.from-position,
+          )
+        } else {
+          offset-side(
+            bond-output.to,
+            bond-output.from,
+            geometry.to-position,
+          )
+        }
+        let inner-offset = double-gap * 1.12 * inner-side
+        let selected-inner-line = (
+          side > 0 and inner-offset > 0
+        ) or (
+          side < 0 and inner-offset < 0
+        )
+        if selected-inner-line {
+          selected-line-offset = inner-offset
+          let trim = calc.min(
+            multiple-bond-trim,
+            geometry.atom-distance * 0.25,
+          )
+          let from-trim = if (
+            geometry.from-degree > 1 and not geometry.from-has-label
+          ) { trim } else { 0.0 }
+          let to-trim = if (
+            geometry.to-degree > 1 and not geometry.to-has-label
+          ) { trim } else { 0.0 }
+          selected-axis-shift = (from-trim - to-trim) / 2
+        }
+      } else {
+        selected-line-offset = double-gap * side
+        let extension = 0.04 * molecule-scale
+        let from-extension = if geometry.from-degree > 2 {
+          extension
+        } else {
+          0.0
+        }
+        let to-extension = if geometry.to-degree > 2 {
+          extension
+        } else {
+          0.0
+        }
+        selected-axis-shift = (
+          to-extension - from-extension
+        ) / 2
+      }
+    }
+  } else if bond-output.order == 3 {
+    selected-line-offset = double-gap * 1.3 * side
+  } else {
+    selected-line-offset = double-gap * 1.5 * side
+  }
+
+  let line-clearance = bond-stroke / canvas-scale / 2 + 1pt / canvas-scale
+  (
+    base.at(0)
+      + geometry.direction.at(0) * selected-axis-shift
+      + normal-x * (selected-line-offset + side * line-clearance),
+    base.at(1)
+      + geometry.direction.at(1) * selected-axis-shift
+      + normal-y * (selected-line-offset + side * line-clearance),
+  )
+}
+
+// Visible atom labels attach at the symbol edge; unlabeled skeletal atoms attach
+// at their vertex. The shared endpoint gap is applied afterward along the curve.
+#let _atom-arrow-attachment(reference, placed-species, toward) = {
+  let center = _atom-position(placed-species, reference.index)
+  let atom = placed-species.layout.atoms.at(reference.index)
+  let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+  let font-size = placed-species.at("actual-font-size", default: 11pt)
+  let font = placed-species.at("font", default: "New Computer Modern")
+  let show-h-state = _normalize-show-h(
+    placed-species.at("show-h", default: ()),
+  )
+  let structural-bonds = placed-species.layout.bonds.filter(
+    bond => not bond.at("virtual_bond", default: false),
+  )
+  let atom-degree = structural-bonds.filter(
+    bond => bond.from == reference.index or bond.to == reference.index,
+  ).len()
+  let force-linear-carbon-label = (
+    _is-carbon(atom)
+      and atom.at("abbrev", default: "") == ""
+      and atom-degree == 2
+      and structural-bonds.filter(bond => (
+        (bond.from == reference.index or bond.to == reference.index)
+          and bond.order == 2
+      )).len() == 2
+  )
+  let visible-label = (
+    atom.at("virtual_h", default: false)
+      or _has-label(
+        atom,
+        show-all-h: show-h-state.all,
+        force: show-h-state.indices.contains(reference.index),
+      )
+      or force-linear-carbon-label
+  )
+  if not visible-label {
+    let offset = reference.at("offset", default: (0, 0))
+    return (
+      center.at(0) + offset.at(0),
+      center.at(1) + offset.at(1),
+    )
+  }
+
+  let label = if atom.at("virtual_h", default: false) {
+    text(size: font-size, font: font, "H")
+  } else if atom.at("abbrev", default: "") != "" {
+    _abbreviation-label(
+      atom.at("abbrev", default: ""),
+      (body, size: font-size) => text(
+        size: size,
+        font: font,
+        style: "normal",
+        weight: "regular",
+        body,
+      ),
+      font-size,
+      font-size,
+    )
+  } else {
+    text(
+      size: font-size,
+      font: font,
+      style: "normal",
+      weight: "regular",
+      atom.symbol,
+    )
+  }
+  let measured-label = measure(label)
+  let half-width = measured-label.width / canvas-scale / 2
+  let half-height = measured-label.height / canvas-scale / 2
+  let offset = reference.at("offset", default: (0, 0))
+  let direction-x = toward.at(0) - center.at(0)
+  let direction-y = toward.at(1) - center.at(1)
+  if calc.abs(direction-x) < 1e-6 and calc.abs(direction-y) < 1e-6 {
+    return (
+      center.at(0) + offset.at(0),
+      center.at(1) + offset.at(1),
+    )
+  }
+  let horizontal-intersection = if calc.abs(direction-x) < 1e-6 {
+    1e9
+  } else {
+    half-width / calc.abs(direction-x)
+  }
+  let vertical-intersection = if calc.abs(direction-y) < 1e-6 {
+    1e9
+  } else {
+    half-height / calc.abs(direction-y)
+  }
+  let intersection = calc.min(
+    horizontal-intersection,
+    vertical-intersection,
+  )
+  (
+    center.at(0) + direction-x * intersection + offset.at(0),
+    center.at(1) + direction-y * intersection + offset.at(1),
+  )
+}
+
 // Resolve a reference dictionary to an absolute canvas coordinate.
 // `placed-species-list` contains the placed species records; `lone-pair-offset`
 // is the radial
@@ -2022,12 +3009,12 @@
     ))
   } else if kind == "bond" {
     let placed-species = placed-species-list.at(reference.species)
-    let first-position = _atom-position(placed-species, reference.i)
-    let second-position = _atom-position(placed-species, reference.j)
-    apply-reference-offset((
-      (first-position.at(0) + second-position.at(0)) / 2,
-      (first-position.at(1) + second-position.at(1)) / 2,
-    ))
+    let geometry = _visible-bond-geometry(
+      placed-species,
+      reference.i,
+      reference.j,
+    )
+    apply-reference-offset(geometry.midpoint)
   } else if kind == "lp" {
     let placed-species = placed-species-list.at(reference.species)
     let molecule-scale = placed-species.at("mol-scale", default: 1.0)
@@ -2041,10 +3028,9 @@
       let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
       let font-size = placed-species.at("actual-font-size", default: 11pt) / molecule-scale
       let font = placed-species.at("font", default: "New Computer Modern")
-      let (rotated-atom-x, rotated-atom-y) = _rotate-point(
-        atom.pos.x,
-        atom.pos.y,
-        placed-species.rotation,
+      let abbreviation-position = _atom-position(
+        placed-species,
+        reference.atom,
       )
       let bond-directions = ()
       for bond-output in placed-species.layout.bonds {
@@ -2057,14 +3043,16 @@
           none
         }
         if other-index != none {
-          let neighbor = placed-species.layout.atoms.at(other-index)
-          let (neighbor-x, neighbor-y) = _rotate-point(
-            neighbor.pos.x,
-            neighbor.pos.y,
-            placed-species.rotation,
+          let neighbor-position = _atom-position(
+            placed-species,
+            other-index,
           )
-          let offset-x = neighbor-x - rotated-atom-x
-          let offset-y = neighbor-y - rotated-atom-y
+          let offset-x = (
+            neighbor-position.at(0) - abbreviation-position.at(0)
+          )
+          let offset-y = (
+            neighbor-position.at(1) - abbreviation-position.at(1)
+          )
           let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
           if distance > 0.001 {
             bond-directions.push((
@@ -2089,9 +3077,7 @@
       if placements.len() == 0 {
         apply-reference-offset(atom-position)
       } else {
-        let placement = placements.at(
-          calc.min(reference.pair, placements.len() - 1),
-        )
+        let placement = placements.at(reference.pair)
         apply-reference-offset((
           atom-position.at(0) + placement.dir.x * placement.offset * molecule-scale,
           atom-position.at(1) + placement.dir.y * placement.offset * molecule-scale,
@@ -2102,9 +3088,7 @@
       if directions.len() == 0 {
         apply-reference-offset(atom-position)
       } else {
-        let direction = directions.at(
-          calc.min(reference.pair, directions.len() - 1),
-        )
+        let direction = directions.at(reference.pair)
         let (direction-x, direction-y) = _rotate-point(
           direction.x,
           direction.y,
@@ -2133,35 +3117,72 @@
 #let atom(..a) = {
   let arguments = a
   let positional = arguments.pos()
+  _validate-named-arguments(arguments, ("offset",), "atom()")
+  if positional.len() not in (1, 2) {
+    _invalid-input(
+      "atom() positional arguments",
+      "expected atom(i) or atom(species, i), got "
+        + str(positional.len())
+        + " values",
+      "Pass one local atom index or a species index followed by an atom index.",
+    )
+  }
   let (species-index, atom-index) = if positional.len() == 1 {
     (0, positional.at(0))
   } else {
     (positional.at(0), positional.at(1))
   }
+  _validate-index(species-index, "atom() species index")
+  _validate-index(atom-index, "atom() atom index")
+  let offset = arguments.named().at("offset", default: (0, 0))
+  _validate-offset(offset, "atom() offset")
   (
     __ref__: "atom",
     species: species-index,
     index: atom-index,
-    offset: arguments.named().at("offset", default: (0, 0)),
+    offset: offset,
   )
 }
 
-/// References the midpoint of the bond between two atoms: `bond(i, j)` or
-/// `bond(s, i, j)`.
+/// References the midpoint of the visible, label-trimmed bond stroke:
+/// `bond(i, j)` or `bond(s, i, j)`. Curved arrows attach outside the
+/// multiple-bond line facing the curve.
 #let bond(..a) = {
   let arguments = a
   let positional = arguments.pos()
+  _validate-named-arguments(arguments, ("offset",), "bond()")
+  if positional.len() not in (2, 3) {
+    _invalid-input(
+      "bond() positional arguments",
+      "expected bond(i, j) or bond(species, i, j), got "
+        + str(positional.len())
+        + " values",
+      "Pass two local atom indices or a species index followed by two atom indices.",
+    )
+  }
   let (species-index, first-atom-index, second-atom-index) = if positional.len() == 2 {
     (0, positional.at(0), positional.at(1))
   } else {
     (positional.at(0), positional.at(1), positional.at(2))
   }
+  _validate-index(species-index, "bond() species index")
+  _validate-index(first-atom-index, "bond() first atom index")
+  _validate-index(second-atom-index, "bond() second atom index")
+  if first-atom-index == second-atom-index {
+    _invalid-input(
+      "bond() atom indices",
+      "both endpoints use atom index " + str(first-atom-index),
+      "Reference two different atoms joined by a visible bond.",
+    )
+  }
+  let offset = arguments.named().at("offset", default: (0, 0))
+  _validate-offset(offset, "bond() offset")
   (
     __ref__: "bond",
     species: species-index,
     i: first-atom-index,
     j: second-atom-index,
-    offset: arguments.named().at("offset", default: (0, 0)),
+    offset: offset,
   )
 }
 
@@ -2170,23 +3191,43 @@
 #let lp(..a) = {
   let arguments = a
   let positional = arguments.pos()
+  _validate-named-arguments(arguments, ("pair", "offset"), "lp()")
+  if positional.len() not in (1, 2) {
+    _invalid-input(
+      "lp() positional arguments",
+      "expected lp(i) or lp(species, i), got "
+        + str(positional.len())
+        + " values",
+      "Pass one local atom index or a species index followed by an atom index.",
+    )
+  }
   let (species-index, atom-index) = if positional.len() == 1 {
     (0, positional.at(0))
   } else {
     (positional.at(0), positional.at(1))
   }
+  _validate-index(species-index, "lp() species index")
+  _validate-index(atom-index, "lp() atom index")
+  let pair-index = arguments.named().at("pair", default: 0)
+  _validate-index(pair-index, "lp() pair index")
+  let offset = arguments.named().at("offset", default: (0, 0))
+  _validate-offset(offset, "lp() offset")
   (
     __ref__: "lp",
     species: species-index,
     atom: atom-index,
-    pair: arguments.named().at("pair", default: 0),
-    offset: arguments.named().at("offset", default: (0, 0)),
+    pair: pair-index,
+    offset: offset,
   )
 }
 
 /// References a whole placed species (e.g. a `ce()` formula) by its index, snapping
 /// to its bounding-box edge. Used when no interior atom is addressable.
-#let species(k, offset: (0, 0)) = (__ref__: "species", index: k, offset: offset)
+#let species(k, offset: (0, 0)) = {
+  _validate-index(k, "species() index")
+  _validate-offset(offset, "species() offset")
+  (__ref__: "species", index: k, offset: offset)
+}
 
 /// A curly electron-pushing arrow between two references.
 ///
@@ -2208,21 +3249,76 @@
 ///   `scale`). Applies to every drawn head. Default: 0.07.
 /// - style (str): shaft style — "solid" (default), "dashed", or "wavy".
 /// -> dictionary  (consumed by smiles()/reaction())
-#let arrow(from: none, to: none, label: none, color: black, stroke: auto, bend: "left", angle: 15deg, half: false, heads: "end", head-length: 0.11, head-width: 0.07, style: "solid") = (
-  __arrow__: true,
-  from: from,
-  to: to,
-  label: label,
-  color: color,
-  stroke: stroke,
-  bend: bend,
-  angle: angle,
-  half: half,
-  heads: heads,
-  head-length: head-length,
-  head-width: head-width,
-  style: style,
-)
+#let arrow(from: none, to: none, label: none, color: black, stroke: auto, bend: "left", angle: 15deg, half: false, heads: "end", head-length: 0.11, head-width: 0.07, style: "solid") = {
+  if type(from) != dictionary or from.at("__ref__", default: "") == "" {
+    _invalid-input(
+      "arrow from",
+      "expected atom(), bond(), lp(), or species(), got " + repr(from),
+      "Pass a reference constructor as the arrow source.",
+    )
+  }
+  if type(to) != dictionary or to.at("__ref__", default: "") == "" {
+    _invalid-input(
+      "arrow to",
+      "expected atom(), bond(), lp(), or species(), got " + repr(to),
+      "Pass a reference constructor as the arrow destination.",
+    )
+  }
+  if type(color) != _color-type {
+    _invalid-input(
+      "arrow color",
+      "expected a color, got " + repr(color),
+      "Pass a Typst color value.",
+    )
+  }
+  _validate-positive-length(stroke, "arrow stroke", allow-auto: true)
+  if bend != none and bend not in ("left", "right") {
+    _invalid-input(
+      "arrow bend",
+      "expected \"left\", \"right\", or none, got " + repr(bend),
+      "Choose a supported bend direction.",
+    )
+  }
+  if type(angle) != _angle-type {
+    _invalid-input(
+      "arrow angle",
+      "expected an angle, got " + repr(angle),
+      "Pass an angle such as 15deg.",
+    )
+  }
+  _validate-bool(half, "arrow half")
+  if heads not in ("end", "both", "none") {
+    _invalid-input(
+      "arrow heads",
+      "expected \"end\", \"both\", or \"none\", got " + repr(heads),
+      "Choose one of the supported arrowhead placements.",
+    )
+  }
+  _validate-positive-number(head-length, "arrow head-length")
+  _validate-positive-number(head-width, "arrow head-width")
+  if style not in ("solid", "dashed", "wavy") {
+    _invalid-input(
+      "arrow style",
+      "expected \"solid\", \"dashed\", or \"wavy\", got " + repr(style),
+      "Choose one of the supported shaft styles.",
+    )
+  }
+  (
+    __arrow__: true,
+    from: from,
+    to: to,
+    label: label,
+    color: color,
+    stroke: stroke,
+    bend: bend,
+    angle: angle,
+    half: half,
+    heads: heads,
+    head-length: head-length,
+    head-width: head-width,
+    style: style,
+  )
+}
 
 /// Highlights an atom (disk) or bond (capsule) behind the structure.
 ///
@@ -2234,16 +3330,255 @@
 /// - include-atoms (bool): for bond highlights, also shade both endpoint atoms.
 ///   Default: false.
 /// -> dictionary  (consumed by smiles()/reaction())
-#let highlight(ref, fill: rgb("#FFE45C"), stroke: none, radius: auto, include-atoms: false) = (
-  __highlight__: true,
-  ref: ref,
-  fill: fill,
-  stroke: stroke,
-  radius: radius,
-  include-atoms: include-atoms,
-)
+#let highlight(ref, fill: rgb("#FFE45C"), stroke: none, radius: auto, include-atoms: false) = {
+  let references = if type(ref) == array { ref } else { (ref,) }
+  if references.len() == 0 {
+    _invalid-input(
+      "highlight reference",
+      "the reference array is empty",
+      "Pass at least one atom() or bond() reference.",
+    )
+  }
+  for reference in references {
+    if (
+      type(reference) != dictionary
+        or reference.at("__ref__", default: "") not in ("atom", "bond")
+    ) {
+      _invalid-input(
+        "highlight reference",
+        "expected atom() or bond(), got " + repr(reference),
+        "Pass one reference or an array of atom()/bond() references.",
+      )
+    }
+  }
+  if type(fill) != _color-type {
+    _invalid-input(
+      "highlight fill",
+      "expected a color, got " + repr(fill),
+      "Pass a Typst color value.",
+    )
+  }
+  if (
+    stroke != none
+      and type(stroke) not in (_stroke-type, _color-type, _length-type)
+  ) {
+    _invalid-input(
+      "highlight stroke",
+      "expected none or a stroke, got " + repr(stroke),
+      "Pass none, a color, a length, or a stroke dictionary.",
+    )
+  }
+  if radius != auto {
+    _validate-positive-number(radius, "highlight radius")
+  }
+  _validate-bool(include-atoms, "highlight include-atoms")
+  (
+    __highlight__: true,
+    ref: ref,
+    fill: fill,
+    stroke: stroke,
+    radius: radius,
+    include-atoms: include-atoms,
+  )
+}
 
 // ── Annotation drawing ──────────────────────────────────────────────────────────
+
+#let _validate-reference(reference, placed-species-list, input-context, allowed-kinds) = {
+  if type(reference) != dictionary {
+    _invalid-input(
+      input-context,
+      "expected a reference, got " + repr(reference),
+      "Use atom(), bond(), lp(), or species().",
+    )
+  }
+  let kind = reference.at("__ref__", default: "")
+  if kind not in allowed-kinds {
+    _invalid-input(
+      input-context,
+      "reference kind " + repr(kind) + " is not supported here",
+      "Use "
+        + allowed-kinds.map(name => name + "()").join(", ")
+        + ".",
+    )
+  }
+  let offset = reference.at("offset", default: (0, 0))
+  _validate-offset(offset, input-context + " offset")
+  let species-index = if kind == "species" {
+    reference.at("index", default: none)
+  } else {
+    reference.at("species", default: none)
+  }
+  _validate-index(species-index, input-context + " species index")
+  if species-index >= placed-species-list.len() {
+    _invalid-input(
+      input-context + " species index",
+      str(species-index) + " does not exist",
+      _available-index-description(placed-species-list.len())
+        + " Species indices count mol() and visible content items; rxn-arrow() itself does not count as a species.",
+    )
+  }
+  if kind == "species" {
+    return
+  }
+
+  let placed-species = placed-species-list.at(species-index)
+  if "layout" not in placed-species {
+    _invalid-input(
+      input-context,
+      "species "
+        + str(species-index)
+        + " is opaque content and has no addressable atoms",
+      "Use species("
+        + str(species-index)
+        + ") for the whole item, or wrap a SMILES string in mol() to address its atoms.",
+    )
+  }
+  let layout = placed-species.layout
+  let atom-indices = if kind == "bond" {
+    (
+      reference.at("i", default: none),
+      reference.at("j", default: none),
+    )
+  } else if kind == "lp" {
+    (reference.at("atom", default: none),)
+  } else {
+    (reference.at("index", default: none),)
+  }
+  for atom-index in atom-indices {
+    _validate-index(atom-index, input-context + " atom index")
+    if atom-index >= layout.atoms.len() {
+      _invalid-input(
+        input-context + " atom index",
+        str(atom-index)
+          + " does not exist in species "
+          + str(species-index),
+        _available-index-description(layout.atoms.len())
+          + " Enable show-indices: true to inspect this molecule.",
+      )
+    }
+  }
+
+  if kind == "bond" {
+    if reference.i == reference.j {
+      _invalid-input(
+        input-context,
+        "bond endpoints both use atom index " + str(reference.i),
+        "Reference two different atoms joined by a visible bond.",
+      )
+    }
+    let matching-bonds = layout.bonds.filter(bond-output => (
+      not bond-output.at("virtual_bond", default: false)
+        and (
+          (bond-output.from == reference.i and bond-output.to == reference.j)
+            or (
+              bond-output.from == reference.j
+                and bond-output.to == reference.i
+            )
+        )
+    ))
+    if matching-bonds.len() == 0 {
+      _invalid-input(
+        input-context,
+        "atoms "
+          + str(reference.i)
+          + " and "
+          + str(reference.j)
+          + " are not joined by a visible bond in species "
+          + str(species-index),
+        "Enable show-indices: true and reference the endpoints of an existing bond.",
+      )
+    }
+  } else {
+    let atom-index = atom-indices.first()
+    if kind == "lp" {
+      let pair-index = reference.at("pair", default: none)
+      _validate-index(pair-index, input-context + " pair index")
+      let pair-count = layout.atoms.at(atom-index).at("lone_pairs", default: 0)
+      if pair-count == 0 {
+        _invalid-input(
+          input-context,
+          "atom "
+            + str(atom-index)
+            + " in species "
+            + str(species-index)
+            + " has no addressable lone pairs",
+          "Choose an atom with a lone pair; custom labels must declare lp=N.",
+        )
+      }
+      if pair-index >= pair-count {
+        _invalid-input(
+          input-context + " pair index",
+          str(pair-index)
+            + " does not exist on atom "
+            + str(atom-index),
+          _available-index-description(pair-count),
+        )
+      }
+    }
+  }
+}
+
+#let _validate-annotation(annotation, placed-species-list, input-context) = {
+  if type(annotation) != dictionary {
+    _invalid-input(
+      input-context,
+      "expected arrow() or highlight(), got " + repr(annotation),
+      "Pass only annotation constructors in positional annotation slots.",
+    )
+  }
+  if annotation.at("__arrow__", default: false) {
+    _validate-reference(
+      annotation.at("from", default: none),
+      placed-species-list,
+      input-context + " from reference",
+      ("atom", "bond", "lp", "species"),
+    )
+    _validate-reference(
+      annotation.at("to", default: none),
+      placed-species-list,
+      input-context + " to reference",
+      ("atom", "bond", "lp", "species"),
+    )
+  } else if annotation.at("__highlight__", default: false) {
+    let references = if type(annotation.ref) == array {
+      annotation.ref
+    } else {
+      (annotation.ref,)
+    }
+    if references.len() == 0 {
+      _invalid-input(
+        input-context,
+        "the highlight reference array is empty",
+        "Pass at least one atom() or bond() reference.",
+      )
+    }
+    for reference in references {
+      _validate-reference(
+        reference,
+        placed-species-list,
+        input-context + " reference",
+        ("atom", "bond"),
+      )
+    }
+  } else {
+    _invalid-input(
+      input-context,
+      "expected arrow() or highlight(), got " + repr(annotation),
+      "Pass only annotation constructors in positional annotation slots.",
+    )
+  }
+}
+
+#let _validate-annotations(annotations, placed-species-list, input-context) = {
+  for annotation-index in range(annotations.len()) {
+    _validate-annotation(
+      annotations.at(annotation-index),
+      placed-species-list,
+      input-context + " " + str(annotation-index),
+    )
+  }
+}
 
 // Endpoint coordinate for an arrow; species references snap to the box edge facing
 // `toward`.
@@ -2253,6 +3588,20 @@
     placed-species-list,
     configuration.lp-offset,
   )
+  if reference.__ref__ == "bond" {
+    return _bond-arrow-attachment(
+      reference,
+      placed-species-list.at(reference.species),
+      toward,
+    )
+  }
+  if reference.__ref__ == "atom" {
+    return _atom-arrow-attachment(
+      reference,
+      placed-species-list.at(reference.species),
+      toward,
+    )
+  }
   if reference.__ref__ != "species" { return reference-position }
   let placed-species = placed-species-list.at(reference.index)
   // Intersect the ray from the origin toward the target with the molecule's
@@ -2412,6 +3761,41 @@
   }
 }
 
+#let _arrow-curve-geometry(start, end, bend, angle) = {
+  let offset-x = end.at(0) - start.at(0)
+  let offset-y = end.at(1) - start.at(1)
+  let distance = calc.max(
+    1e-6,
+    calc.sqrt(offset-x * offset-x + offset-y * offset-y),
+  )
+  let direction-x = offset-x / distance
+  let direction-y = offset-y / distance
+  let sign = if bend == "right" {
+    -1.0
+  } else if bend == "left" {
+    1.0
+  } else {
+    0.0
+  }
+  let normal-x = -direction-y
+  let normal-y = direction-x
+  let midpoint-x = (start.at(0) + end.at(0)) / 2
+  let midpoint-y = (start.at(1) + end.at(1)) / 2
+  let bend-magnitude = distance / 2 * calc.tan(angle) * sign
+  (
+    distance: distance,
+    direction: (direction-x, direction-y),
+    normal: (normal-x, normal-y),
+    midpoint: (midpoint-x, midpoint-y),
+    bend-magnitude: bend-magnitude,
+    sign: sign,
+    apex: (
+      midpoint-x + normal-x * bend-magnitude,
+      midpoint-y + normal-y * bend-magnitude,
+    ),
+  )
+}
+
 #let _draw-arrow(arrow-specification, placed-species-list, configuration) = {
   import cetz.draw: *
   let heads = arrow-specification.at("heads", default: "end")
@@ -2432,52 +3816,74 @@
     placed-species-list,
     configuration.lp-offset,
   )
+  let initial-geometry = _arrow-curve-geometry(
+    raw-start,
+    raw-end,
+    arrow-specification.bend,
+    arrow-specification.angle,
+  )
   let start = _arrow-endpoint(
     arrow-specification.from,
     placed-species-list,
     configuration,
-    raw-end,
+    initial-geometry.apex,
   )
   let end = _arrow-endpoint(
     arrow-specification.to,
     placed-species-list,
     configuration,
-    raw-start,
+    initial-geometry.apex,
   )
-
-  let offset-x = end.at(0) - start.at(0)
-  let offset-y = end.at(1) - start.at(1)
-  let distance = calc.max(
-    1e-6,
-    calc.sqrt(offset-x * offset-x + offset-y * offset-y),
+  let attached-geometry = _arrow-curve-geometry(
+    start,
+    end,
+    arrow-specification.bend,
+    arrow-specification.angle,
   )
-  let direction-x = offset-x / distance
-  let direction-y = offset-y / distance
-
-  // Pull both ends in slightly so the tail clears its source glyph and the head
-  // stops just short of the target.
-  let inset = calc.min(configuration.inset, distance * 0.3)
+  let move-toward(point, target, amount) = {
+    let offset-x = target.at(0) - point.at(0)
+    let offset-y = target.at(1) - point.at(1)
+    let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
+    if distance <= 1e-6 {
+      point
+    } else {
+      let movement = calc.min(amount, distance * 0.25)
+      (
+        point.at(0) + offset-x / distance * movement,
+        point.at(1) + offset-y / distance * movement,
+      )
+    }
+  }
   let inset-start = (
-    start.at(0) + direction-x * inset,
-    start.at(1) + direction-y * inset,
+    move-toward(
+      start,
+      attached-geometry.apex,
+      configuration.endpoint-gap,
+    )
   )
   let inset-end = (
-    end.at(0) - direction-x * inset,
-    end.at(1) - direction-y * inset,
+    move-toward(
+      end,
+      attached-geometry.apex,
+      configuration.endpoint-gap,
+    )
   )
-
-  let sign = if arrow-specification.bend == "right" { -1.0 } else if arrow-specification.bend == "left" { 1.0 } else { 0.0 }
-  let normal-x = -direction-y
-  let normal-y = direction-x
-  let midpoint-x = (inset-start.at(0) + inset-end.at(0)) / 2
-  let midpoint-y = (inset-start.at(1) + inset-end.at(1)) / 2
-  let bend-magnitude = (
-    distance / 2 * calc.tan(arrow-specification.angle) * sign
+  let geometry = _arrow-curve-geometry(
+    inset-start,
+    inset-end,
+    arrow-specification.bend,
+    arrow-specification.angle,
   )
-  let apex = (
-    midpoint-x + normal-x * bend-magnitude,
-    midpoint-y + normal-y * bend-magnitude,
-  )
+  let distance = geometry.distance
+  let direction-x = geometry.direction.at(0)
+  let direction-y = geometry.direction.at(1)
+  let sign = geometry.sign
+  let normal-x = geometry.normal.at(0)
+  let normal-y = geometry.normal.at(1)
+  let midpoint-x = geometry.midpoint.at(0)
+  let midpoint-y = geometry.midpoint.at(1)
+  let bend-magnitude = geometry.bend-magnitude
+  let apex = geometry.apex
 
   let arrowhead-options = (
     fill: arrow-specification.color,
@@ -2625,7 +4031,7 @@
   arrow-thickness: if bond-stroke == none { 0.9pt * scale } else { bond-stroke },
   arrow-scale: scale,
   label-size: font-size * 0.92,
-  inset: 0.16,
+  endpoint-gap: 2pt / canvas-scale,
   label-gap: 0.34,
 )
 
@@ -2708,6 +4114,27 @@
   show-indices: false,
   ..annotations
 ) = context {
+  _validate-positive-number(scale, "smiles scale")
+  if bond-length != none {
+    _validate-positive-number(bond-length, "smiles bond-length")
+  }
+  _validate-positive-length(
+    font-size,
+    "smiles font-size",
+    allow-none: true,
+  )
+  _validate-positive-length(
+    bond-stroke,
+    "smiles bond-stroke",
+    allow-none: true,
+  )
+  if type(rotation) != _angle-type {
+    _invalid-input(
+      "smiles rotation",
+      "expected an angle, got " + repr(rotation),
+      "Pass an angle such as 30deg.",
+    )
+  }
   // A style preset fills in only the sizing arguments the caller left unset,
   // and scales with `scale` like the built-in defaults do.
   let preset = _style-preset(style)
@@ -2733,16 +4160,40 @@
   let placed-species-list = ((
     kind: "mol",
     layout: layout,
+    mol-scale: 1.0,
     rotation: rotation,
     origin: (0, 0),
     size: (layout.bbox_width, layout.bbox_height),
     canvas-scale: canvas-scale,
     actual-font-size: actual-font-size,
+    actual-bond-stroke: if bond-stroke == none { 0.9pt * scale } else { bond-stroke },
     font: font,
     show-h: show-h,
+    aromatic: aromatic,
   ),)
   let configuration = _annotation-configuration(canvas-scale, actual-font-size, scale, bond-stroke: bond-stroke)
   let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
+  _validate-molecule-options(
+    layout,
+    scale,
+    bond-length,
+    font-size,
+    font,
+    bond-stroke,
+    color,
+    rotation,
+    show-h,
+    lone-pairs,
+    atom-colors,
+    show-indices,
+    fg,
+    theme,
+    aromatic,
+    atom-annotations,
+    opacity,
+    bond-customizations,
+  )
+  _validate-annotations(annotation, placed-species-list, "smiles annotation")
 
   cetz.canvas(length: canvas-scale, {
     import cetz.draw: *
@@ -2797,6 +4248,14 @@
 /// - ..args: Any #smiles() drawing options (color, fg, show-h, rotation, …).
 /// -> content
 #let smiles-inline(smiles-str, height: 1.4em, baseline: auto, ..args) = context {
+  _validate-positive-length(height, "smiles-inline height")
+  if baseline != auto and type(baseline) != _length-type {
+    _invalid-input(
+      "smiles-inline baseline",
+      "expected auto or a length, got " + repr(baseline),
+      "Use baseline: auto or pass a length such as 0.3em.",
+    )
+  }
   let body = smiles(smiles-str, ..args)
   let measured-body = measure(body)
   if measured-body.height <= 0pt { return body }
@@ -2851,10 +4310,39 @@
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
   let options = opts.named()
+  if name != none and type(name) != str {
+    _invalid-input(
+      "smiles-cetz name",
+      "expected none or a string, got " + repr(name),
+      "Pass a CeTZ group name such as \"substrate\".",
+    )
+  }
+  _validate-offset(origin, "smiles-cetz origin")
+  if fg != auto and type(fg) != _color-type {
+    _invalid-input(
+      "smiles-cetz foreground",
+      "expected auto or a color, got " + repr(fg),
+      "Pass a Typst color.",
+    )
+  }
+  if theme != auto and theme not in ("light", "dark") {
+    _invalid-input(
+      "smiles-cetz theme",
+      "expected auto, \"light\", or \"dark\", got " + repr(theme),
+      "Choose one of the supported palette themes.",
+    )
+  }
   let fg = if fg == auto { black } else { fg }
   let theme = if theme == auto { "light" } else { theme }
   let mirror = options.at("mirror", default: none)
   let rotation = options.at("rotation", default: 0deg)
+  if type(rotation) != _angle-type {
+    _invalid-input(
+      "smiles-cetz rotation",
+      "expected an angle, got " + repr(rotation),
+      "Pass an angle such as 30deg.",
+    )
+  }
   let layout = _mirror-layout(_compute-layout(smiles-str), mirror, rotation: rotation)
   let allowed = (
     "scale", "font-size", "font", "bond-stroke", "color", "rotation",
@@ -2872,25 +4360,27 @@
   if drawing-options.at("font", default: none) == auto {
     drawing-options.insert("font", "New Computer Modern")
   }
-  let rotation-cosine = calc.cos(rotation)
-  let rotation-sine = calc.sin(rotation)
   group(name: name, {
     translate(origin)
     _draw-molecule(layout, fg: fg, theme: theme, ..drawing-options)
     for atom-index in range(layout.atoms.len()) {
       let atom = layout.atoms.at(atom-index)
+      let atom-position = _rendered-atom-position(atom, rotation)
       anchor(
         "atom-" + str(atom-index),
-        (
-          atom.pos.x * rotation-cosine - atom.pos.y * rotation-sine,
-          atom.pos.x * rotation-sine + atom.pos.y * rotation-cosine,
-        ),
+        (atom-position.x, atom-position.y),
       )
     }
     for bond-output in layout.bonds {
       if not bond-output.at("virtual_bond", default: false) {
-        let from-position = layout.atoms.at(bond-output.from).pos
-        let to-position = layout.atoms.at(bond-output.to).pos
+        let from-position = _rendered-atom-position(
+          layout.atoms.at(bond-output.from),
+          rotation,
+        )
+        let to-position = _rendered-atom-position(
+          layout.atoms.at(bond-output.to),
+          rotation,
+        )
         let midpoint-x = (from-position.x + to-position.x) / 2
         let midpoint-y = (from-position.y + to-position.y) / 2
         anchor(
@@ -2898,10 +4388,7 @@
             + str(calc.min(bond-output.from, bond-output.to))
             + "-"
             + str(calc.max(bond-output.from, bond-output.to)),
-          (
-            midpoint-x * rotation-cosine - midpoint-y * rotation-sine,
-            midpoint-x * rotation-sine + midpoint-y * rotation-cosine,
-          ),
+          (midpoint-x, midpoint-y),
         )
       }
     }
@@ -2911,7 +4398,7 @@
 
 // ── Reaction scheme helpers ───────────────────────────────────────────────────
 
-/// Creates a reaction arrow for use inside #reaction().
+/// Creates a reaction arrow for use inside `reaction()`.
 ///
 /// - above (content / dictionary): Label above a horizontal arrow / to the right
 ///   of a vertical one. A mol() item renders as a molecule; in mechanism mode it
@@ -2919,7 +4406,7 @@
 /// - below (content / dictionary): Label below a horizontal arrow / to the left
 ///   of a vertical one. Accepts the same values as `above`.
 /// - dir (auto / str): Arrow direction — "right", "left", "down", or "up".
-///   `auto` follows the enclosing #reaction(flow:) (right for horizontal flows,
+///   `auto` follows the enclosing `reaction(flow:)` (right for horizontal flows,
 ///   down for vertical). Default: auto.
 /// - kind (str): Arrow style — "single" (default), "equilibrium",
 ///   "equilibrium-filled", "dashed" (hypothetical/formal step), or "wavy"
@@ -2930,17 +4417,58 @@
 ///   color, matching dark slide themes. Default: auto.
 /// - stroke (auto / length): Shaft width before `scale` is applied. `auto`
 ///   matches the default SMILES bond stroke (0.9pt). Default: auto.
-/// -> dictionary  (consumed by #reaction)
-#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", scale: 1.0, color: auto, stroke: auto) = (
-  __rxn_arrow__: true,
-  above: above,
-  below: below,
-  dir: dir,
-  kind: kind,
-  scale: scale,
-  color: color,
-  stroke: stroke,
-)
+/// -> dictionary  (consumed by `reaction()`)
+#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", scale: 1.0, color: auto, stroke: auto) = {
+  if dir != auto and dir not in ("right", "left", "down", "up") {
+    _invalid-input(
+      "rxn-arrow direction",
+      "expected auto, \"right\", \"left\", \"down\", or \"up\", got "
+        + repr(dir),
+      "Choose a supported reaction-arrow direction.",
+    )
+  }
+  if kind not in (
+    "single",
+    "equilibrium",
+    "equilibrium-filled",
+    "dashed",
+    "wavy",
+  ) {
+    _invalid-input(
+      "rxn-arrow kind",
+      "unsupported kind " + repr(kind),
+      "Use \"single\", \"equilibrium\", \"equilibrium-filled\", \"dashed\", or \"wavy\".",
+    )
+  }
+  _validate-positive-number(scale, "rxn-arrow scale")
+  if color != auto and type(color) != _color-type {
+    _invalid-input(
+      "rxn-arrow color",
+      "expected auto or a color, got " + repr(color),
+      "Use color: auto or pass a Typst color.",
+    )
+  }
+  _validate-positive-length(stroke, "rxn-arrow stroke", allow-auto: true)
+  for (slot-name, slot-value) in (("above", above), ("below", below)) {
+    if type(slot-value) == dictionary and not slot-value.at("__mol__", default: false) {
+      _invalid-input(
+        "rxn-arrow " + slot-name,
+        "a dictionary value must be created with mol()",
+        "Pass ordinary content or mol(...) for a referenceable molecule.",
+      )
+    }
+  }
+  (
+    __rxn_arrow__: true,
+    above: above,
+    below: below,
+    dir: dir,
+    kind: kind,
+    scale: scale,
+    color: color,
+    stroke: stroke,
+  )
+}
 
 /// A reaction-scheme item: a molecule or any content, with an optional label and
 /// position offset. Consumed by #reaction() and by the above/below slots of
@@ -2951,19 +4479,96 @@
 /// - label (content): Optional label shown below. Default: none.
 /// - offset (array): (dx, dy) page-axis nudge in bond-length units. Positive x
 ///   moves right and positive y moves up, independent of reaction flow.
-/// - ..opts: Molecule drawing options used when `spec` is a string, including a
-///   per-molecule `scale`. In mechanism mode, per-molecule options control scale,
-///   labels, strokes, colors, rotation, mirroring, hydrogens, lone pairs, opacity,
-///   bond customizations, and index overlays; `reaction(scale: ...)` sets the
-///   shared base bond length that per-molecule scale multiplies.
+/// - ..opts: Positional arrow()/highlight() annotations use local atom and bond
+///   references for this molecule. Named options control molecule drawing,
+///   including per-molecule `scale`, labels, strokes, colors, rotation, mirroring,
+///   hydrogens, lone pairs, opacity, bond customizations, and index overlays.
+///   `reaction(scale: ...)` scales the complete scheme uniformly.
 /// -> dictionary  (consumed by #reaction / #rxn-arrow)
-#let mol(spec, label: none, offset: (0, 0), ..opts) = (
-  __mol__: true,
-  spec: spec,
-  label: label,
-  offset: offset,
-  opts: opts.named(),
-)
+#let mol(spec, label: none, offset: (0, 0), ..opts) = {
+  if type(spec) != str and type(spec) != _content-type {
+    _invalid-input(
+      "mol specification",
+      "expected a SMILES string or content, got " + repr(spec),
+      "Pass a string such as \"CCO\" or rendered content such as ce(\"H2O\").",
+    )
+  }
+  _validate-offset(offset, "mol offset")
+  let annotations = opts.pos()
+  for annotation in annotations {
+    if (
+      type(annotation) != dictionary
+        or (
+          not annotation.at("__arrow__", default: false)
+            and not annotation.at("__highlight__", default: false)
+        )
+    ) {
+      _invalid-input(
+        "mol positional annotation",
+        "expected arrow() or highlight(), got " + repr(annotation),
+        "Pass only local arrow()/highlight() annotations after the molecule specification.",
+      )
+    }
+  }
+  let options = opts.named()
+  let allowed-options = (
+    "style", "scale", "bond-length", "font-size", "font", "bond-stroke",
+    "color", "fg", "theme", "rotation", "mirror", "show-h", "aromatic",
+    "atom-annotations", "opacity", "bond-customizations", "lone-pairs",
+    "atom-colors", "show-indices",
+  )
+  for option-name in options.keys() {
+    if option-name not in allowed-options {
+      _invalid-input(
+        "mol option " + repr(option-name),
+        "the option is not supported",
+        "Use an option accepted by smiles().",
+      )
+    }
+  }
+  if "scale" in options {
+    _validate-positive-number(options.scale, "mol scale")
+  }
+  if "bond-length" in options and options.at("bond-length") != none {
+    _validate-positive-number(options.at("bond-length"), "mol bond-length")
+  }
+  if "font-size" in options {
+    _validate-positive-length(
+      options.at("font-size"),
+      "mol font-size",
+      allow-none: true,
+    )
+  }
+  if "bond-stroke" in options {
+    _validate-positive-length(
+      options.at("bond-stroke"),
+      "mol bond-stroke",
+      allow-none: true,
+    )
+  }
+  if "rotation" in options and type(options.rotation) != _angle-type {
+    _invalid-input(
+      "mol rotation",
+      "expected an angle, got " + repr(options.rotation),
+      "Pass an angle such as 30deg.",
+    )
+  }
+  if type(spec) != str and (annotations.len() > 0 or options.len() > 0) {
+    _invalid-input(
+      "mol content options",
+      "opaque content has no addressable atoms or molecule drawing options",
+      "Apply styling before passing the content, and omit arrow()/highlight() annotations; use species() to reference the whole item.",
+    )
+  }
+  (
+    __mol__: true,
+    spec: spec,
+    label: label,
+    offset: offset,
+    annotations: annotations,
+    opts: options,
+  )
+}
 
 // Render a mol() item to standalone content (scheme/grid path).
 #let _render-molecule-item(molecule-item, show-indices-default: false, offset-unit: 30pt) = context {
@@ -3020,7 +4625,7 @@
 // Render a horizontal reaction arrow.
 #let _horizontal-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0) = context {
   let arrow-color = if arrow-color == auto {
-    if type(text.fill) == color { text.fill } else { black }
+    if type(text.fill) == _color-type { text.fill } else { black }
   } else { arrow-color }
   let stroke-width = if stroke == auto { 0.9pt } else { stroke }
   let span = 52
@@ -3101,7 +4706,7 @@
 // Render a vertical reaction arrow. `above` is shown to the right, `below` to the left.
 #let _vertical-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0) = context {
   let arrow-color = if arrow-color == auto {
-    if type(text.fill) == color { text.fill } else { black }
+    if type(text.fill) == _color-type { text.fill } else { black }
   } else { arrow-color }
   let stroke-width = if stroke == auto { 0.9pt } else { stroke }
   let span = 52
@@ -3193,22 +4798,23 @@
 ///    bond(s, i, j), lp(s, i) and species(k), where s/k count mol()/content items
 ///    in written order — including mol() items inside rxn-arrow(above:/below:)
 ///    slots (above before below, at the arrow's position in the sequence).
-///    Plain arrow-label content and annotations are not counted.
+///    Plain arrow-label content and annotations are not counted. Positional
+///    arrow()/highlight() items inside mol() use local references. Reaction items
+///    inside brackets(..items) stay on this same canvas and remain referenceable.
 ///
-// Screen-space bounds of a placed molecule relative to its origin, as
-// `(left, right, bottom, top)` magnitudes in canvas units. Rotation makes a tall
-// molecule wide, so width and height cannot simply be swapped; the extents come
-// from the rotated atom coordinates. The overall size is taken from a real
-// rotated measurement (`measured-w`/`measured-h`, already scaled), and the label
-// padding beyond the skeleton is shared evenly around the origin. Because layout
-// coordinates are centroid-centered, the origin is generally off the box center,
-// so the returned extents are asymmetric.
+// Screen-space bounds of a placed molecule relative to its origin. A complete
+// measurement supplies the overall dimensions, while atom and label boxes
+// determine how those dimensions are distributed around the molecular origin.
+// This preserves asymmetric overhangs from terminal groups and custom labels
+// after rotation without changing any layout coordinates.
 #let _molecule-bounds(
   molecule-layout,
   rotation,
   molecule-scale,
   measured-width,
   measured-height,
+  options: (:),
+  canvas-scale: 30pt,
 ) = {
   let atoms = molecule-layout.atoms.filter(
     atom => not atom.at("virtual_h", default: false),
@@ -3221,43 +4827,273 @@
       top: measured-height / 2,
     )
   }
-  let rotation-cosine = calc.cos(rotation)
-  let rotation-sine = calc.sin(rotation)
-  let atom-x-coordinates = atoms.map(atom => (
-    (atom.pos.x * rotation-cosine - atom.pos.y * rotation-sine) * molecule-scale
-  ))
-  let atom-y-coordinates = atoms.map(atom => (
-    (atom.pos.x * rotation-sine + atom.pos.y * rotation-cosine) * molecule-scale
-  ))
-  let minimum-atom-x = atom-x-coordinates.fold(
-    atom-x-coordinates.first(),
+
+  let structural-bonds = molecule-layout.bonds.filter(
+    bond => not bond.at("virtual_bond", default: false),
+  )
+  let atom-degree(atom-index) = structural-bonds.filter(
+    bond => bond.from == atom-index or bond.to == atom-index,
+  ).len()
+  let first-neighbor(atom-index) = {
+    for bond in structural-bonds {
+      if bond.from == atom-index { return bond.to }
+      if bond.to == atom-index { return bond.from }
+    }
+    none
+  }
+  let force-linear-carbon-label(atom-index) = {
+    let atom = molecule-layout.atoms.at(atom-index)
+    (
+      _is-carbon(atom)
+        and atom.at("abbrev", default: "") == ""
+        and atom-degree(atom-index) == 2
+        and structural-bonds.filter(bond => (
+          (bond.from == atom-index or bond.to == atom-index)
+            and bond.order == 2
+        )).len() == 2
+    )
+  }
+
+  let show-h-state = _normalize-show-h(
+    options.at("show-h", default: ()),
+  )
+  let actual-font-size = options.at("font-size", default: none)
+  let actual-font-size = if actual-font-size == none {
+    11pt * molecule-scale
+  } else {
+    actual-font-size
+  }
+  let font = options.at("font", default: "New Computer Modern")
+  let font = if font == auto { "New Computer Modern" } else { font }
+  let atom-label(body, size: actual-font-size) = text(
+    size: size,
+    font: font,
+    style: "normal",
+    weight: "regular",
+    body,
+  )
+  let content-size(body) = {
+    let measured = measure(body)
+    (
+      width: measured.width / canvas-scale,
+      height: measured.height / canvas-scale,
+    )
+  }
+  let padding = 1pt / canvas-scale
+  let label-margin = calc.max(
+    0.27 * molecule-scale,
+    actual-font-size / canvas-scale * 0.70,
+  )
+
+  let visible-boxes = ()
+  let visual-box(center-x, center-y, width, height) = (
+    left: center-x - width / 2,
+    right: center-x + width / 2,
+    bottom: center-y - height / 2,
+    top: center-y + height / 2,
+  )
+
+  for atom-index in range(molecule-layout.atoms.len()) {
+    let atom = molecule-layout.atoms.at(atom-index)
+    if atom.at("virtual_h", default: false) { continue }
+    let position = _rendered-atom-position(
+      atom,
+      rotation,
+      scale: molecule-scale,
+    )
+    visible-boxes.push(visual-box(position.x, position.y, 0.0, 0.0))
+
+    let force-hydrogen = show-h-state.indices.contains(atom-index)
+    let displays-label = _has-label(
+      atom,
+      show-all-h: show-h-state.all,
+      force: force-hydrogen,
+    ) or force-linear-carbon-label(atom-index)
+    if not displays-label { continue }
+
+    let abbreviation = atom.at("abbrev", default: "")
+    if abbreviation != "" {
+      let label = _abbreviation-label(
+        abbreviation,
+        atom-label,
+        actual-font-size,
+        actual-font-size,
+      )
+      let label-size = content-size(label)
+      let label-width = body => content-size(_abbreviation-label(
+        body,
+        atom-label,
+        actual-font-size,
+        actual-font-size,
+      )).width
+      let label-center-x = position.x - _label-anchor-offset(
+        abbreviation,
+        atom.at("abbrev_anchor", default: 0),
+        atom.at("abbrev_anchor_len", default: 0),
+        label-width,
+      )
+      visible-boxes.push(visual-box(
+        label-center-x,
+        position.y,
+        label-size.width + 2 * padding,
+        label-size.height + 2 * padding,
+      ))
+      continue
+    }
+
+    let visible-hydrogen-count = {
+      let count = atom.hcount + _visible-implicit-h(
+        atom,
+        show-all-h: show-h-state.all,
+        force: force-hydrogen,
+      )
+      if atom.at("stereo_h", default: "none") != "none" {
+        calc.max(0, count - 1)
+      } else {
+        count
+      }
+    }
+    let charge-string = if atom.charge == 1        { "+" }
+                        else if atom.charge == -1  { "\u{2212}" }
+                        else if atom.charge > 1    { str(atom.charge) + "+" }
+                        else if atom.charge < -1   { str(-atom.charge) + "\u{2212}" }
+                        else                       { "" }
+    let charge-content = if charge-string == "" {
+      []
+    } else {
+      h(0.12em) + super(atom-label(charge-string))
+    }
+    let isotope = atom.at("isotope", default: 0)
+    let isotope-content = if isotope > 0 {
+      super(atom-label(str(isotope)))
+    } else {
+      []
+    }
+    let symbol-content = isotope-content + atom-label(atom.symbol)
+    let hydrogen-content = if (
+      visible-hydrogen-count == 0
+        or (
+          _is-carbon(atom)
+            and not (show-h-state.all or force-hydrogen)
+        )
+    ) {
+      []
+    } else if visible-hydrogen-count == 1 {
+      atom-label("H")
+    } else {
+      atom-label("H") + sub(atom-label(str(visible-hydrogen-count)))
+    }
+    let degree = atom-degree(atom-index)
+    let terminal-heteroatom = (
+      hydrogen-content != []
+        and degree == 1
+        and not _is-carbon(atom)
+    )
+
+    if terminal-heteroatom {
+      let neighbor-index = first-neighbor(atom-index)
+      let neighbor-position = _rendered-atom-position(
+        molecule-layout.atoms.at(neighbor-index),
+        rotation,
+        scale: molecule-scale,
+      )
+      let direction-x = neighbor-position.x - position.x
+      let direction-y = neighbor-position.y - position.y
+      let complete-label = symbol-content + hydrogen-content + charge-content
+      let complete-size = content-size(complete-label)
+      let symbol-size = content-size(symbol-content)
+      if calc.abs(direction-x) >= calc.abs(direction-y) {
+        let away = if direction-x > 0 { -1.0 } else { 1.0 }
+        visible-boxes.push(visual-box(
+          position.x + away * (complete-size.width + padding) / 2,
+          position.y,
+          complete-size.width + padding,
+          complete-size.height + 2 * padding,
+        ))
+      } else {
+        let vertical-away = if direction-y > 0 { -1.0 } else { 1.0 }
+        visible-boxes.push(visual-box(
+          position.x + (complete-size.width - symbol-size.width) / 2,
+          position.y + vertical-away * (complete-size.height + padding) / 2,
+          complete-size.width + 2 * padding,
+          complete-size.height + padding,
+        ))
+      }
+      continue
+    }
+
+    let stacked-hydrogen = (
+      hydrogen-content != []
+        and degree >= 2
+        and not _is-carbon(atom)
+    )
+    if stacked-hydrogen {
+      let base-content = symbol-content + charge-content
+      let base-size = content-size(base-content)
+      let symbol-size = content-size(symbol-content)
+      visible-boxes.push(visual-box(
+        position.x + (base-size.width - symbol-size.width) / 2,
+        position.y,
+        base-size.width + 2 * padding,
+        base-size.height + 2 * padding,
+      ))
+      let hydrogen-size = content-size(hydrogen-content)
+      visible-boxes.push(visual-box(
+        position.x,
+        position.y + label-margin * 0.95,
+        hydrogen-size.width + 2 * padding,
+        hydrogen-size.height + 2 * padding,
+      ))
+      continue
+    }
+
+    let complete-label = symbol-content + hydrogen-content + charge-content
+    let complete-size = content-size(complete-label)
+    let symbol-size = content-size(symbol-content)
+    let symbol-centered-charge = (
+      hydrogen-content == [] and charge-content != []
+    )
+    visible-boxes.push(visual-box(
+      if symbol-centered-charge {
+        position.x + (complete-size.width - symbol-size.width) / 2
+      } else {
+        position.x
+      },
+      position.y,
+      complete-size.width + 2 * padding,
+      complete-size.height + 2 * padding,
+    ))
+  }
+
+  let minimum-x = visible-boxes.map(box => box.left).fold(
+    visible-boxes.first().left,
     calc.min,
   )
-  let maximum-atom-x = atom-x-coordinates.fold(
-    atom-x-coordinates.first(),
+  let maximum-x = visible-boxes.map(box => box.right).fold(
+    visible-boxes.first().right,
     calc.max,
   )
-  let minimum-atom-y = atom-y-coordinates.fold(
-    atom-y-coordinates.first(),
+  let minimum-y = visible-boxes.map(box => box.bottom).fold(
+    visible-boxes.first().bottom,
     calc.min,
   )
-  let maximum-atom-y = atom-y-coordinates.fold(
-    atom-y-coordinates.first(),
+  let maximum-y = visible-boxes.map(box => box.top).fold(
+    visible-boxes.first().top,
     calc.max,
   )
   let horizontal-padding = calc.max(
     0.0,
-    measured-width - (maximum-atom-x - minimum-atom-x),
+    measured-width - (maximum-x - minimum-x),
   ) / 2
   let vertical-padding = calc.max(
     0.0,
-    measured-height - (maximum-atom-y - minimum-atom-y),
+    measured-height - (maximum-y - minimum-y),
   ) / 2
   (
-    left: -minimum-atom-x + horizontal-padding,
-    right: maximum-atom-x + horizontal-padding,
-    bottom: -minimum-atom-y + vertical-padding,
-    top: maximum-atom-y + vertical-padding,
+    left: -minimum-x + horizontal-padding,
+    right: maximum-x + horizontal-padding,
+    bottom: -minimum-y + vertical-padding,
+    top: maximum-y + vertical-padding,
   )
 }
 
@@ -3270,10 +5106,25 @@
 ///   this reaction. Individual mol(..., show-indices: ...) calls can override it.
 /// -> content
 #let reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, show-indices: false, flow: "right", ..items) = {
+  _validate-nonnegative-length(gap-h, "reaction gap-h")
+  _validate-nonnegative-length(gap-v, "reaction gap-v")
+  _validate-positive-number(scale, "reaction scale")
+  _validate-bool(breakable, "reaction breakable")
+  _validate-bool(show-indices, "reaction show-indices")
   if flow not in ("right", "left", "up", "down") {
-    panic("reaction flow must be \"right\", \"left\", \"up\", or \"down\"")
+    _invalid-input(
+      "reaction flow",
+      "expected \"right\", \"left\", \"up\", or \"down\", got " + repr(flow),
+      "Choose one of the supported layout directions.",
+    )
   }
-  let steps = items.pos()
+  if items.pos().len() == 0 {
+    _invalid-input(
+      "reaction items",
+      "the reaction is empty",
+      "Pass at least one molecule, content item, or reaction arrow.",
+    )
+  }
   let is-reaction-arrow(item) = (
     type(item) == dictionary and item.at("__rxn_arrow__", default: false)
   )
@@ -3286,6 +5137,63 @@
   let is-molecule-item(item) = (
     type(item) == dictionary and item.at("__mol__", default: false)
   )
+  let is-bracket-group(item) = (
+    type(item) == dictionary and item.at("__bracket_group__", default: false)
+  )
+  let is-bracket-marker(item) = (
+    type(item) == dictionary and item.at("__bracket_marker__", default: false)
+  )
+
+  // Transparent bracket groups become marker-delimited runs on this reaction's
+  // canvas. Their molecule items consequently keep their ordinary species
+  // indices and remain addressable by annotations on either side.
+  let steps = ()
+  let next-bracket-group-index = 0
+  for item in items.pos() {
+    let recognized-item = (
+      is-bracket-group(item)
+        or is-reaction-arrow(item)
+        or is-electron-arrow(item)
+        or is-highlight(item)
+        or is-molecule-item(item)
+        or type(item) == _content-type
+        or type(item) == str
+    )
+    if not recognized-item {
+      _invalid-input(
+        "reaction item",
+        "expected content, mol(), rxn-arrow(), arrow(), highlight(), or brackets(), got "
+          + repr(item),
+        "Pass one of the supported reaction item types.",
+      )
+    }
+    if is-bracket-group(item) {
+      let group-index = next-bracket-group-index
+      next-bracket-group-index += 1
+      steps.push((
+        __bracket_marker__: true,
+        edge: "start",
+        group: group-index,
+        sup: item.sup,
+        sub: item.sub,
+        stroke: item.stroke,
+        gap: item.gap,
+      ))
+      for child in item.items {
+        if is-bracket-group(child) {
+          panic("nested transparent bracket groups are not supported")
+        }
+        steps.push(child)
+      }
+      steps.push((
+        __bracket_marker__: true,
+        edge: "end",
+        group: group-index,
+      ))
+    } else {
+      steps.push(item)
+    }
+  }
 
   // An `auto` arrow follows the flow: horizontal flows lay out with rightward
   // arrows (mirrored to point left below), vertical flows with downward ones.
@@ -3299,7 +5207,15 @@
   })
 
   let mechanism = steps.any(
-    item => is-electron-arrow(item) or is-highlight(item),
+    item => (
+      is-electron-arrow(item)
+        or is-highlight(item)
+        or is-bracket-marker(item)
+        or (
+          is-molecule-item(item)
+            and item.at("annotations", default: ()).len() > 0
+        )
+    ),
   )
 
   if not mechanism {
@@ -3501,16 +5417,21 @@
     block(breakable: breakable, scaled)
   } else {
     // ── Mechanism (shared canvas) path ──────────────────────────────────────
-    let canvas-scale = scale * 30pt
-    let font-size = 11pt * scale
-    let configuration = _annotation-configuration(canvas-scale, font-size, scale)
-    let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
+    // Draw at a neutral physical scale, then scale the completed canvas. This
+    // keeps absolute content, strokes, labels, reaction arrows, and molecular
+    // geometry in the same scaling model.
+    let canvas-scale = 30pt
+    let font-size = 11pt
+    let configuration = _annotation-configuration(canvas-scale, font-size, 1.0)
+    let the-scale = 1.0 // cetz.draw `scale` shadows names inside the canvas
     let gap = 1.0 // bond-length units between species
 
     context {
       let placed-species-list = ()       // referenceable items (mol/content), in species-index order
       let reaction-arrow-items = () // positioned but non-referenceable content
       let annotations = () // curly arrows and highlights
+      let bracket-items = ()
+      let bracket-starts = (:)
       let layout-cursor = 0.0
       let lift-clearance = 0.15  // gap between an arrow and a species lifted from its label slot
 
@@ -3531,6 +5452,10 @@
             "font-size",
             default: none,
           )
+          let molecule-bond-stroke = molecule-item.opts.at(
+            "bond-stroke",
+            default: none,
+          )
           let rotation = molecule-item.opts.at("rotation", default: 0deg)
           // Measure the rotated/mirrored/scaled molecule the same way the grid
           // path does, so wide-after-rotation species get accurate extents.
@@ -3539,6 +5464,9 @@
           // center (layout coordinates are centroid-centered).
           let measurement-options = molecule-item.opts
           measurement-options.insert("scale", the-scale * molecule-scale)
+          if "show-indices" not in measurement-options {
+            measurement-options.insert("show-indices", show-indices)
+          }
           let measured-molecule = measure(
             smiles(molecule-item.spec, ..measurement-options),
           )
@@ -3548,6 +5476,8 @@
             molecule-scale,
             measured-molecule.width / canvas-scale,
             measured-molecule.height / canvas-scale,
+            options: measurement-options,
+            canvas-scale: canvas-scale,
           )
           (
             kind: "mol-smiles",
@@ -3561,6 +5491,7 @@
             bounds: bounds,
             size: (bounds.left + bounds.right, bounds.top + bounds.bottom),
             label: molecule-item.label,
+            annotations: molecule-item.at("annotations", default: ()),
             opts: molecule-item.opts,
             canvas-scale: canvas-scale,
             actual-font-size: if molecule-font-size == none {
@@ -3568,11 +5499,17 @@
             } else {
               molecule-font-size
             },
+            actual-bond-stroke: if molecule-bond-stroke == none {
+              0.9pt * molecule-scale
+            } else {
+              molecule-bond-stroke
+            },
             font: molecule-item.opts.at(
               "font",
               default: "New Computer Modern",
             ),
             show-h: molecule-item.opts.at("show-h", default: ()),
+            aromatic: molecule-item.opts.at("aromatic", default: "kekule"),
           )
         } else {
           let measured-content = measure(molecule-item.spec)
@@ -3594,6 +5531,7 @@
             ),
             size: (width, height),
             label: molecule-item.label,
+            annotations: molecule-item.at("annotations", default: ()),
           )
         }
       }
@@ -3607,9 +5545,142 @@
           )
       )
 
+      let scope-reference-to-species(reference, species-index) = {
+        if type(reference) != dictionary or "__ref__" not in reference {
+          return reference
+        }
+        let scoped-reference = reference
+        if reference.__ref__ in ("atom", "bond", "lp") {
+          scoped-reference.species = species-index
+        } else if reference.__ref__ == "species" {
+          scoped-reference.index = species-index
+        }
+        scoped-reference
+      }
+      let scope-local-annotation(annotation, species-index) = {
+        let scoped-annotation = annotation
+        if is-electron-arrow(annotation) {
+          scoped-annotation.from = scope-reference-to-species(
+            annotation.from,
+            species-index,
+          )
+          scoped-annotation.to = scope-reference-to-species(
+            annotation.to,
+            species-index,
+          )
+        } else if is-highlight(annotation) {
+          scoped-annotation.ref = if type(annotation.ref) == array {
+            annotation.ref.map(reference => (
+              scope-reference-to-species(reference, species-index)
+            ))
+          } else {
+            scope-reference-to-species(annotation.ref, species-index)
+          }
+        } else {
+          panic("mol positional items must be arrow() or highlight()")
+        }
+        scoped-annotation
+      }
+      let register-species(placed-species, species-list, annotation-list) = {
+        let species-index = species-list.len()
+        let local-annotations = placed-species.at(
+          "annotations",
+          default: (),
+        ).map(annotation => (
+          scope-local-annotation(annotation, species-index)
+        ))
+        (
+          species-list: species-list + (placed-species,),
+          annotations: annotation-list + local-annotations,
+        )
+      }
+
       for item in steps {
         if is-electron-arrow(item) or is-highlight(item) {
           annotations.push(item)
+        } else if is-bracket-marker(item) and item.edge == "start" {
+          let bracket-gap = item.gap.to-absolute() / canvas-scale
+          let tick-length = (0.18em).to-absolute() / canvas-scale
+          bracket-starts.insert(str(item.group), (
+            left: layout-cursor,
+            species-start: placed-species-list.len(),
+            arrow-start: reaction-arrow-items.len(),
+            sup: item.sup,
+            sub: item.sub,
+            stroke: item.stroke,
+            gap: bracket-gap,
+            tick: tick-length,
+          ))
+          layout-cursor += tick-length + bracket-gap
+        } else if is-bracket-marker(item) and item.edge == "end" {
+          let bracket-start = bracket-starts.at(str(item.group))
+          let grouped-species = placed-species-list.slice(
+            bracket-start.species-start,
+            placed-species-list.len(),
+          )
+          let grouped-arrows = reaction-arrow-items.slice(
+            bracket-start.arrow-start,
+            reaction-arrow-items.len(),
+          )
+          if grouped-species.len() == 0 and grouped-arrows.len() == 0 {
+            panic("transparent brackets require at least one visible reaction item")
+          }
+          let bottom = 0.0
+          let top = 0.0
+          for grouped-species-item in grouped-species {
+            bottom = calc.min(
+              bottom,
+              grouped-species-item.origin.at(1) - grouped-species-item.bounds.bottom,
+            )
+            top = calc.max(
+              top,
+              grouped-species-item.origin.at(1) + grouped-species-item.bounds.top,
+            )
+          }
+          for grouped-arrow in grouped-arrows {
+            let arrow-height = measure(grouped-arrow.body).height / canvas-scale
+            bottom = calc.min(bottom, grouped-arrow.origin.at(1) - arrow-height / 2)
+            top = calc.max(top, grouped-arrow.origin.at(1) + arrow-height / 2)
+          }
+          let content-right = calc.max(
+            bracket-start.left + bracket-start.tick + bracket-start.gap,
+            layout-cursor - gap,
+          )
+          let left-line = bracket-start.left + bracket-start.tick
+          let right-line = content-right + bracket-start.gap
+          let bracket-bottom = bottom - bracket-start.gap
+          let bracket-top = top + bracket-start.gap
+          let script-gap = (0.12em).to-absolute() / canvas-scale
+          let script-content = if bracket-start.sup == none and bracket-start.sub == none {
+            none
+          } else {
+            stack(
+              dir: ttb,
+              spacing: 1fr,
+              if bracket-start.sup != none {
+                box(text(size: 0.85em, bracket-start.sup))
+              } else { box() },
+              if bracket-start.sub != none {
+                box(text(size: 0.85em, bracket-start.sub))
+              } else { box() },
+            )
+          }
+          let script-width = if script-content == none {
+            0.0
+          } else {
+            measure(script-content).width / canvas-scale + script-gap
+          }
+          bracket-items.push((
+            left-line: left-line,
+            right-line: right-line,
+            bottom: bracket-bottom,
+            top: bracket-top,
+            tick: bracket-start.tick,
+            stroke: bracket-start.stroke,
+            script: script-content,
+            script-gap: script-gap,
+          ))
+          layout-cursor = right-line + bracket-start.tick + script-width + gap
         } else if is-reaction-arrow(item) {
           // mol() items in the arrow's above/below slots are lifted out of the
           // arrow body and registered as species of their own (above before
@@ -3668,22 +5739,26 @@
                 center-x
                   + (lift-above.bounds.left - lift-above.bounds.right) / 2
               )
-              placed-species-list.push(position-species(
+              let registered = register-species(position-species(
                 lift-above,
                 origin-x,
                 arrow-height / 2 + lift-clearance + lift-above.bounds.bottom,
-              ))
+              ), placed-species-list, annotations)
+              placed-species-list = registered.species-list
+              annotations = registered.annotations
             }
             if lift-below != none {
               let origin-x = (
                 center-x
                   + (lift-below.bounds.left - lift-below.bounds.right) / 2
               )
-              placed-species-list.push(position-species(
+              let registered = register-species(position-species(
                 lift-below,
                 origin-x,
                 -(arrow-height / 2 + lift-clearance + lift-below.bounds.top),
-              ))
+              ), placed-species-list, annotations)
+              placed-species-list = registered.species-list
+              annotations = registered.annotations
             }
             layout-cursor += slot-width + gap
           } else {
@@ -3693,24 +5768,28 @@
             let center-x = layout-cursor + left-width + arrow-width / 2
             reaction-arrow-items.push((body: body, origin: (center-x, 0)))
             if lift-above != none {
-              placed-species-list.push(position-species(
+              let registered = register-species(position-species(
                 lift-above,
                 center-x
                   + arrow-width / 2
                   + lift-clearance
                   + lift-above.bounds.left,
                 0,
-              ))
+              ), placed-species-list, annotations)
+              placed-species-list = registered.species-list
+              annotations = registered.annotations
             }
             if lift-below != none {
-              placed-species-list.push(position-species(
+              let registered = register-species(position-species(
                 lift-below,
                 center-x
                   - arrow-width / 2
                   - lift-clearance
                   - lift-below.bounds.right,
                 0,
-              ))
+              ), placed-species-list, annotations)
+              placed-species-list = registered.species-list
+              annotations = registered.annotations
             }
             layout-cursor += left-width + arrow-width + right-width + gap
           }
@@ -3718,15 +5797,27 @@
           let molecule-item = if is-molecule-item(item) {
             item
           } else {
-            (__mol__: true, spec: item, label: none, offset: (0, 0), opts: (:))
+            (__mol__: true, spec: item, label: none, offset: (0, 0), annotations: (), opts: (:))
           }
           let placed-species = build-placed-species(molecule-item)
           // Place the origin so the molecule's actual left edge lands at the
           // layout-cursor, then advance by its full rotated width plus the gap.
-          placed-species-list.push(position-species(placed-species, layout-cursor + placed-species.bounds.left, 0))
+          let registered = register-species(position-species(
+            placed-species,
+            layout-cursor + placed-species.bounds.left,
+            0,
+          ), placed-species-list, annotations)
+          placed-species-list = registered.species-list
+          annotations = registered.annotations
           layout-cursor += placed-species.bounds.left + placed-species.bounds.right + gap
         }
       }
+
+      _validate-annotations(
+        annotations,
+        placed-species-list,
+        "reaction annotation",
+      )
 
       let canvas = cetz.canvas(length: canvas-scale, {
         import cetz.draw: *
@@ -3737,6 +5828,36 @@
               annotation,
               placed-species-list,
               configuration,
+            )
+          }
+        }
+
+        for bracket-item in bracket-items {
+          line(
+            (bracket-item.left-line + bracket-item.tick, bracket-item.bottom),
+            (bracket-item.left-line, bracket-item.bottom),
+            (bracket-item.left-line, bracket-item.top),
+            (bracket-item.left-line + bracket-item.tick, bracket-item.top),
+            stroke: bracket-item.stroke,
+          )
+          line(
+            (bracket-item.right-line - bracket-item.tick, bracket-item.bottom),
+            (bracket-item.right-line, bracket-item.bottom),
+            (bracket-item.right-line, bracket-item.top),
+            (bracket-item.right-line - bracket-item.tick, bracket-item.top),
+            stroke: bracket-item.stroke,
+          )
+          if bracket-item.script != none {
+            content(
+              (
+                bracket-item.right-line + bracket-item.tick + bracket-item.script-gap,
+                (bracket-item.bottom + bracket-item.top) / 2,
+              ),
+              box(
+                height: (bracket-item.top - bracket-item.bottom) * canvas-scale,
+                bracket-item.script,
+              ),
+              anchor: "west",
             )
           }
         }
@@ -3814,7 +5935,17 @@
         }
       })
 
-      block(breakable: breakable, canvas)
+      let scaled-canvas = if scale == 1.0 {
+        canvas
+      } else {
+        _typst-scale(
+          x: scale * 100%,
+          y: scale * 100%,
+          reflow: true,
+          canvas,
+        )
+      }
+      block(breakable: breakable, scaled-canvas)
     }
   }
 }
@@ -3846,18 +5977,51 @@
 #let step(
   label: none, into: none, out: none, bend: auto, merge: false, rotation: "straight",
   label-offset: (0, 0), into-offset: (0, 0), out-offset: (0, 0),
-) = (
-  __cycle_step__: true,
-  label: label,
-  into: into,
-  out: out,
-  bend: bend,
-  merge: merge,
-  rotation: rotation,
-  label-offset: label-offset,
-  into-offset: into-offset,
-  out-offset: out-offset,
-)
+) = {
+  if bend != auto {
+    _validate-number(bend, "step bend")
+  }
+  _validate-bool(merge, "step merge")
+  if (
+    rotation not in ("straight", "auto")
+      and type(rotation) != _angle-type
+  ) {
+    _invalid-input(
+      "step rotation",
+      "expected \"straight\", \"auto\", or an angle, got " + repr(rotation),
+      "Choose a supported label rotation.",
+    )
+  }
+  _validate-offset(label-offset, "step label-offset")
+  _validate-offset(into-offset, "step into-offset")
+  _validate-offset(out-offset, "step out-offset")
+  for (argument-name, argument-value) in (("into", into), ("out", out)) {
+    if (
+      argument-value != none
+        and type(argument-value) != str
+        and type(argument-value) != _content-type
+    ) {
+      _invalid-input(
+        "step " + argument-name,
+        "expected none, a SMILES string, or content, got "
+          + repr(argument-value),
+        "Pass a SMILES string directly or render the reagent before passing it.",
+      )
+    }
+  }
+  (
+    __cycle_step__: true,
+    label: label,
+    into: into,
+    out: out,
+    bend: bend,
+    merge: merge,
+    rotation: rotation,
+    label-offset: label-offset,
+    into-offset: into-offset,
+    out-offset: out-offset,
+  )
+}
 
 // Render a reagent spec (SMILES string or content) to content, for the small
 // molecules that feed into or out of a cycle arc.
@@ -3876,7 +6040,7 @@
     0deg
   } else if rotation == "auto" {
     _upright-angle(midpoint-angle)
-  } else if type(rotation) == angle {
+  } else if type(rotation) == _angle-type {
     rotation
   } else {
     panic("step rotation must be \"straight\", \"auto\", or an angle")
@@ -3927,6 +6091,43 @@
   ..items,
 ) = {
   let cycle-items = items.pos()
+  if radius != auto {
+    _validate-positive-number(radius, "cycle radius")
+  }
+  if type(start) != _angle-type {
+    _invalid-input(
+      "cycle start",
+      "expected an angle, got " + repr(start),
+      "Pass an angle such as 90deg.",
+    )
+  }
+  _validate-bool(clockwise, "cycle clockwise")
+  _validate-positive-number(scale, "cycle scale")
+  _validate-positive-number(reagent-scale, "cycle reagent-scale")
+  _validate-number(reagent-bend, "cycle reagent-bend")
+  _validate-number(arc-gap, "cycle arc-gap")
+  if type(arrow-color) != _color-type {
+    _invalid-input(
+      "cycle arrow-color",
+      "expected a color, got " + repr(arrow-color),
+      "Pass a Typst color.",
+    )
+  }
+  if label-color != auto and type(label-color) != _color-type {
+    _invalid-input(
+      "cycle label-color",
+      "expected auto or a color, got " + repr(label-color),
+      "Use label-color: auto or pass a Typst color.",
+    )
+  }
+  _validate-bool(breakable, "cycle breakable")
+  if cycle-items.len() == 0 {
+    _invalid-input(
+      "cycle items",
+      "the cycle is empty",
+      "Pass at least one molecular species or content item.",
+    )
+  }
   let is-step(item) = (
     type(item) == dictionary and item.at("__cycle_step__", default: false)
   )
@@ -3939,10 +6140,33 @@
   let arc-steps = ()
   for item in cycle-items {
     if is-step(item) {
-      if arc-steps.len() < species.len() {
-        arc-steps.push(item)
+      if species.len() == 0 {
+        _invalid-input(
+          "cycle step",
+          "a step appears before the first species",
+          "Place each step() after the species where its arc begins.",
+        )
       }
+      if arc-steps.len() >= species.len() {
+        _invalid-input(
+          "cycle step",
+          "more than one step follows the same species",
+          "Place at most one step() between consecutive species.",
+        )
+      }
+      arc-steps.push(item)
     } else {
+      if (
+        type(item) != str
+          and type(item) != _content-type
+          and not is-molecule-item(item)
+      ) {
+        _invalid-input(
+          "cycle species",
+          "expected a SMILES string, content, or mol(), got " + repr(item),
+          "Pass a renderable species item.",
+        )
+      }
       // Pad a missing step for the previous species before starting a new one.
       while arc-steps.len() < species.len() {
         arc-steps.push(step())
@@ -3953,7 +6177,6 @@
   while arc-steps.len() < species.len() { arc-steps.push(step()) }
 
   let species-count = species.len()
-  if species-count == 0 { return [] }
 
   let canvas-scale = scale * 30pt
   let molecule-scale = scale
@@ -4369,13 +6592,16 @@
 /// intermediate. `sup` / `sub` are typeset at the top-right / bottom-right (a charge,
 /// a ‡ for a transition state, …).
 ///
-/// - body (content): The content to enclose.
+/// - ..body (content / reaction items): One content value to enclose, or a list
+///   of mol(), rxn-arrow(), arrow(), and highlight() items consumed directly by
+///   an enclosing reaction(). Reaction items remain referenceable across the
+///   bracket boundary.
 /// - sup (content): Optional superscript outside the right bracket. Default: none.
 /// - sub (content): Optional subscript outside the right bracket. Default: none.
 /// - stroke (stroke): Bracket stroke. Default: 0.6pt black.
 /// - gap (length): Padding between the brackets and the body. Default: 0.3em.
-/// -> content
-#let brackets(body, sup: none, sub: none, stroke: 0.6pt + black, gap: 0.3em) = context {
+/// -> content / dictionary (consumed by #reaction)
+#let _render-brackets(body, sup: none, sub: none, stroke: 0.6pt + black, gap: 0.3em) = context {
   let body-height = measure(body).height
   let absolute-gap = gap.to-absolute()
   let bracket-tick-length = (0.18em).to-absolute()
@@ -4409,4 +6635,71 @@
     ))
   }
   box(baseline: 50% + 0.3em)[#bracket(true)#h(absolute-gap)#box(baseline: 50% - body-height / 2, body)#h(absolute-gap)#bracket(false)#if script-content != none { h(0.12em); script-content }]
+}
+
+#let brackets(..arguments) = {
+  let body-items = arguments.pos()
+  let options = arguments.named()
+  if body-items.len() == 0 {
+    _invalid-input(
+      "brackets body",
+      "no content or reaction items were provided",
+      "Pass one content value or one or more reaction items.",
+    )
+  }
+  for option-name in options.keys() {
+    if option-name not in ("sup", "sub", "stroke", "gap") {
+      _invalid-input(
+        "brackets option " + repr(option-name),
+        "the option is not supported",
+        "Use sup, sub, stroke, or gap.",
+      )
+    }
+  }
+  let sup = options.at("sup", default: none)
+  let sub = options.at("sub", default: none)
+  let stroke = options.at("stroke", default: 0.6pt + black)
+  let gap = options.at("gap", default: 0.3em)
+  if type(stroke) != _stroke-type {
+    _invalid-input(
+      "brackets stroke",
+      "expected a stroke, got " + repr(stroke),
+      "Pass a stroke such as 0.6pt + black.",
+    )
+  }
+  _validate-nonnegative-length(gap, "brackets gap")
+  let is-reaction-item(item) = (
+    type(item) == dictionary and (
+      item.at("__mol__", default: false)
+        or item.at("__rxn_arrow__", default: false)
+        or item.at("__arrow__", default: false)
+        or item.at("__highlight__", default: false)
+        or item.at("__bracket_group__", default: false)
+    )
+  )
+  if body-items.len() > 1 and body-items.any(item => not is-reaction-item(item)) {
+    _invalid-input(
+      "brackets body",
+      "multiple body values are only supported for reaction items",
+      "Pass one ordinary content value, or pass mol()/rxn-arrow()/arrow()/highlight() items inside reaction().",
+    )
+  }
+  if body-items.len() == 1 and not is-reaction-item(body-items.first()) {
+    _render-brackets(
+      body-items.first(),
+      sup: sup,
+      sub: sub,
+      stroke: stroke,
+      gap: gap,
+    )
+  } else {
+    (
+      __bracket_group__: true,
+      items: body-items,
+      sup: sup,
+      sub: sub,
+      stroke: stroke,
+      gap: gap,
+    )
+  }
 }

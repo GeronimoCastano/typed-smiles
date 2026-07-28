@@ -34,6 +34,12 @@ pub struct AtomOutput {
     /// Character length of the abbreviation attachment glyph. Zero means centered.
     #[serde(default)]
     pub abbrev_anchor_len: usize,
+    /// Page-space rendering displacement in bond-length units. These values do
+    /// not alter the coordinates chosen by the layout engine.
+    #[serde(default)]
+    pub abbrev_offset_x: f64,
+    #[serde(default)]
+    pub abbrev_offset_y: f64,
     /// Parsed bracket chirality, e.g. "tetra_anti" or "tetra_clockwise".
     #[serde(default)]
     pub chirality: String,

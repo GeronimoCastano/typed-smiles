@@ -98,6 +98,8 @@ fn build_atom_outputs(
                 abbrev_style: atom.abbrev_style.clone(),
                 abbrev_anchor: atom.abbrev_anchor,
                 abbrev_anchor_len: atom.abbrev_anchor_len,
+                abbrev_offset_x: atom.abbrev_offset_x,
+                abbrev_offset_y: atom.abbrev_offset_y,
                 chirality: atom.chirality.as_str().to_string(),
                 stereo_h: hydrogen_stereo[atom_index]
                     .map(|(stereo, _)| stereo.as_str().to_string())
@@ -201,6 +203,8 @@ fn append_virtual_hydrogen(
         abbrev_style: String::new(),
         abbrev_anchor: 0,
         abbrev_anchor_len: 0,
+        abbrev_offset_x: 0.0,
+        abbrev_offset_y: 0.0,
         chirality: "none".to_string(),
         stereo_h: "none".to_string(),
         stereo_h_dir: Vec2::default(),
