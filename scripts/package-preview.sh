@@ -54,7 +54,9 @@ mkdir -p "$package_target/src" "$package_target/plugin" "$package_target/assets/
 cp "$repo_root/typst.toml" "$package_target/typst.toml"
 cp "$repo_root/README.md" "$package_target/README.md"
 cp "$repo_root/LICENSE" "$package_target/LICENSE"
-cp "$repo_root/src/lib.typ" "$package_target/src/lib.typ"
+for source_file in "$repo_root"/src/*.typ; do
+  cp "$source_file" "$package_target/src/"
+done
 cp "$repo_root/plugin/typst_smiles_plugin.wasm" "$package_target/plugin/typst_smiles_plugin.wasm"
 
 found_readme_image=0
