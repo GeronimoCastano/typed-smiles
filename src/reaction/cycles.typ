@@ -1,7 +1,7 @@
 // Catalytic-cycle declarations, layout, and drawing.
 
 #import "@preview/cetz:0.5.2"
-#import "validation.typ": (
+#import "../validation.typ": (
   _color-type,
   _angle-type,
   _content-type,
@@ -11,11 +11,11 @@
   _validate-bool,
   _validate-offset,
 )
-#import "chemistry.typ": _compute-layout
-#import "styles.typ": _resolve-foreground-theme
-#import "molecule-rendering.typ": _mirror-layout, _draw-molecule
-#import "molecule.typ": smiles, _typst-rotate
-#import "reactions.typ": mol, reaction
+#import "../chemistry.typ": _compute-layout
+#import "../styles.typ": _resolve-foreground-theme
+#import "../molecule/rendering.typ": _mirror-layout, _draw-molecule
+#import "../molecule/api.typ": smiles, _typst-rotate
+#import "schemes.typ": mol, reaction
 
 // ── Catalytic cycle ───────────────────────────────────────────────────────────
 

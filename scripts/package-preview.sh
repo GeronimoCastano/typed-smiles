@@ -54,8 +54,11 @@ mkdir -p "$package_target/src" "$package_target/plugin" "$package_target/assets/
 cp "$repo_root/typst.toml" "$package_target/typst.toml"
 cp "$repo_root/README.md" "$package_target/README.md"
 cp "$repo_root/LICENSE" "$package_target/LICENSE"
-for source_file in "$repo_root"/src/*.typ; do
-  cp "$source_file" "$package_target/src/"
+find "$repo_root/src" -type f -name '*.typ' | while IFS= read -r source_file; do
+  relative_path=${source_file#"$repo_root/"}
+  destination_path="$package_target/$relative_path"
+  mkdir -p "$(dirname -- "$destination_path")"
+  cp "$source_file" "$destination_path"
 done
 cp "$repo_root/plugin/typst_smiles_plugin.wasm" "$package_target/plugin/typst_smiles_plugin.wasm"
 

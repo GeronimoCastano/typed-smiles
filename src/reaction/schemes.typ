@@ -1,7 +1,7 @@
 // Reaction item construction, scheme layout, and shared-canvas mechanisms.
 
 #import "@preview/cetz:0.5.2"
-#import "validation.typ": (
+#import "../validation.typ": (
   _color-type,
   _angle-type,
   _stroke-type,
@@ -13,20 +13,20 @@
   _validate-bool,
   _validate-offset,
 )
-#import "chemistry.typ": _compute-layout
-#import "styles.typ": _resolve-foreground-theme
-#import "molecule-rendering.typ": (
+#import "../chemistry.typ": _compute-layout
+#import "../styles.typ": _resolve-foreground-theme
+#import "../molecule/rendering.typ": (
   _mirror-layout,
   _draw-molecule,
   _molecule-bounds,
 )
-#import "annotations.typ": (
+#import "../mechanism/annotations.typ": (
   _validate-annotations,
   _draw-highlight,
   _draw-arrow,
   _annotation-configuration,
 )
-#import "molecule.typ": smiles, _typst-scale
+#import "../molecule/api.typ": smiles, _typst-scale
 
 // ── Reaction scheme helpers ───────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 // Mechanism-arrow and highlight construction, validation, and drawing.
 
 #import "@preview/cetz:0.5.2"
-#import "validation.typ": (
+#import "../validation.typ": (
   _color-type,
   _length-type,
   _angle-type,
@@ -14,7 +14,7 @@
   _validate-index,
   _available-index-description,
 )
-#import "molecule-rendering.typ": _label-anchor-offset, _abbreviation-label
+#import "../molecule/rendering.typ": _label-anchor-offset, _abbreviation-label
 #import "references.typ": (
   _atom-position,
   _bond-arrow-attachment,

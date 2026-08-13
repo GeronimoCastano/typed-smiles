@@ -1,13 +1,13 @@
 // Addressable atom, bond, lone-pair, and species references.
 
-#import "validation.typ": (
+#import "../validation.typ": (
   _invalid-input,
   _validate-index,
   _validate-offset,
   _validate-named-arguments,
   _normalize-show-h,
 )
-#import "molecule-rendering.typ": (
+#import "../molecule/rendering.typ": (
   _is-carbon,
   _visible-implicit-h,
   _has-label,

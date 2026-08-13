@@ -1,7 +1,7 @@
 // Public molecule rendering APIs and their synchronous call-boundary validation.
 
 #import "@preview/cetz:0.5.2"
-#import "validation.typ": (
+#import "../validation.typ": (
   _color-type,
   _length-type,
   _angle-type,
@@ -11,14 +11,14 @@
   _validate-offset,
   _validate-molecule-options,
 )
-#import "chemistry.typ": _compute-layout
-#import "styles.typ": _resolve-foreground-theme, _canvas-scale, _style-preset
-#import "molecule-rendering.typ": (
+#import "../chemistry.typ": _compute-layout
+#import "../styles.typ": _resolve-foreground-theme, _canvas-scale, _style-preset
+#import "rendering.typ": (
   _rendered-atom-position,
   _mirror-layout,
   _draw-molecule,
 )
-#import "annotations.typ": (
+#import "../mechanism/annotations.typ": (
   _validate-annotations,
   _draw-highlight,
   _draw-arrow,

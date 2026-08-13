@@ -1,14 +1,14 @@
 // Molecular geometry transforms, labels, and low-level CeTZ drawing.
 
 #import "@preview/cetz:0.5.2"
-#import "validation.typ": (
+#import "../validation.typ": (
   _normalize-show-h,
   _normalize-atom-annotations,
   _opacity-ratio,
   _normalize-bond-customizations,
   _validate-molecule-options,
 )
-#import "styles.typ": _atom-color, _label-color, _canvas-scale
+#import "../styles.typ": _atom-color, _label-color, _canvas-scale
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
