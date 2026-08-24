@@ -202,6 +202,7 @@ hydrogen with `show-h: "all"`. For a fully explicit drawing, use
   ),
 )
 #smiles("CC(N)C(=O)O", show-h: 1)   // label just the central C-H
+#smiles("CC(N)C(=O)O", show-h: "all") // label every implicit H
 #smiles("CCO", show-h: "skeleton")   // draw every H with its own bond
 ```
 
