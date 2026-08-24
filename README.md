@@ -205,7 +205,7 @@ hydrogen with `show-h: "all"`. For a fully explicit drawing, use
 #smiles("CCO", show-h: "skeleton")   // draw every H with its own bond
 ```
 
-![Atom annotation and per-atom hydrogen examples](assets/readme/atom-annotations.png)
+![Atom annotation, per-atom hydrogen, and skeleton examples](assets/readme/atom-annotations-skeleton.png)
 
 ## Lone pairs
 
