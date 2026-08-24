@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 #import "@preview/cetz:0.5.2"
 
 #set text(font: "New Computer Modern", size: 11pt)
@@ -31,6 +31,7 @@
   [*Furan* \ #text(size: 8pt, `C1=CC=CO1`) \ #smiles("C1=CC=CO1")],
   [*Phenylalanine* \ #text(size: 8pt, `NC(CC1=CC=CC=C1)C(=O)O`) \ #smiles("NC(CC1=CC=CC=C1)C(=O)O")],
 )
+
 
 = Ring System Regression Tests
 
@@ -3937,4 +3938,215 @@ manual custom-label displacement.
 )
 
 
+#pagebreak()
+
+= Full hydrogen skeleton (`show-h: "skeleton"`)
+
+`show-h: "skeleton"` draws every hydrogen as its own atom with a single bond,
+including hydrogens that are implicit in the SMILES. This is useful when the
+connectivity of every hydrogen should be visible rather than compressed into
+an `H` subscript.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Ethanol* \
+    #text(size: 8pt, `CCO`) \
+    #smiles("CCO", show-h: "skeleton", color: false)],
+
+  [*Isopropanol* \
+    #text(size: 8pt, `CC(C)O`) \
+    #smiles("CC(C)O", show-h: "skeleton", color: false)],
+
+  [*Benzene* \
+    #text(size: 8pt, `c1ccccc1`) \
+    #smiles("c1ccccc1", show-h: "skeleton", color: false)],
+
+  [*Chiral alanine* \
+    #text(size: 8pt, `N[C@@H](C)C(=O)O`) \
+    #smiles("N[C@@H](C)C(=O)O", show-h: "skeleton", color: false)],
+)
+
+
+#pagebreak()
+
+= Molecular formulas from SMILES (`mol-formula`)
+
+`mol-formula` counts explicit and implicit hydrogens, combines dot-separated
+components, and formats the result in Hill order. The examples below are
+checked against PubChem molecular formulas for the corresponding structures.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Ethanol* \
+    #text(size: 8pt, `CCO`) \
+    #mol-formula("CCO")],
+
+  [*Benzene* \
+    #text(size: 8pt, `c1ccccc1`) \
+    #mol-formula("c1ccccc1")],
+
+  [*Caffeine* \
+    #text(size: 8pt, `CN1C=NC2=C1C(=O)N(C(=O)N2C)C`) \
+    #mol-formula("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")],
+
+  [*Sodium acetate* \
+    #text(size: 8pt, `CC(=O)[O-].[Na+]`) \
+    #mol-formula("CC(=O)[O-].[Na+]")],
+
+  [*Ammonium chloride* \
+    #text(size: 8pt, `[NH4+].[Cl-]`) \
+    #mol-formula("[NH4+].[Cl-]")],
+
+  [*Glucose* \
+    #text(size: 8pt, `C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O`) \
+    #mol-formula("C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O")],
+)
+
+
 #v(2cm)
+
+
+#pagebreak()
+
+= Orthogonal displayed hydrogens (`show-h: "skeleton"`)
+
+The displayed-formula convention uses a straight row for eligible unbranched
+heavy-atom chains. Carbon-bound hydrogens use clean horizontal and vertical
+bonds; atoms with lone pairs retain their characteristic bent or evenly-spread
+2D bond angles. The ordinary molecule layout remains unchanged.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Ethanol* \
+    #smiles("CCO", show-h: "skeleton")],
+
+  [*Butane* \
+    #smiles("CCCC", show-h: "skeleton")],
+
+  [*Acetic acid* \
+    #smiles("CC(=O)O", show-h: "skeleton")],
+
+  [*Ordinary rendering* \
+    #smiles("CCO")],
+)
+
+
+#pagebreak()
+
+= Linear heavy-atom skeletons and electron-domain angles (`show-h: "skeleton"`)
+
+Skeleton mode keeps explicit carbon chains linear while accounting for lone
+pairs in local hydrogen placement. Water is bent, and the three visible bonds
+around an amino nitrogen are evenly spread in the displayed 2D formula.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Water* \
+    #smiles("O", show-h: "skeleton")],
+
+  [*Amino ending* \
+    #smiles("C[NH2]", show-h: "skeleton")],
+
+  [*Ammonia* \
+    #smiles("N", show-h: "skeleton")],
+
+  [*Butane* \
+    #smiles("CCCC", show-h: "skeleton")],
+
+  [*Ordinary rendering* \
+    #smiles("CCCC")],
+)
+
+
+#pagebreak()
+
+= Colored skeleton palette (`show-h: "skeleton"`)
+
+Skeleton mode keeps the default CPK element colors: oxygen is red, nitrogen is
+blue, and explicit hydrogen labels and bonds use a neutral gray.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Ethanol* \
+    #smiles("CCO", show-h: "skeleton")],
+
+  [*Amino ending* \
+    #smiles("C[NH2]", show-h: "skeleton")],
+
+  [*Water* \
+    #smiles("O", show-h: "skeleton")],
+)
+
+
+#pagebreak()
+
+= Colored skeleton gallery (`show-h: "skeleton"`)
+
+Fifteen compact examples exercise the colored explicit-hydrogen layout across
+chains, branches, functional groups, halogens, sulfur, and an aromatic ring.
+
+#grid(
+  columns: (1fr, 1fr, 1fr, 1fr, 1fr),
+  gutter: 0.75em,
+  align: center + horizon,
+
+  [*Methane* \
+    #smiles("C", show-h: "skeleton", scale: 0.70)],
+
+  [*Water* \
+    #smiles("O", show-h: "skeleton", scale: 0.70)],
+
+  [*Ammonia* \
+    #smiles("N", show-h: "skeleton", scale: 0.70)],
+
+  [*Hydrogen peroxide* \
+    #smiles("OO", show-h: "skeleton", scale: 0.70)],
+
+  [*Methanol* \
+    #smiles("CO", show-h: "skeleton", scale: 0.70)],
+
+  [*Ethanol* \
+    #smiles("CCO", show-h: "skeleton", scale: 0.70)],
+
+  [*Propane* \
+    #smiles("CCC", show-h: "skeleton", scale: 0.70)],
+
+  [*Butane* \
+    #smiles("CCCC", show-h: "skeleton", scale: 0.70)],
+
+  [*Isopropanol* \
+    #smiles("CC(C)O", show-h: "skeleton", scale: 0.62)],
+
+  [*Acetone* \
+    #smiles("CC(=O)C", show-h: "skeleton", scale: 0.62)],
+
+  [*Acetic acid* \
+    #smiles("CC(=O)O", show-h: "skeleton", scale: 0.62)],
+
+  [*Ethylamine* \
+    #smiles("CCN", show-h: "skeleton", scale: 0.70)],
+
+  [*Chloromethane* \
+    #smiles("CCl", show-h: "skeleton", scale: 0.70)],
+
+  [*Dimethyl sulfide* \
+    #smiles("CSC", show-h: "skeleton", scale: 0.62)],
+
+  [*Benzene* \
+    #smiles("c1ccccc1", show-h: "skeleton", scale: 0.58)],
+)

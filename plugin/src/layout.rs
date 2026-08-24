@@ -567,7 +567,7 @@ pub(crate) fn implicit_h_count(molecule: &MoleculeGraph, atom_index: usize) -> u
         return 0;
     }
 
-    let Some(valence) = standard_valence(&atom.symbol) else {
+    let Some(normal_valences) = normal_valences(&atom.symbol) else {
         return 0;
     };
 
@@ -575,17 +575,27 @@ pub(crate) fn implicit_h_count(molecule: &MoleculeGraph, atom_index: usize) -> u
         .iter()
         .map(|&(_, bond_index)| molecule.bonds[bond_index].order.as_u8() as i16)
         .sum();
-    let remaining = valence - atom.charge as i16 - bond_order_sum;
+    let required_valence = atom.charge as i16 + bond_order_sum;
+    let valence = normal_valences
+        .iter()
+        .copied()
+        .find(|&candidate| candidate >= required_valence)
+        .unwrap_or(*normal_valences.last().unwrap());
+    let remaining = valence - required_valence;
     remaining.max(0) as u8
 }
 
-fn standard_valence(symbol: &str) -> Option<i16> {
+/// Normal valences used when an unbracketed organic-subset atom needs implicit
+/// hydrogens. The ordered alternatives let hypervalent P and S reach the next
+/// valid valence instead of silently losing hydrogen count.
+fn normal_valences(symbol: &str) -> Option<&'static [i16]> {
     match symbol {
-        "C" | "Si" | "Sn" => Some(4),
-        "N" | "P" | "As" => Some(3),
-        "O" | "S" | "Se" | "Te" => Some(2),
-        "B" => Some(3),
-        "F" | "Cl" | "Br" | "I" => Some(1),
+        "C" | "Si" | "Sn" => Some(&[4]),
+        "N" | "P" | "As" => Some(&[3, 5]),
+        "O" => Some(&[2]),
+        "S" | "Se" | "Te" => Some(&[2, 4, 6]),
+        "B" => Some(&[3]),
+        "F" | "Cl" | "Br" | "I" => Some(&[1]),
         _ => None,
     }
 }

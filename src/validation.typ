@@ -140,22 +140,24 @@
 }
 
 #let _normalize-show-h(show-h) = {
-  if show-h == "all" {
-    (all: true, indices: ())
+  if show-h == "skeleton" {
+    (all: false, skeleton: true, indices: ())
+  } else if show-h == "all" {
+    (all: true, skeleton: false, indices: ())
   } else if type(show-h) == array {
     for atom-index in show-h {
       _validate-index(atom-index, "show-h atom index")
     }
-    (all: false, indices: show-h)
+    (all: false, skeleton: false, indices: show-h)
   } else if type(show-h) == int {
     _validate-index(show-h, "show-h atom index")
-    (all: false, indices: (show-h,))
+    (all: false, skeleton: false, indices: (show-h,))
   } else {
     _invalid-input(
       "show-h",
-      "expected \"all\", an atom index, or an array of atom indices, got "
+      "expected \"skeleton\", \"all\", an atom index, or an array of atom indices, got "
         + repr(show-h),
-      "Use \"all\", 2, or (0, 2), for example.",
+      "Use \"skeleton\", \"all\", 2, or (0, 2), for example.",
     )
   }
 }

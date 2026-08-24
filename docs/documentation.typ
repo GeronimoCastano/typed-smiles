@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
 #import "@preview/cetz:0.5.2"
 
 #let version = "0.10.0"
@@ -62,7 +62,7 @@
   ce: ce, rxn-arrow: rxn-arrow,
   mol: mol, reaction: reaction, cycle: cycle, step: step,
   atom: atom, bond: bond, lp: lp, species: species, arrow: arrow,
-  highlight: highlight, brackets: brackets, mol-weight: mol-weight,
+  highlight: highlight, brackets: brackets, mol-formula: mol-formula, mol-weight: mol-weight,
   cetz: cetz,
 )
 
@@ -195,6 +195,7 @@ The package exports these main symbols:
   [#c("atom"), #c("bond"), #c("lp"), #c("species")], [References for arrows and highlights.],
   [#c("arrow"), #c("highlight")], [Mechanism arrows and shaded atom/bond regions.],
   [#c("brackets")], [Draw square brackets with optional corner marks.],
+  [#c("mol-formula")], [Compute and render a molecular formula from a SMILES string.],
   [#c("mol-weight")], [Compute molecular weight from a SMILES string.],
 )
 
@@ -260,7 +261,7 @@ The package exports these main symbols:
   [#c("theme")], [`auto` / `"light"` / `"dark"`], [`auto`], [CPK palette variant; `auto` picks "dark" when #c("fg") is light.],
   [#c("rotation")], [`angle`], [`0deg`], [Rotate the molecule; labels stay upright.],
   [#c("mirror")], [`none` / `"horizontal"` / `"vertical"`], [`none`], [Optional horizontal or vertical page-axis reflection.],
-  [#c("show-h")], [`"all"` / `int` / `array`], [`()`], [Implicit hydrogens to label beyond the default heteroatom hydrogens. Use #c("\"all\"") for every atom.],
+  [#c("show-h")], [`"skeleton"` / `"all"` / `int` / `array`], [`()`], [Implicit hydrogens to label beyond the default heteroatom hydrogens. Use #c("\"all\"") for compact labels or #c("\"skeleton\"") for separate H atoms and bonds.],
   [#c("aromatic")], [`"kekule"` / `"circle"`], [`"kekule"`], [Depict lowercase-aromatic rings with alternating double bonds or with an inscribed circle.],
   [#c("atom-annotations")], [`array`], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuple entries.],
   [#c("opacity")], [`ratio` / `float`], [`100%`], [Fade the whole drawing — bonds, labels, charges, lone pairs — e.g. for ghost molecules.],
@@ -472,16 +473,49 @@ Wedges and hashes change orientation as needed.]
   Hydrogens on heteroatoms are shown by default; carbon hydrogens are hidden.
   #c("show-h") selects carbon hydrogens without needing a trailing comma for one
   atom: use an integer for one atom, an array for several atoms, or #c("\"all\"")
-  for every implicit hydrogen. Use #c("show-indices: true") to read off the
-  indices while writing.
+  for every implicit hydrogen. Use #c("\"skeleton\"") to draw every hydrogen
+  as a separate atom with its own single bond. Eligible unbranched heavy-atom
+  chains become straight rows; carbon-bound hydrogens use clean orthogonal
+  directions, while lone pairs keep water bent and three-bond centers evenly
+  spread in the displayed 2D schematic. Rings, branches, unsaturated paths,
+  and stereochemical paths retain the normal heavy-atom layout. Ordinary
+  molecule placement is unchanged. With the default color mode, element labels
+  and bonds use the CPK palette and explicit skeleton hydrogens are gray. Use
+  #c("show-indices: true") to read off the indices while writing.
 
   #example(```typ
   #smiles("CC(N)C(=O)O") \
   #smiles("CC(N)C(=O)O", show-h: 1) \
   #smiles("CC(N)C(=O)O", show-h: (0, 1)) \
-  #smiles("CC(N)C(=O)O", show-h: "all")
+  #smiles("CC(N)C(=O)O", show-h: "all") \
+  #smiles("CCO", show-h: "skeleton")
   ```)
 ]
+
+// ═════════════════════════════════════════════════════════════════════════════
+= Molecular formula: #raw("mol-formula()")
+// ═════════════════════════════════════════════════════════════════════════════
+
+#demo[
+  #c("mol-formula(smiles)") parses the structure, counts explicit and implicit
+  hydrogens, combines dot-separated components, and renders the result in Hill
+  order. It returns content through the same #link("https://typst.app/universe/package/chemformula")[chemformula]
+  renderer used by #c("ce()").
+
+  #example(```typ
+  Ethanol: #mol-formula("CCO") \
+  Benzene: #mol-formula("c1ccccc1") \
+  Sodium acetate: #mol-formula("CC(=O)[O-].[Na+]") \
+  Caffeine: #mol-formula("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
+  ```)
+]
+
+Dot-separated fragments are combined into one molecular composition and their
+formal charges are summed. This gives, for example, #c("C2H3NaO2") for sodium
+acetate and #c("ClH4N") for #c("[NH4+].[Cl-]"). A molecular formula is not an
+empirical formula, so subscripts are not reduced. Wildcards, custom labels, and
+isotope-labeled atoms fail with a descriptive error because their composition
+cannot be represented by this helper's ordinary-element output.
 
 == #raw("atom-annotations")
 
@@ -1927,7 +1961,7 @@ parameter.
   [#c("theme")], [`auto`], [CPK palette variant; `auto` goes dark when #c("fg") is light.],
   [#c("rotation")], [`0deg`], [Rotate, labels stay upright.],
   [#c("mirror")], [`none`], [Optional #c("\"horizontal\"") or #c("\"vertical\"") reflection.],
-  [#c("show-h")], [`()`], [Label selected implicit hydrogens; use #c("\"all\"") for every atom.],
+  [#c("show-h")], [`()`], [Label selected implicit hydrogens; use #c("\"all\"") for every atom or #c("\"skeleton\"") for separate H atoms and bonds.],
   [#c("aromatic")], [`"kekule"`], [Lowercase-aromatic rings as doubles or #c("\"circle\"").],
   [#c("atom-annotations")], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuples.],
   [#c("opacity")], [`100%`], [Fade the whole drawing (ghost molecules).],
@@ -1976,6 +2010,7 @@ parameter.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
+  [#c("mol-formula(smiles)")], [Hill-ordered molecular formula content; errors on wildcards, abbreviations, and isotopes.],
   [#c("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float"); errors on wildcards, abbreviations, and isotopes.],
   [#c("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],
   [#c("smiles-cetz(smiles, name:, origin:, fg:, theme:, ..opts)")], [Molecule as CeTZ elements with #c("atom-<i>") / #c("bond-<i>-<j>") / #c("center") anchors.],

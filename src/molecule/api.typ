@@ -6,6 +6,7 @@
   _length-type,
   _angle-type,
   _invalid-input,
+  _normalize-show-h,
   _validate-positive-number,
   _validate-positive-length,
   _validate-offset,
@@ -16,6 +17,7 @@
 #import "rendering.typ": (
   _rendered-atom-position,
   _mirror-layout,
+  _linearize-skeleton-layout,
   _draw-molecule,
 )
 #import "../mechanism/annotations.typ": (
@@ -58,9 +60,10 @@
 ///   page-axis reflection. Wedges and hashes are exchanged so the depicted
 ///   stereochemistry is preserved.
 ///   Default: none.
-/// - show-h ("all" / int / array): Which implicit hydrogens to label beyond
-///   the default heteroatom hydrogens. Use "all" for every atom, an integer for
-///   one atom, or an array for selected atoms. Default: ().
+/// - show-h ("skeleton" / "all" / int / array): How implicit hydrogens are
+///   displayed beyond the default heteroatom hydrogens. Use "skeleton" for
+///   separate H labels and bonds, "all" for compact H labels on every atom,
+///   an integer for one atom, or an array for selected atoms. Default: ().
 /// - aromatic ("kekule" / "circle"): How rings written in aromatic (lowercase)
 ///   notation are depicted: alternating double bonds, or single bonds with an
 ///   inscribed circle. Kekulé-written input always draws its explicit bonds.
@@ -143,7 +146,16 @@
   let font = if font == auto { "New Computer Modern" } else { font }
 
   let (fg, theme) = _resolve-foreground-theme(fg, theme)
-  let layout = _mirror-layout(_compute-layout(smiles-str), mirror, rotation: rotation)
+  let raw-layout = _compute-layout(smiles-str)
+  let layout = _mirror-layout(
+    if _normalize-show-h(show-h).skeleton {
+      _linearize-skeleton-layout(raw-layout)
+    } else {
+      raw-layout
+    },
+    mirror,
+    rotation: rotation,
+  )
   let canvas-scale = _canvas-scale(scale, bond-length)
   let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
   let annotation = annotations.pos()
@@ -333,7 +345,17 @@
       "Pass an angle such as 30deg.",
     )
   }
-  let layout = _mirror-layout(_compute-layout(smiles-str), mirror, rotation: rotation)
+  let show-h = options.at("show-h", default: ())
+  let raw-layout = _compute-layout(smiles-str)
+  let layout = _mirror-layout(
+    if _normalize-show-h(show-h).skeleton {
+      _linearize-skeleton-layout(raw-layout)
+    } else {
+      raw-layout
+    },
+    mirror,
+    rotation: rotation,
+  )
   let allowed = (
     "scale", "font-size", "font", "bond-stroke", "color", "rotation",
     "show-h", "lone-pairs", "atom-colors", "show-indices", "aromatic",

@@ -71,3 +71,29 @@
   }
   json(_smiles-plugin.mol_weight(bytes(smiles-str)))
 }
+
+/// Computes a Hill-ordered molecular formula from a SMILES string and renders
+/// it through chemformula. Dot-separated fragments are combined into one
+/// composition and their formal charges are summed. Errors on wildcards,
+/// abbreviations, and isotope-labeled atoms whose formula representation would
+/// need isotope-aware formatting.
+///
+/// - smiles-str (str): A valid SMILES string, e.g. "CCO".
+/// -> content
+#let mol-formula(smiles-str) = {
+  if type(smiles-str) != str {
+    _invalid-input(
+      "mol-formula SMILES expression",
+      "expected a string, got " + repr(smiles-str),
+      "Pass a SMILES string such as \"CCO\".",
+    )
+  }
+  if smiles-str.trim() == "" {
+    _invalid-input(
+      "mol-formula SMILES expression",
+      "the string is empty",
+      "Pass at least one atom, such as \"C\".",
+    )
+  }
+  ce(json(_smiles-plugin.mol_formula(bytes(smiles-str))))
+}

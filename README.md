@@ -123,6 +123,15 @@ explicit bonds.
 Heteroatom hydrogens are shown by default; carbon hydrogens stay implicit.
 Use `show-h: "all"` for carbon hydrogens, `[NH3]` bracket syntax for
 explicit hydrogens, and `{label}` / `{label|style}` for custom group labels.
+Use `show-h: "skeleton"` to draw every hydrogen as a separate `H` atom with
+its own single bond, turning the molecule into a fully explicit 2D skeleton.
+Eligible unbranched heavy-atom chains become straight rows, with carbon-bound
+hydrogens using clean horizontal/vertical displayed-formula directions. Lone
+pairs influence non-carbon angles, so water remains bent and three-bond
+centers are evenly spread in the 2D schematic. Rings, branches, unsaturated
+paths, and stereochemical paths retain the normal heavy-atom layout. The
+ordinary molecule layout is unchanged. In the default color mode, element
+labels and bonds use the CPK palette and explicit skeleton hydrogens are gray.
 Use `>` inside a custom label to choose the attachment glyph, e.g. `{>PPh3}`.
 For the cleanest result, rotate the molecule so the bond approaches the chosen
 glyph roughly perpendicular to the written label.
@@ -180,7 +189,8 @@ atom — NMR numbering, Greek positions, footnote marks. Pass a tuple list where
 each entry is `(index, content)` or `(index, content, offset)`. Values are
 content, so wrap them in `text()` to restyle. `show-h` labels selected carbon
 hydrogens with `show-h: 1` or `show-h: (1, 2)`, and labels every implicit
-hydrogen with `show-h: "all"`.
+hydrogen with `show-h: "all"`. For a fully explicit drawing, use
+`show-h: "skeleton"`:
 
 ```typst
 #smiles(
@@ -192,6 +202,7 @@ hydrogen with `show-h: "all"`.
   ),
 )
 #smiles("CC(N)C(=O)O", show-h: 1)   // label just the central C-H
+#smiles("CCO", show-h: "skeleton")   // draw every H with its own bond
 ```
 
 ![Atom annotation and per-atom hydrogen examples](assets/readme/atom-annotations.png)
@@ -609,7 +620,7 @@ style extensions and bond orders, for example `!c!w` or `!c=`.
 | `theme` | `auto` | CPK palette variant; `auto` goes dark when `fg` is light |
 | `rotation` | `0deg` | Rotate molecule; labels stay upright |
 | `mirror` | `none` | Optional `"horizontal"` or `"vertical"` reflection |
-| `show-h` | `()` | Label selected implicit hydrogens; use `"all"` for every atom |
+| `show-h` | `()` | Label selected implicit hydrogens; use `"all"` for compact labels or `"skeleton"` for separate H atoms and bonds |
 | `aromatic` | `"kekule"` | Lowercase-aromatic rings as doubles or `"circle"` |
 | `atom-annotations` | `()` | Small gray side labels as `(index, content)` or `(index, content, offset)` tuples |
 | `opacity` | `100%` | Fade the whole drawing (ghost molecules) |
@@ -729,6 +740,18 @@ styling; other arguments pass through to chemformula.
 
 Molecular weight in g/mol as a `float`. Errors on wildcards, abbreviations,
 and isotopes.
+
+### `#mol-formula(smiles-str)`
+
+Computes and renders the Hill-ordered molecular formula, including implicit and
+explicit hydrogens. Dot-separated fragments are combined and their formal
+charges are summed. Errors on wildcards, abbreviations, and isotopes.
+
+```typst
+#mol-formula("CCO")                         // C₂H₆O
+#mol-formula("CC(=O)[O-].[Na+]")            // C₂H₃NaO₂
+#mol-formula("CN1C=NC2=C1C(=O)N(C(=O)N2C)C") // C₈H₁₀N₄O₂
+```
 
 ### `#smiles-inline(smiles-str, height: 1.4em, baseline: auto, …args)`
 

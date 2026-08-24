@@ -27,7 +27,10 @@
   }
 }
 
-#let _has-label(atom, show-all-h: false, force: false) = {
+#let _has-label(atom, show-all-h: false, force: false, show-skeleton-h: false) = {
+  if show-skeleton-h {
+    return true
+  }
   let has-abbrev = atom.at("abbrev", default: "") != ""
   let has-hetero = (not _is-carbon(atom) and atom.symbol != "*") or (atom.charge != 0)
   let has-isotope = atom.at("isotope", default: 0) > 0
@@ -165,6 +168,169 @@
     mirrored-layout.bbox_height = max-y - min-y
   }
   mirrored-layout
+}
+
+// Fully displayed formulas conventionally start a straight carbon chain as a
+// horizontal row. Keep the normal line-angle layout for rings, branches,
+// stereochemical bonds, and unsaturated paths where changing the heavy-atom
+// geometry would hide meaningful structure.
+#let _linearize-skeleton-layout(layout) = {
+  let structural-bonds = layout.bonds.filter(
+    bond => not bond.at("virtual_bond", default: false),
+  )
+  let atom-neighbors(atom-index) = {
+    let neighbors = ()
+    for bond in structural-bonds {
+      if bond.from == atom-index {
+        neighbors.push(bond.to)
+      } else if bond.to == atom-index {
+        neighbors.push(bond.from)
+      }
+    }
+    neighbors
+  }
+  let atom-degree(atom-index) = atom-neighbors(atom-index).len()
+  let old-positions = layout.atoms.map(atom => atom.pos)
+  let positions = old-positions
+  let visited = ()
+
+  for atom-index in range(layout.atoms.len()) {
+    if layout.atoms.at(atom-index).at("virtual_h", default: false) {
+      continue
+    }
+    if visited.contains(atom-index) {
+      continue
+    }
+
+    let component = ()
+    let pending = (atom-index,)
+    let pending-index = 0
+    while pending-index < pending.len() {
+      let current = pending.at(pending-index)
+      pending-index += 1
+      if visited.contains(current) {
+        continue
+      }
+      visited.push(current)
+      component.push(current)
+      for neighbor-index in atom-neighbors(current) {
+        if not visited.contains(neighbor-index) {
+          pending.push(neighbor-index)
+        }
+      }
+    }
+
+    let is-linear = component.len() > 1
+    let endpoint-count = 0
+    for component-atom in component {
+      if atom-degree(component-atom) > 2 {
+        is-linear = false
+      }
+      if atom-degree(component-atom) == 1 {
+        endpoint-count += 1
+      }
+      let atom = layout.atoms.at(component-atom)
+      if atom.at("chirality", default: "none") != "none" {
+        is-linear = false
+      }
+    }
+    if endpoint-count != 2 {
+      is-linear = false
+    }
+
+    for bond in structural-bonds {
+      if component.contains(bond.from) and component.contains(bond.to) {
+        if (
+          bond.order != 1
+            or bond.stereo != "none"
+            or bond.direction != "none"
+            or bond.at("forced_stereo", default: false)
+            or bond.at("aromatic", default: false)
+        ) {
+          is-linear = false
+        }
+      }
+    }
+    if not is-linear {
+      continue
+    }
+
+    let start = none
+    for component-atom in component {
+      if atom-degree(component-atom) == 1 {
+        start = component-atom
+        break
+      }
+    }
+    if start == none {
+      continue
+    }
+
+    let path = ()
+    let previous = none
+    let current = start
+    while current != none and path.len() < component.len() {
+      path.push(current)
+      let next = none
+      for neighbor-index in atom-neighbors(current) {
+        if neighbor-index != previous and component.contains(neighbor-index) {
+          next = neighbor-index
+          break
+        }
+      }
+      previous = current
+      current = next
+    }
+    if path.len() != component.len() {
+      continue
+    }
+
+    let center-x = component.map(index => old-positions.at(index).x).sum() / component.len()
+    let center-y = component.map(index => old-positions.at(index).y).sum() / component.len()
+    let path-center = (path.len() - 1) / 2
+    let path-index = 0
+    for path-atom in path {
+      positions.at(path-atom) = (
+        x: center-x + path-index - path-center,
+        y: center-y,
+      )
+      path-index += 1
+    }
+  }
+
+  // Bracket hydrogens are retained as virtual reference atoms. Move them with
+  // their parent so atom() and show-indices remain attached to the structure.
+  for bond in layout.bonds {
+    if not bond.at("virtual_bond", default: false) {
+      continue
+    }
+    let parent-position = old-positions.at(bond.from)
+    let new-parent-position = positions.at(bond.from)
+    let delta-x = new-parent-position.x - parent-position.x
+    let delta-y = new-parent-position.y - parent-position.y
+    let child-position = old-positions.at(bond.to)
+    positions.at(bond.to) = (
+      x: child-position.x + delta-x,
+      y: child-position.y + delta-y,
+    )
+  }
+
+  let linearized-layout = layout
+  linearized-layout.atoms = range(layout.atoms.len()).map(atom-index => {
+    let atom = layout.atoms.at(atom-index)
+    atom.pos = positions.at(atom-index)
+    atom
+  })
+  if positions.len() > 0 {
+    let first-position = positions.first()
+    let min-x = positions.map(position => position.x).fold(first-position.x, calc.min)
+    let max-x = positions.map(position => position.x).fold(first-position.x, calc.max)
+    let min-y = positions.map(position => position.y).fold(first-position.y, calc.min)
+    let max-y = positions.map(position => position.y).fold(first-position.y, calc.max)
+    linearized-layout.bbox_width = max-x - min-x
+    linearized-layout.bbox_height = max-y - min-y
+  }
+  linearized-layout
 }
 
 #let _label-anchor-offset(label, anchor, anchor-length, label-width) = {
@@ -415,6 +581,7 @@
   )
   let show-h-state = _normalize-show-h(show-h)
   let show-all-h = show-h-state.all
+  let show-skeleton-h = show-h-state.skeleton
   let show-h-list = show-h-state.indices
   let atom-annotations = _normalize-atom-annotations(atom-annotations)
   let opacity = _opacity-ratio(opacity, "opacity")
@@ -575,6 +742,7 @@
       atom,
       show-all-h: show-all-h,
       force: forced-hydrogen(atom-index),
+      show-skeleton-h: show-skeleton-h,
     ) or force-linear-carbon-label(atom-index)
   }
   let first-neighbor(atom-index) = {
@@ -594,11 +762,15 @@
   }
   let visible-hydrogen-count(atom-index) = {
     let atom = layout.atoms.at(atom-index)
-    let count = atom.hcount + _visible-implicit-h(
-      atom,
-      show-all-h: show-all-h,
-      force: forced-hydrogen(atom-index),
-    )
+    let count = if show-skeleton-h {
+      atom.hcount + atom.at("implicit_h", default: 0)
+    } else {
+      atom.hcount + _visible-implicit-h(
+        atom,
+        show-all-h: show-all-h,
+        force: forced-hydrogen(atom-index),
+      )
+    }
     if atom.at("stereo_h", default: "none") != "none" {
       calc.max(0, count - 1)
     } else {
@@ -606,7 +778,7 @@
     }
   }
   let label-trim(atom, atom-index, direction-x, direction-y) = {
-    let displays-hydrogen = visible-hydrogen-count(atom-index) > 0 and (
+    let displays-hydrogen = not show-skeleton-h and visible-hydrogen-count(atom-index) > 0 and (
       show-all-h or forced-hydrogen(atom-index) or not _is-carbon(atom)
     )
     if not has-label(atom-index) {
@@ -909,6 +1081,228 @@
             bond-start-x + ux * t + ox, bond-start-y + uy * t + oy,
             bond-end-x - ux * t + ox, bond-end-y - uy * t + oy,
             from-color, to-color,
+          )
+        }
+      }
+    }
+
+    // Full-skeleton hydrogens are separate labels and bonds rather than an H
+    // count attached to the parent atom. Fully displayed formulas are page-space
+    // schematics, so their local H bonds use clean cardinal directions instead
+    // of pretending to be a literal projection of tetrahedral geometry.
+    let normalize-direction(x, y, fallback: (x: 1.0, y: 0.0)) = {
+      let length = calc.sqrt(x * x + y * y)
+      if length > 0.001 {
+        (x: x / length, y: y / length)
+      } else {
+        fallback
+      }
+    }
+
+    let nearest-cardinal(direction, fallback: (x: 1.0, y: 0.0)) = {
+      if calc.abs(direction.x) < 0.001 and calc.abs(direction.y) < 0.001 {
+        fallback
+      } else if calc.abs(direction.x) >= calc.abs(direction.y) {
+        (x: if direction.x < 0.0 { -1.0 } else { 1.0 }, y: 0.0)
+      } else {
+        (x: 0.0, y: if direction.y < 0.0 { -1.0 } else { 1.0 })
+      }
+    }
+
+    let opposite(direction) = (x: -direction.x, y: -direction.y)
+    let perpendicular(direction) = (x: -direction.y, y: direction.x)
+
+    let rotate-direction(direction, angle) = (
+      x: direction.x * calc.cos(angle) - direction.y * calc.sin(angle),
+      y: direction.x * calc.sin(angle) + direction.y * calc.cos(angle),
+    )
+
+    let spread-directions(center, count, angle) = {
+      if count <= 0 {
+        return ()
+      }
+      if count == 1 {
+        return (center,)
+      }
+      let middle = (count - 1) / 2
+      range(count).map(index => rotate-direction(
+        center,
+        (index - middle) * angle,
+      ))
+    }
+
+    // Electron domains determine the local shape. Three visible bonds are
+    // spread at 120° in the 2D displayed formula; two bonds on an oxygen with
+    // two lone pairs retain water's characteristic 104.5° bend.
+    let displayed-bond-angle(atom, visible-bond-count) = {
+      let lone-pairs = atom.at("lone_pairs", default: 0)
+      let electron-domain-count = visible-bond-count + lone-pairs
+      if atom.symbol == "O" and visible-bond-count == 2 and lone-pairs >= 2 {
+        104.5deg
+      } else if visible-bond-count == 3 and electron-domain-count >= 3 {
+        120deg
+      } else if visible-bond-count == 2 and lone-pairs > 0 {
+        107deg
+      } else if visible-bond-count == 2 {
+        180deg
+      } else {
+        109.5deg
+      }
+    }
+
+    let skeleton-hydrogen-directions(atom-index, count) = {
+      if count <= 0 {
+        return ()
+      }
+      let atom-position = atom-screen-position(layout.atoms.at(atom-index))
+      let atom = layout.atoms.at(atom-index)
+      let neighbor-indices = atom-neighbor-indices(atom-index)
+      let neighbor-directions = neighbor-indices.map(neighbor-index => {
+        let neighbor-position = atom-screen-position(layout.atoms.at(neighbor-index))
+        normalize-direction(
+          neighbor-position.x - atom-position.x,
+          neighbor-position.y - atom-position.y,
+        )
+      })
+      let heavy-count = neighbor-directions.len()
+      let visible-bond-count = heavy-count + count
+      let angle = displayed-bond-angle(atom, visible-bond-count)
+
+      if heavy-count == 0 {
+        let cardinals = ((x: 1.0, y: 0.0), (x: 0.0, y: 1.0), (x: -1.0, y: 0.0), (x: 0.0, y: -1.0))
+        if visible-bond-count == 4 {
+          return range(count).map(index => cardinals.at(calc.rem(index, cardinals.len())))
+        }
+        return spread-directions((x: 0.0, y: -1.0), count, angle)
+      }
+
+      if heavy-count == 1 {
+        let heavy-axis = nearest-cardinal(neighbor-directions.first())
+        let away = opposite(heavy-axis)
+        let side = perpendicular(away)
+        if _is-carbon(atom) and atom.at("lone_pairs", default: 0) == 0 {
+          if count == 1 {
+            return (away,)
+          }
+          if count == 2 {
+            return (side, opposite(side))
+          }
+          return (away, side, opposite(side))
+        }
+
+        if visible-bond-count == 3 {
+          // A three-bond 2D display places the remaining bonds evenly around
+          // the bond opposite the heavy-atom attachment.
+          return spread-directions(
+            opposite(neighbor-directions.first()),
+            count,
+            120deg,
+          )
+        }
+        if visible-bond-count == 2 {
+          return (rotate-direction(neighbor-directions.first(), angle),)
+        }
+        return spread-directions(away, count, angle)
+      }
+
+      if count == 1 {
+        let away = normalize-direction(
+          -neighbor-directions.map(direction => direction.x).sum(),
+          -neighbor-directions.map(direction => direction.y).sum(),
+          fallback: opposite(neighbor-directions.first()),
+        )
+        return (nearest-cardinal(away),)
+      }
+
+      // For a CH₂-like center, use the axis perpendicular to the line joining
+      // the heavy neighbors. This keeps the two H bonds as a straight,
+      // vertically or horizontally separated pair in a displayed formula.
+      let first-neighbor = atom-screen-position(layout.atoms.at(neighbor-indices.first()))
+      let second-neighbor = atom-screen-position(layout.atoms.at(neighbor-indices.at(1)))
+      let neighbor-span = normalize-direction(
+        first-neighbor.x - second-neighbor.x,
+        first-neighbor.y - second-neighbor.y,
+      )
+      let heavy-axis = nearest-cardinal(neighbor-span)
+      let hydrogen-axis = perpendicular(heavy-axis)
+      if count == 2 {
+        if visible-bond-count == 3 {
+          return spread-directions(
+            nearest-cardinal(normalize-direction(
+              -neighbor-directions.map(direction => direction.x).sum(),
+              -neighbor-directions.map(direction => direction.y).sum(),
+              fallback: opposite(neighbor-directions.first()),
+            )),
+            count,
+            120deg,
+          )
+        }
+        return (hydrogen-axis, opposite(hydrogen-axis))
+      }
+
+      let away = nearest-cardinal(normalize-direction(
+        -neighbor-directions.map(direction => direction.x).sum(),
+        -neighbor-directions.map(direction => direction.y).sum(),
+        fallback: opposite(neighbor-directions.first()),
+      ))
+      (away, hydrogen-axis, opposite(hydrogen-axis))
+    }
+
+    let skeleton-hydrogen-label-trim(direction-x, direction-y) = {
+      let label-size = measure(atom-label("H"))
+      let half-width = label-size.width / canvas-scale / 2
+      let half-height = label-size.height / canvas-scale / 2
+      half-width * calc.abs(direction-x) + half-height * calc.abs(direction-y) + 0.04
+    }
+
+    if show-skeleton-h {
+      let skeleton-hydrogen-bond-length = 0.70
+      let skeleton-hydrogen-label-distance = 0.88
+      let hydrogen-fill = if color { label-color("gray") } else { fg }
+      for atom-index in range(layout.atoms.len()) {
+        let atom = layout.atoms.at(atom-index)
+        if atom.at("virtual_h", default: false) { continue }
+        let count = visible-hydrogen-count(atom-index)
+        if count <= 0 { continue }
+        let parent-position = atom-screen-position(atom)
+        let parent-fill = display-color(atom)
+        for direction in skeleton-hydrogen-directions(atom-index, count) {
+          let parent-trim = label-trim(atom, atom-index, direction.x, direction.y)
+          let hydrogen-position = (
+            x: parent-position.x + direction.x * skeleton-hydrogen-label-distance,
+            y: parent-position.y + direction.y * skeleton-hydrogen-label-distance,
+          )
+          let hydrogen-trim = skeleton-hydrogen-label-trim(direction.x, direction.y)
+          let bond-start = (
+            x: parent-position.x + direction.x * parent-trim,
+            y: parent-position.y + direction.y * parent-trim,
+          )
+          let bond-end = (
+            x: parent-position.x + direction.x * skeleton-hydrogen-bond-length,
+            y: parent-position.y + direction.y * skeleton-hydrogen-bond-length,
+          )
+          let bond-midpoint = (
+            x: (bond-start.x + bond-end.x) / 2,
+            y: (bond-start.y + bond-end.y) / 2,
+          )
+          line(
+            (bond-start.x, bond-start.y),
+            (bond-midpoint.x, bond-midpoint.y),
+            stroke: stroke-width + parent-fill,
+          )
+          line(
+            (bond-midpoint.x, bond-midpoint.y),
+            (
+              hydrogen-position.x - direction.x * hydrogen-trim,
+              hydrogen-position.y - direction.y * hydrogen-trim,
+            ),
+            stroke: stroke-width + hydrogen-fill,
+          )
+          content(
+            (hydrogen-position.x, hydrogen-position.y),
+            atom-label("H", fill: hydrogen-fill),
+            anchor: "center",
+            padding: 1pt,
           )
         }
       }
@@ -1218,7 +1612,7 @@
           []
         }
         let symbol-text = isotope-content + atom-label(atom.symbol, fill: fill)
-        let h-text = if abbrev != "" or h-count == 0 or (_is-carbon(atom) and not (show-all-h or forced-hydrogen(i))) {
+        let h-text = if show-skeleton-h or abbrev != "" or h-count == 0 or (_is-carbon(atom) and not (show-all-h or forced-hydrogen(i))) {
           []
         } else if h-count == 1 {
           atom-label("H", fill: fill)

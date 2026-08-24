@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, mol, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight
+#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight
 
 #let selected-case = sys.inputs.at("case", default: "")
 
@@ -33,6 +33,12 @@
   smiles("CO", [not an annotation])
 } else if selected-case == "show-h-out-of-range" {
   smiles("CO", show-h: 5)
+} else if selected-case == "mol-formula-wrong-type" {
+  mol-formula(1)
+} else if selected-case == "mol-formula-empty" {
+  mol-formula("")
+} else if selected-case == "mol-formula-wildcard" {
+  mol-formula("*CC")
 } else if selected-case == "annotation-out-of-range" {
   smiles("CO", atom-annotations: ((5, [note]),))
 } else if selected-case == "customized-missing-bond" {

@@ -9,6 +9,7 @@ pub use render::LayoutOutput;
 use graph::{BondMarker, BondMarkerStyle, BondOrder, MoleculeGraph};
 use layout::compute_layout;
 use ptable::Element;
+use std::collections::BTreeMap;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -641,6 +642,82 @@ fn compute_molecular_weight(molecule: &MoleculeGraph) -> Result<f64, String> {
     Ok(molecular_weight)
 }
 
+fn compute_molecular_formula(molecule: &MoleculeGraph) -> Result<String, String> {
+    let mut element_counts = BTreeMap::<String, u32>::new();
+    let mut formal_charge = 0i16;
+
+    for (atom_index, atom) in molecule.atoms.iter().enumerate() {
+        if !atom.abbrev.is_empty() {
+            return Err(format!(
+                "cannot compute molecular formula: abbreviation {{{}}} has no defined composition",
+                atom.abbrev
+            ));
+        }
+        if atom.symbol == "*" {
+            return Err(
+                "cannot compute molecular formula: wildcard atom `*` has no element".to_string(),
+            );
+        }
+        if let Some(isotope) = atom.isotope {
+            return Err(format!(
+                "cannot compute molecular formula: isotope [{isotope}{}] needs isotope-aware formula output",
+                atom.symbol
+            ));
+        }
+        if Element::from_symbol(&atom.symbol).is_none() {
+            return Err(format!(
+                "cannot compute molecular formula: unknown element {}",
+                atom.symbol
+            ));
+        }
+
+        *element_counts.entry(atom.symbol.clone()).or_default() += 1;
+        let hydrogen_count =
+            u32::from(atom.hcount) + u32::from(layout::implicit_h_count(molecule, atom_index));
+        if hydrogen_count > 0 {
+            *element_counts.entry("H".to_string()).or_default() += hydrogen_count;
+        }
+        formal_charge += i16::from(atom.charge);
+    }
+
+    let mut ordered_symbols = Vec::new();
+    if element_counts.contains_key("C") {
+        ordered_symbols.push("C".to_string());
+        if element_counts.contains_key("H") {
+            ordered_symbols.push("H".to_string());
+        }
+        ordered_symbols.extend(
+            element_counts
+                .keys()
+                .filter(|symbol| symbol.as_str() != "C" && symbol.as_str() != "H")
+                .cloned(),
+        );
+    } else {
+        ordered_symbols.extend(element_counts.keys().cloned());
+    }
+
+    let mut formula = String::new();
+    for symbol in ordered_symbols {
+        formula.push_str(&symbol);
+        let count = element_counts
+            .get(&symbol)
+            .expect("formula symbol came from the element-count map");
+        if *count > 1 {
+            formula.push_str(&count.to_string());
+        }
+    }
+
+    if formal_charge != 0 {
+        formula.push('^');
+        if formal_charge.abs() != 1 {
+            formula.push_str(&formal_charge.abs().to_string());
+        }
+        formula.push(if formal_charge > 0 { '+' } else { '-' });
+    }
+
+    Ok(formula)
+}
+
 // ── WASM / Typst plugin entrypoint ──────────────────────────────────────────
 
 #[cfg(target_arch = "wasm32")]
@@ -672,6 +749,17 @@ mod wasm_entrypoint {
         let molecular_weight = compute_molecular_weight(&molecule)?;
         serde_json::to_vec(&molecular_weight).map_err(|error| format!("JSON error: {error}"))
     }
+
+    /// Called from Typst as `smiles-plugin.mol_formula(bytes(smiles-str))`.
+    /// Returns a Hill-ordered molecular formula string with a net-charge suffix.
+    #[wasm_func]
+    pub fn mol_formula(smiles: &[u8]) -> Result<Vec<u8>, String> {
+        let smiles =
+            core::str::from_utf8(smiles).map_err(|error| format!("UTF-8 error: {error}"))?;
+        let molecule = parse_molecule(smiles)?;
+        let formula = compute_molecular_formula(&molecule)?;
+        serde_json::to_vec(&formula).map_err(|error| format!("JSON error: {error}"))
+    }
 }
 
 // ── Native entrypoint for tests / CLI ───────────────────────────────────────
@@ -686,6 +774,12 @@ pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
 pub fn mol_weight_native(smiles: &str) -> Result<f64, String> {
     let molecule = parse_molecule(smiles)?;
     compute_molecular_weight(&molecule)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn mol_formula_native(smiles: &str) -> Result<String, String> {
+    let molecule = parse_molecule(smiles)?;
+    compute_molecular_formula(&molecule)
 }
 
 #[cfg(test)]
@@ -2363,6 +2457,11 @@ mod tests {
         );
     }
 
+    fn assert_formula(smiles: &str, expected: &str) {
+        let formula = mol_formula_native(smiles).expect("molecular formula failed");
+        assert_eq!(formula, expected, "mol_formula({smiles})");
+    }
+
     /// Extracts every SMILES string literal passed to `smiles("...")` or
     /// `mol("...")` in the visual test file, undoing Typst string escapes.
     fn test_typ_smiles_strings() -> Vec<String> {
@@ -2490,6 +2589,59 @@ mod tests {
     }
 
     #[test]
+    fn mol_weight_pubchem_reference_set() {
+        // Connectivity SMILES and reference weights queried from PubChem's
+        // compound-property records; CIDs make each regression easy to audit.
+        let examples = [
+            ("methane", "C", 16.043, 297),
+            ("ethane", "CC", 30.07, 6324),
+            ("propane", "CCC", 44.10, 6334),
+            ("butane", "CCCC", 58.12, 7843),
+            ("isobutane", "CC(C)C", 58.12, 6360),
+            ("methanol", "CO", 32.042, 887),
+            ("isopropanol", "CC(C)O", 60.10, 3776),
+            ("acetone", "CC(=O)C", 58.08, 180),
+            ("acetic acid", "CC(=O)O", 60.05, 176),
+            ("formaldehyde", "C=O", 30.026, 712),
+            ("acetaldehyde", "CC=O", 44.05, 177),
+            ("formic acid", "C(=O)O", 46.025, 284),
+            ("phenol", "C1=CC=C(C=C1)O", 94.11, 996),
+            ("toluene", "CC1=CC=CC=C1", 92.14, 1140),
+            ("pyridine", "C1=CC=NC=C1", 79.10, 1049),
+            ("cyclohexane", "C1CCCCC1", 84.16, 8078),
+            ("naphthalene", "C1=CC=C2C=CC=CC2=C1", 128.17, 931),
+            ("ethyl acetate", "CCOC(=O)C", 88.11, 8857),
+            ("chloroform", "C(Cl)(Cl)Cl", 119.37, 6212),
+            ("dichloromethane", "C(Cl)Cl", 84.93, 6344),
+            ("hydrogen peroxide", "OO", 34.015, 784),
+            ("ammonia", "N", 17.031, 222),
+            ("glycine", "C(C(=O)O)N", 75.07, 750),
+            ("alanine", "CC(C(=O)O)N", 89.09, 5950),
+            ("urea", "C(=O)(N)N", 60.056, 1176),
+            ("acetamide", "CC(=O)N", 59.07, 178),
+            ("aspirin", "CC(=O)OC1=CC=CC=C1C(=O)O", 180.16, 2244),
+            ("ibuprofen", "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O", 206.28, 3672),
+            ("acetaminophen", "CC(=O)NC1=CC=C(C=C1)O", 151.16, 1983),
+            ("citric acid", "C(C(=O)O)C(CC(=O)O)(C(=O)O)O", 192.12, 311),
+            (
+                "sucrose",
+                "C(C1C(C(C(C(O1)OC2(C(C(C(O2)CO)O)O)CO)O)O)O)O",
+                342.30,
+                5988,
+            ),
+        ];
+
+        for (name, smiles, expected, cid) in examples {
+            let molecular_weight = mol_weight_native(smiles)
+                .unwrap_or_else(|error| panic!("{name} (PubChem CID {cid}, {smiles}): {error}"));
+            assert!(
+                (molecular_weight - expected).abs() < 0.01,
+                "{name} (PubChem CID {cid}, {smiles}) = {molecular_weight}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
     fn mol_weight_caffeine() {
         // PubChem CID 2519: 194.19 g/mol
         assert_weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C", 194.19);
@@ -2525,5 +2677,54 @@ mod tests {
     fn mol_weight_isotope_errors() {
         let err = mol_weight_native("[2H]O[2H]").expect_err("isotope should fail");
         assert!(err.contains("isotope"));
+    }
+
+    #[test]
+    fn molecular_formula_matches_pubchem_ethanol() {
+        // PubChem CID 702: CCO -> C2H6O.
+        assert_formula("CCO", "C2H6O");
+    }
+
+    #[test]
+    fn molecular_formula_matches_pubchem_aromatic_benzene() {
+        // PubChem CID 241: c1ccccc1 -> C6H6.
+        assert_formula("c1ccccc1", "C6H6");
+    }
+
+    #[test]
+    fn molecular_formula_matches_pubchem_caffeine() {
+        // PubChem CID 2519: CN1C=NC2=C1C(=O)N(C(=O)N2C)C -> C8H10N4O2.
+        assert_formula("CN1C=NC2=C1C(=O)N(C(=O)N2C)C", "C8H10N4O2");
+    }
+
+    #[test]
+    fn molecular_formula_matches_pubchem_sodium_acetate() {
+        // PubChem CID 517045: CC(=O)[O-].[Na+] -> C2H3NaO2.
+        assert_formula("CC(=O)[O-].[Na+]", "C2H3NaO2");
+    }
+
+    #[test]
+    fn molecular_formula_matches_pubchem_ammonium_chloride() {
+        // PubChem CID 25517: [NH4+].[Cl-] -> ClH4N.
+        assert_formula("[NH4+].[Cl-]", "ClH4N");
+    }
+
+    #[test]
+    fn molecular_formula_counts_explicit_and_implicit_hydrogens() {
+        assert_formula("O", "H2O");
+        assert_formula("[NH4+]", "H4N^+");
+        assert_formula("C([H])([H])([H])[H]", "CH4");
+    }
+
+    #[test]
+    fn molecular_formula_rejects_undefined_composition() {
+        for (smiles, expected_error) in [
+            ("*CC", "wildcard"),
+            ("{PPh3}C=O", "PPh3"),
+            ("[2H]O[2H]", "isotope"),
+        ] {
+            let error = mol_formula_native(smiles).expect_err("formula should fail");
+            assert!(error.contains(expected_error), "{smiles}: {error}");
+        }
     }
 }

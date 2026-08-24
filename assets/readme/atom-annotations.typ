@@ -4,7 +4,7 @@
 #set text(font: "New Computer Modern", size: 10pt)
 
 #table(
-  columns: (1.15fr, 1fr, 1fr),
+  columns: (1.15fr, 1fr, 1fr, 1fr),
   gutter: 0em,
   row-gutter: 0em,
   align: center + horizon,
@@ -13,6 +13,7 @@
   [*Atom annotations*],
   [*Selected C-H*],
   [*All implicit H*],
+  [*Ethanol skeleton*],
 
   [#smiles(
     "N[C@@H](C)C(=O)O",
@@ -25,4 +26,5 @@
   )],
   [#smiles("CC(N)C(=O)O", bond-length: 1.05, show-h: 1)],
   [#smiles("CC(N)C(=O)O", bond-length: 1.05, show-h: "all")],
+  [#smiles("CCO", bond-length: 1.05, show-h: "skeleton")],
 )
