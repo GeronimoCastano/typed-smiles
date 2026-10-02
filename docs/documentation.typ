@@ -8,7 +8,7 @@
 #import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, molecules, substructure-matches, functional-groups
 #import "@preview/cetz:0.5.2"
 
-#let version = "0.11.0"
+#let version = "0.12.0"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -172,13 +172,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.11.0": *
+#import "@preview/typed-smiles:0.12.0": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.11.0": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.12.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports these main symbols:
@@ -2052,7 +2052,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.11.0": *
+#import "@preview/typed-smiles:0.12.0": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
@@ -2222,6 +2222,8 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],
   [#c("smiles-cetz(smiles, name:, origin:, fg:, theme:, ..opts)")], [Molecule as CeTZ elements with #c("atom-<i>") / #c("bond-<i>-<j>") / #c("center") anchors.],
   [#c("molecules.<name>")], [Bundled SMILES string for a common molecule (@sec-library); #c("molecules.at(\"name\")") for computed names.],
+  [#c("substructure-matches(smiles, pattern)")], [Array of #c("(atoms:, bonds:)") index dictionaries for every SMARTS match; #c("()") when absent.],
+  [#c("functional-groups.<name>")], [SMARTS definition behind each #c("highlight-groups") name.],
 )
 
 == Mechanism helpers

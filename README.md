@@ -15,7 +15,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.11.0": *
+#import "@preview/typed-smiles:0.12.0": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -31,7 +31,7 @@ Aromatic rings can be written either in lowercase aromatic notation
 on parse and both render identically.
 
 ```typst
-#import "@preview/typed-smiles:0.11.0": smiles
+#import "@preview/typed-smiles:0.12.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -59,7 +59,7 @@ laboratory reagents. Type `molecules.` and the editor suggests the available
 names.
 
 ```typst
-#import "@preview/typed-smiles:0.11.0": smiles, molecules
+#import "@preview/typed-smiles:0.12.0": smiles, molecules
 
 #smiles(molecules.caffeine)
 #smiles(molecules.alanine)
@@ -506,7 +506,7 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.11.0": ce
+#import "@preview/typed-smiles:0.12.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -531,7 +531,7 @@ explicit hydrogens. Dot-separated fragments (salts, hydrates) are summed
 together.
 
 ```typst
-#import "@preview/typed-smiles:0.11.0": mol-weight
+#import "@preview/typed-smiles:0.12.0": mol-weight
 
 Ethanol: #calc.round(mol-weight("CCO"), digits: 2) g/mol // 46.07
 Caffeine: #calc.round(mol-weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C"), digits: 2) g/mol // 194.19
@@ -550,7 +550,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.11.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.12.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -708,7 +708,7 @@ or an angle), and `label-offset:`/`into-offset:`/`out-offset:` nudge pieces like
 a `mol` offset.
 
 ```typst
-#import "@preview/typed-smiles:0.11.0": cycle, step, mol, ce
+#import "@preview/typed-smiles:0.12.0": cycle, step, mol, ce
 
 #let cplx(body) = box(inset: 2pt, body)
 
@@ -923,6 +923,17 @@ charges are summed. Errors on wildcards, abbreviations, and isotopes.
 A dictionary from lowercase, hyphenated names to SMILES strings for about a
 hundred common molecules. Access entries as `molecules.caffeine` or
 `molecules.at("caffeine")`; a misspelled name is a compile error.
+
+### `#substructure-matches(smiles-str, pattern)`
+
+Every distinct match of a SMARTS pattern as an array of `(atoms:, bonds:)`
+dictionaries holding atom indices and bond index pairs. Returns `()` when the
+pattern is absent; invalid or unsupported SMARTS is a compile error.
+
+### `functional-groups`
+
+A dictionary from the names accepted by `highlight-groups` to their SMARTS
+definitions, such as `functional-groups.carboxylic-acid`.
 
 ### `#smiles-inline(smiles-str, height: 1.4em, baseline: auto, …args)`
 
