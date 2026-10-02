@@ -16,6 +16,7 @@
   _skeleton-hydrogen-label-distance,
   _stacked-hydrogen-side,
   _stacked-hydrogen-direction,
+  _charge-text,
   _abbreviation-label,
   _abbreviation-lone-pair-directions,
 )
@@ -89,11 +90,7 @@
     neighbor-index
   }
   let charge-content(atom) = {
-    let charge-str = if atom.charge == 1        { "+" }
-                     else if atom.charge == -1  { "\u{2212}" }
-                     else if atom.charge > 1    { str(atom.charge) + "+" }
-                     else if atom.charge < -1   { str(-atom.charge) + "\u{2212}" }
-                     else                       { "" }
+    let charge-str = _charge-text(atom.charge)
     if charge-str == "" {
       []
     } else {
@@ -187,7 +184,6 @@
         (
           px
             - padding-units
-            - content-width(if hydrogen-side == "west" { charge } else { [] })
             - symbol-width / 2,
           py,
         )
@@ -224,11 +220,7 @@
           py + direction.y * label-margin * 0.95,
         )
       }
-      let label-content = symbol-text + charge
-      return (
-        px - content-width(label-content) / 2 + content-width(symbol-text) / 2,
-        py,
-      )
+      return (px, py)
     }
     if stacked-h-side in ("left", "right") {
       // The symbol stays centered on the atom; the hydrogen sits beside it.
@@ -493,7 +485,6 @@
     } else if (
       atom.at("abbrev", default: "") == ""
         and not displays-hydrogen
-        and atom.charge == 0
         and atom.at("isotope", default: 0) == 0
     ) {
       let label-size = measure(atom-label(atom.symbol))

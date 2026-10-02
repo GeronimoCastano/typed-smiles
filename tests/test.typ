@@ -4313,3 +4313,70 @@ pyrrole N–H hydrogen.
 #include "substructure-chemistry.typ"
 #pagebreak()
 #include "substructure-hydrogens.typ"
+
+
+#pagebreak()
+
+= Charge labels clear of bonds
+
+A charge sits at the upper right of its atom symbol unless a bond, a skeleton
+hydrogen, or a drawn lone pair approaches that corner. It then moves to the
+most open position around the symbol, so single, double, and triple bonds never
+run through the sign at any rotation.
+
+#let charge-cell(title, smiles-str, ..options) = [
+  #text(size: 8pt, title) \ #smiles(smiles-str, ..options)
+]
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+
+  charge-cell([Nitro], "C[N+](=O)[O-]"),
+  charge-cell([Nitroglycerin], "C(C(CO[N+](=O)[O-])O[N+](=O)[O-])O[N+](=O)[O-]", scale: 0.7),
+  charge-cell([Azide], "CN=[N+]=[N-]"),
+  charge-cell([Isocyanide], "C[N+]#[C-]"),
+
+  charge-cell([Iminium], "CC=[N+](C)C"),
+  charge-cell([Ammonium], "C[N+](C)(C)C"),
+  charge-cell([Pyridinium], "C[n+]1ccccc1"),
+  charge-cell([Imidazolium], "c1c[nH+]c[nH]1"),
+
+  charge-cell([Carbocation], "C[C+](C)C"),
+  charge-cell([Carbanion], "C[CH-]C(=O)C"),
+  charge-cell([Carboxylate], "CC(=O)[O-]"),
+  charge-cell([Sulfonium], "C[S+](C)C"),
+
+  charge-cell([Dication], "C[N+2](C)C"),
+  charge-cell([Ylide], "C[P+](C)(C)[CH2-]"),
+  charge-cell([Lone pairs], "C[O-]", lone-pairs: "dots"),
+  charge-cell([Skeleton], "C[N+](=O)[O-]", show-h: "skeleton"),
+)
+
+Rotating a nitro group, a nitrile oxide, an azide, and an ammonium group through
+every 30° keeps the signs off their single, double, and triple bonds.
+
+#grid(
+  columns: (1fr,) * 6,
+  gutter: 0.8em,
+  align: center + horizon,
+  ..range(0, 360, step: 30).map(angle => charge-cell(
+    [#angle°], "C[N+](=O)[O-]", rotation: angle * 1deg, scale: 0.8)),
+  ..range(0, 360, step: 30).map(angle => charge-cell(
+    [#angle°], "CC#[N+][O-]", rotation: angle * 1deg, scale: 0.8)),
+  ..range(0, 360, step: 30).map(angle => charge-cell(
+    [#angle°], "C=[N+]=[N-]", rotation: angle * 1deg, scale: 0.8)),
+  ..range(0, 360, step: 30).map(angle => charge-cell(
+    [#angle°], "C[NH3+]", rotation: angle * 1deg, scale: 0.8)),
+)
+
+A charge in a reaction scheme keeps its placement, and mechanism arrows still
+end on the charged atom.
+
+#reaction(
+  mol("C[N+](=O)[O-]", lone-pairs: "dots"),
+  rxn-arrow(),
+  mol("CC=[N+](C)C", rotation: 30deg),
+  arrow(from: lp(0, 3), to: atom(1, 2)),
+)
