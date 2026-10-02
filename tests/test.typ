@@ -4,6 +4,8 @@
 #set text(font: "New Computer Modern", size: 11pt)
 #set page(margin: 2cm)
 
+#include "skeleton-highlight-centers.typ"
+
 = SMILES Rendering Test
 
 #grid(
