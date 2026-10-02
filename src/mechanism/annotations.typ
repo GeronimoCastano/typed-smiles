@@ -17,6 +17,7 @@
 #import "../molecule/rendering.typ": _label-anchor-offset, _abbreviation-label
 #import "references.typ": (
   _atom-position,
+  _highlight-hydrogens,
   _bond-arrow-attachment,
   _atom-arrow-attachment,
   _resolve-reference,
@@ -550,6 +551,42 @@
           stroke: highlight-specification.stroke,
         )
       }
+    }
+  }
+  // Named functional groups carry the elements whose attached H belongs to
+  // the group. Only selected atoms expand, so bond-only requests keep their
+  // endpoint labels unshaded and recursive carbon context stays unselected.
+  let elements = highlight-specification.at("hydrogen-elements", default: ())
+  let parents = ()
+  for reference in references {
+    if reference.__ref__ == "atom" { parents.push((reference.species, reference.index)) }
+    else if reference.__ref__ == "bond" and highlight-specification.include-atoms {
+      parents.push((reference.species, reference.i))
+      parents.push((reference.species, reference.j))
+    }
+  }
+  for (species-index, atom-index) in parents.dedup() {
+    let placed-species = placed-species-list.at(species-index)
+    let atom = placed-species.layout.atoms.at(atom-index)
+    if atom.symbol not in elements { continue }
+    let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+    let radius = if highlight-specification.radius == auto {
+      configuration.atom-radius * molecule-scale
+    } else { highlight-specification.radius }
+    let parent = _atom-position(placed-species, atom-index)
+    let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+    for hydrogen in _highlight-hydrogens(placed-species, atom-index) {
+      line(parent, hydrogen.position, stroke: (
+        paint: highlight-specification.fill,
+        thickness: configuration.bond-thickness * molecule-scale,
+        cap: "round",
+      ))
+      // A capsule spans the whole H/Hn label, including a hydrogen subscript.
+      let half-span = calc.max(0.0, hydrogen.width / 2 - radius * 0.5)
+      line((hydrogen.position.at(0) - half-span, hydrogen.position.at(1)),
+           (hydrogen.position.at(0) + half-span, hydrogen.position.at(1)),
+        stroke: (paint: highlight-specification.fill,
+                 thickness: 2 * radius * canvas-scale, cap: "round"))
     }
   }
 }

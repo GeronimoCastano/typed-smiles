@@ -4,6 +4,9 @@
 #set text(font: "New Computer Modern", size: 11pt)
 #set page(margin: 2cm)
 
+#include "skeleton-hydrogen-rotation.typ"
+#include "skeleton-highlight-centers.typ"
+
 = SMILES Rendering Test
 
 #grid(
@@ -4150,3 +4153,11 @@ chains, branches, functional groups, halogens, sulfur, and an aromatic ring.
   [*Benzene* \
     #smiles("c1ccccc1", show-h: "skeleton", scale: 0.58)],
 )
+
+// Assertion and rendering coverage for automatic substructure highlighting.
+#pagebreak()
+#include "substructure.typ"
+#pagebreak()
+#include "substructure-chemistry.typ"
+#pagebreak()
+#include "substructure-hydrogens.typ"

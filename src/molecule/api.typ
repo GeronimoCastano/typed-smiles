@@ -13,6 +13,7 @@
   _validate-molecule-options,
 )
 #import "../chemistry.typ": _compute-layout
+#import "../substructure.typ": _substructure-highlights
 #import "../styles.typ": _resolve-foreground-theme, _canvas-scale, _style-preset
 #import "rendering.typ": (
   _rendered-atom-position,
@@ -81,6 +82,12 @@
 ///   and inline `{label|style}` styles. See documentation for the two key forms.
 /// - show-indices (bool): Stamp each atom's writing-order index on the diagram, as a
 ///   development aid for writing atom()/bond()/lp() references. Default: false.
+/// - highlight-smarts (str / dictionary / array): Patterns or requests with
+///   pattern and include-atoms (default: true); shade every match.
+/// - highlight-groups (str / dictionary / array): Group names or requests with
+///   group and include-atoms (default: true).
+/// - highlight-colors (auto / array): Palette cycled over distinct matches.
+/// - highlight-unmatched ("error" / "ignore"): Policy for absent patterns/groups.
 /// - ..annotations: Any number of arrow() / highlight() items referencing atoms of
 ///   this molecule (single-index form, e.g. atom(2)).
 /// -> content
@@ -105,6 +112,10 @@
   lone-pairs: none,
   atom-colors: (:),
   show-indices: false,
+  highlight-smarts: (),
+  highlight-groups: (),
+  highlight-colors: auto,
+  highlight-unmatched: "error",
   ..annotations
 ) = context {
   _validate-positive-number(scale, "smiles scale")
@@ -158,7 +169,13 @@
   )
   let canvas-scale = _canvas-scale(scale, bond-length)
   let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
-  let annotation = annotations.pos()
+  let annotation = _substructure-highlights(
+    smiles-str,
+    highlight-smarts: highlight-smarts,
+    highlight-groups: highlight-groups,
+    highlight-colors: highlight-colors,
+    highlight-unmatched: highlight-unmatched,
+  ) + annotations.pos()
   let placed-species-list = ((
     kind: "mol",
     layout: layout,
@@ -307,7 +324,8 @@
 /// - theme ("light" / "dark"): CPK palette variant. Default: "light".
 /// - ..opts: #smiles() drawing options — scale, font-size, font, bond-stroke,
 ///   color, rotation, mirror, show-h, aromatic, atom-annotations, opacity,
-///   bond-customizations, lone-pairs, atom-colors, show-indices.
+///   bond-customizations, lone-pairs, atom-colors, show-indices, highlight-smarts,
+///   highlight-groups, highlight-colors, highlight-unmatched.
 /// -> none  (emits CeTZ draw elements)
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
@@ -362,9 +380,15 @@
     "atom-annotations", "opacity", "bond-customizations",
   )
   let drawing-options = (:)
+  let highlight-options = (
+    "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
+  )
+  let matching-options = (:)
   for (option-name, option-value) in options {
     if option-name in allowed {
       drawing-options.insert(option-name, option-value)
+    } else if option-name in highlight-options {
+      matching-options.insert(option-name, option-value)
     } else if option-name != "mirror" {
       panic("smiles-cetz does not accept option \"" + option-name + "\"")
     }
@@ -372,8 +396,26 @@
   if drawing-options.at("font", default: none) == auto {
     drawing-options.insert("font", "New Computer Modern")
   }
+  let annotations = _substructure-highlights(smiles-str, ..matching-options)
+  let molecule-scale = options.at("scale", default: 1.0)
+  let canvas-scale = _canvas-scale(molecule-scale, none)
+  let font-size = options.at("font-size", default: none)
+  let actual-font-size = if font-size == none { 11pt * molecule-scale } else { font-size }
+  let bond-stroke = options.at("bond-stroke", default: none)
+  let placed-species-list = ((
+    kind: "mol", layout: layout, mol-scale: 1.0, rotation: rotation,
+    origin: (0, 0), size: (layout.bbox_width, layout.bbox_height),
+    canvas-scale: canvas-scale, actual-font-size: actual-font-size,
+    actual-bond-stroke: if bond-stroke == none { 0.9pt * molecule-scale } else { bond-stroke },
+    font: drawing-options.at("font", default: "New Computer Modern"),
+    show-h: show-h, aromatic: options.at("aromatic", default: "kekule"),
+  ),)
+  let configuration = _annotation-configuration(canvas-scale, actual-font-size, molecule-scale, bond-stroke: bond-stroke)
   group(name: name, {
     translate(origin)
+    for annotation in annotations {
+      _draw-highlight(annotation, placed-species-list, configuration)
+    }
     _draw-molecule(layout, fg: fg, theme: theme, ..drawing-options)
     for atom-index in range(layout.atoms.len()) {
       let atom = layout.atoms.at(atom-index)

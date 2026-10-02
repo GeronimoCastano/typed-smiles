@@ -125,6 +125,8 @@ Use `show-h: "all"` for carbon hydrogens, `[NH3]` bracket syntax for
 explicit hydrogens, and `{label}` / `{label|style}` for custom group labels.
 Use `show-h: "skeleton"` to draw every hydrogen as a separate `H` atom with
 its own single bond, turning the molecule into a fully explicit 2D skeleton.
+`rotation` and `mirror` transform the entire skeleton, including H positions and
+their bonds, while atom labels stay upright.
 Eligible unbranched heavy-atom chains become straight rows, with carbon-bound
 hydrogens using clean horizontal/vertical displayed-formula directions. Lone
 pairs influence non-carbon angles, so water remains bent and three-bond
@@ -298,6 +300,136 @@ labels and all, for ghost or de-emphasized species.
 Overrides apply to every part of a bond: both lines of a double bond, hash
 lines, waves, and dashes. Both options also work per molecule inside
 `reaction()` via `mol("...", opacity: 30%)`.
+
+## Substructure highlighting
+
+Highlight a group by its chemistry instead of looking up atom indices:
+
+```typst
+#smiles("CC(=O)OC1=CC=CC=C1C(=O)O", highlight-smarts: "C(=O)[OX2H1]")
+// The same carboxylic acid group, using its name:
+#smiles("CC(=O)OC1=CC=CC=C1C(=O)O", highlight-groups: "carboxylic acid")
+
+#smiles("OCCO", highlight-groups: "alcohol",
+  highlight-colors: (rgb("#FFE45C"), rgb("#BBE1FA")))
+#smiles-inline("CCO", highlight-groups: "alcohol")
+// Bond highlights without endpoint atom disks:
+#smiles("Oc1ccccc1", aromatic: "circle",
+  highlight-smarts: (pattern: "c1ccccc1", include-atoms: false))
+#smiles("CC(=O)O", highlight-groups: (group: "carbonyl", include-atoms: false))
+#reaction(
+  mol("CC(=O)O", highlight-groups: "carboxylic-acid"),
+  rxn-arrow(),
+  mol("CC(=O)OC", highlight-groups: "ester"),
+)
+```
+
+`highlight-smarts` and `highlight-groups` accept a string, a request dictionary,
+or a tuple mixing both. Dictionaries use `pattern` for SMARTS and `group` for a
+named group, with optional `include-atoms` (default: `true`). For example,
+`highlight-groups: ((group: "carbonyl", include-atoms: false), "alcohol")`
+customizes one request while leaving the other at its default.
+Every distinct match shades its atoms and the bonds specified by the
+pattern, using the existing disk/capsule highlight style.
+Automatic highlights use `include-atoms: true`, joining bond capsules at their
+endpoint atoms into a continuous highlight.
+Set `include-atoms: false` in a request to shade only its trimmed bond capsules;
+standalone matched atoms (including single-atom groups) are still highlighted.
+Symmetric mappings of the same atoms **and bonds** count once; overlapping
+matches are retained.
+Matches are sorted by atom indices, then bonds. Colors cycle through a six-color
+palette, or your `highlight-colors` tuple, across SMARTS requests followed by
+named-group requests. A one-color tuple gives every match the same color. Shared
+regions take the color of the later highlight; manual `highlight()` annotations
+are drawn afterward. Rotation, mirroring, aromatic circles, hydrogen display,
+inline scaling, raw `smiles-cetz()`, and both reaction rendering modes work with
+these options.
+
+An absent pattern/group gives a diagnostic naming the request and molecule.
+Set `highlight-unmatched: "ignore"` to skip absent groups deliberately; invalid
+or unsupported patterns still error. To inspect matches without rendering, use
+`substructure-matches(smiles-str, pattern)`, which returns `()` when absent:
+
+```typst
+#let found = substructure-matches("CC(=O)O", "C(=O)[OX2H1]")
+// ((atoms: (1, 2, 3), bonds: ((1, 2), (1, 3))),)
+```
+
+Named groups are `carboxylic-acid`, `carboxylate`, `alcohol`, `phenol`, `amine`,
+`ester`, `amide`, `carbonyl`, `aldehyde`, `ketone`, `nitrile`, `ether`, `thiol`,
+`nitro`, `alkene`, and `alkyne`. Spaces and letter case are accepted in names.
+The exported `functional-groups` dictionary contains their exact SMARTS
+definitions. Alcohol selects the neutral OH attached to a saturated carbon;
+phenol selects OH attached to aromatic carbon. Amine selects neutral primary,
+secondary, and tertiary amines, excluding amides, sulfonamides, amidines,
+guanidines, and cyanamides. Ester means a carboxylic ester (including formates),
+excluding anhydrides, carbonates, and carbamates. Carboxylic acid and carboxylate
+likewise exclude carbonic and carbamic acids. Nitro requires a C–N attachment;
+nitrate esters are a separate group. Nitrile excludes cyanamide.
+
+Ether excludes ester oxygen. The general carbonyl pattern also finds carbonyls
+in acids, esters, and amides, including aromatic carbonyl atoms in caffeine.
+Amide selects each local O=C–N motif, including lactams, ureas, and carbamates;
+urea therefore has two overlapping matches. Alcohol, phenol, amine, and thiol
+select their O, N, or S atom and highlight its displayed attached hydrogens;
+`SH`, `OH`, and `NH₂` labels are shaded together. Skeleton mode also shades the
+corresponding H atoms and bonds. Carboxylic-acid OH, amide NH, and aldehyde H
+receive the same treatment. Hydrogens stay hidden when the drawing omits them,
+and bond-only requests leave endpoint atoms and their H unshaded. Ether selects
+only O. Recursive neighboring atoms are context and are not shaded.
+
+`substructure-matches` still returns only query atoms and bonds with stable
+indices; named-group highlights add the displayed H fragments during drawing.
+Raw SMARTS highlights follow their query atom/bond selection. For example:
+
+```typst
+#smiles("CCS", highlight-groups: "thiol",
+  highlight-colors: (rgb("#BBE1FA"),))
+#smiles("CCS", show-h: "skeleton", highlight-groups: "thiol",
+  highlight-colors: (rgb("#BBE1FA"),))
+```
+
+These are structural definitions, without tautomer or
+protonation normalization.
+
+### Supported SMARTS subset
+
+| Syntax | Meaning |
+|---|---|
+| `C`, `N`, `O`, `Cl`, …; `c`, `n`, `[nH]`, … | Element and aliphatic/aromatic state |
+| `*`, `[#6]`, `a`, `A` | Any atom, atomic number, any aromatic/aliphatic atom |
+| `[OH1]`, `[NX3]`, `[ND2]` | Total attached hydrogen count, total connectivity (including H), graph degree |
+| `[N+]`, `[O-]`, `[N+2]`, `[O+0]` | Formal charge; omitted charge is unconstrained |
+| `[R]`, `[R0]` | In a ring / outside all rings |
+| `[O,N]`, `[O;H1]`, `[N&X3]`, `[!#6]` | OR, low-precedence AND, high-precedence AND (also juxtaposition), NOT |
+| `[$(N-C=O)]`, `[!$(N-C=O)]` | Anchored recursive context / excluded context |
+| `CC(=O)O`, `c1ccccc1`, `C%12CC%12`, `C.O` | Branches, ring closures, two-digit closures, disconnected components |
+| `-`, `=`, `#`, `:`, `~` | Non-aromatic single/double/triple, aromatic, any bond |
+
+An omitted bond matches single or aromatic bonds. `[H]` selects a real hydrogen
+atom; `H1` in `[OH1]` counts attached hydrogens. Counts reuse the molecule's
+implicit/bracket/folded-hydrogen representation and include retained hydrogen
+neighbors. Display-only H fragments do not become independent query atoms.
+`{label}` abbreviations and wildcards have no inferred element/composition;
+use `*` to select them explicitly.
+
+Lowercase aromatic input retains atom/bond aromaticity after Kekulé assignment,
+so `c:c` matches independent of drawing style. Explicit uppercase Kekulé input
+such as `C1=CC=CC=C1` has **no perceived aromaticity**: use lowercase input for
+aromatic predicates, or patterns such as `[#6]~[#6]` when either notation should
+match. The biphenyl `-` linker remains a non-aromatic single bond.
+
+PubChem commonly exports uppercase Kekulé SMILES. Use a lowercase aromatic
+representation for chemically classifying aromatic rings with named groups:
+uppercase Kekulé phenol will not match `phenol`, and its explicit C=C bonds
+can match `alkene`. This notation boundary also affects aromatic nitrogen.
+
+This is a SMARTS subset, not full RDKit/Daylight compatibility. Stereo, isotope,
+atom-map, implicit-H (`h`), valence/hybridization, ring-size/count, and bond
+logical predicates are rejected with a diagnostic. Patterns are limited to
+4096 bytes, 64 atoms per query, and 16 nesting levels. Searches stop with an
+explicit error at 1,000,000 steps or 4096 distinct matches, returning no partial
+highlight results.
 
 ## Inline molecules
 
@@ -629,6 +761,10 @@ style extensions and bond orders, for example `!c!w` or `!c=`.
 | `lone-pairs` | `none` | Draw lone pairs as `"dots"` or `"lines"` |
 | `atom-colors` | `(:)` | Color overrides: element key `O: red` or label key `"{PPh3}": blue` |
 | `show-indices` | `false` | Stamp atom indices for writing arrow references |
+| `highlight-smarts` | `()` | SMARTS string, `(pattern:, include-atoms:)` dictionary, or tuple mixing both |
+| `highlight-groups` | `()` | Group name, `(group:, include-atoms:)` dictionary, or tuple mixing both |
+| `highlight-colors` | `auto` | Non-empty color tuple; cycle through matches |
+| `highlight-unmatched` | `"error"` | `"error"` for absent matches, or explicitly `"ignore"` |
 | `…annotations` | — | `arrow()` / `highlight()` items on this molecule |
 
 SMILES string extensions:
@@ -695,7 +831,7 @@ nudges it in page coordinates, in bond-length units: positive x moves right and
 positive y moves up regardless of `reaction(flow:)`. String molecules accept
 common drawing options such as `scale`, `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-h`,
 `lone-pairs`, `opacity`, `bond-customizations`, `atom-colors`, and
-`show-indices`; `reaction(scale: ...)` uniformly resizes the complete reaction,
+`show-indices`, and the four `highlight-*` options above; `reaction(scale: ...)` uniformly resizes the complete reaction,
 and each `mol(scale: ...)` additionally resizes that molecule. Positional
 `arrow()` and `highlight()` items inside `mol()` use local references, so
 `mol("C=O", arrow(from: bond(0, 1), to: atom(0)))` does not require a species
@@ -792,6 +928,20 @@ Current limitations:
   centers are accepted and drawn with correct connectivity, but without
   stereo wedges.
 - Bridged bicyclics may overlap; template matching is not implemented.
+
+## Chemical verification
+
+The pinned [PubChem corpus](tests/fixtures/substructure-pubchem.json) covers
+63 compounds and all 16 named groups. Reviewed group counts check chemical
+classification; independent RDKit match sets check the exact selected atoms
+and bonds. Native Rust and shipped WASM tests cover 1,328 group/notation cases,
+including the documented uppercase Kekulé boundary. Annotation tests also
+check both `include-atoms` settings.
+
+Compile `tests/substructure-chemistry.typ` to inspect the highlighted examples.
+Run `python3 tests/verify-substructures.py` in an environment with RDKit to
+repeat the independent check; ordinary Rust/Typst tests need no RDKit or network.
+See [fixture notes](tests/fixtures/README.md) for sources and scope.
 
 ## License
 

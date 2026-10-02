@@ -14,6 +14,7 @@
   _validate-offset,
 )
 #import "../chemistry.typ": _compute-layout
+#import "../substructure.typ": _substructure-highlights
 #import "../styles.typ": _resolve-foreground-theme
 #import "../molecule/rendering.typ": (
   _mirror-layout,
@@ -148,6 +149,7 @@
     "color", "fg", "theme", "rotation", "mirror", "show-h", "aromatic",
     "atom-annotations", "opacity", "bond-customizations", "lone-pairs",
     "atom-colors", "show-indices",
+    "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
   )
   for option-name in options.keys() {
     if option-name not in allowed-options {
@@ -829,7 +831,13 @@
             bounds: bounds,
             size: (bounds.left + bounds.right, bounds.top + bounds.bottom),
             label: molecule-item.label,
-            annotations: molecule-item.at("annotations", default: ()),
+            annotations: _substructure-highlights(
+              molecule-item.spec,
+              highlight-smarts: molecule-item.opts.at("highlight-smarts", default: ()),
+              highlight-groups: molecule-item.opts.at("highlight-groups", default: ()),
+              highlight-colors: molecule-item.opts.at("highlight-colors", default: auto),
+              highlight-unmatched: molecule-item.opts.at("highlight-unmatched", default: "error"),
+            ) + molecule-item.at("annotations", default: ()),
             opts: molecule-item.opts,
             canvas-scale: canvas-scale,
             actual-font-size: if molecule-font-size == none {

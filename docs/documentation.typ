@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, substructure-matches, functional-groups
 #import "@preview/cetz:0.5.2"
 
 #let version = "0.11.0"
@@ -1603,6 +1603,141 @@ arrow-label content, and annotations are not counted.
   to the O glyph rather than the combined #c("O-") label.
 ]
 
+== Automatic substructure highlighting
+
+#demo[
+  Pass #c("highlight-smarts") to select atoms and bonds by chemistry.
+  #c("highlight-groups") offers named groups without writing SMARTS. Both accept
+  a string, a request dictionary, or a tuple mixing both, and shade every
+  distinct match with the existing highlight style.
+
+  #example(```typ
+  #smiles("CC(=O)OC1=CC=CC=C1C(=O)O",
+    highlight-smarts: "C(=O)[OX2H1]")
+  #smiles("OCCO", highlight-groups: "alcohol",
+    highlight-colors: (rgb("#FFE45C"), rgb("#BBE1FA")))
+  ```)
+]
+
+#demo[
+  These options also work with #c("smiles-inline()"), #c("smiles-cetz()"), and
+  #c("mol()"), including schemes with curly mechanism arrows.
+
+  #example(```typ
+  #reaction(
+    mol("CC(=O)O", highlight-groups: "carboxylic acid"),
+    rxn-arrow(),
+    mol("CC(=O)OC", highlight-groups: "ester"),
+  )
+  ```)
+]
+
+Matches are sorted by atom indices, then query bonds.
+Automatic highlights set #c("include-atoms: true"), so bond capsules join at
+their endpoint atoms into a continuous highlight.
+Each request can override this: use
+#c("highlight-smarts: (pattern: \"c1ccccc1\", include-atoms: false)") or
+#c("highlight-groups: (group: \"carbonyl\", include-atoms: false)"). This draws
+trimmed bond capsules without endpoint atom disks. Standalone matched atoms
+(including single-atom groups) are still shaded. Strings and dictionaries may
+be mixed in a tuple; the override applies to all matches of that request.
+Symmetric mappings of the same atoms and bonds count once; overlapping matches
+remain. The six-color
+palette cycles across SMARTS requests, then group requests. Set
+#c("highlight-colors: (yellow, blue)") to customize it; a single-color tuple
+gives every match that color. Shared regions take the later highlight color;
+manual #c("highlight()") annotations draw afterward. Only bonds specified by
+the query are shaded, including ring closures; recursive context is not shaded.
+
+No match produces a diagnostic naming the pattern/group and molecule. Use
+#c("highlight-unmatched: \"ignore\"") to allow absent groups explicitly.
+Invalid or unsupported patterns still produce an error. For inspection,
+#c("substructure-matches(smiles-str, pattern)") returns an array of dictionaries
+with #c("atoms") (writing-order indices) and #c("bonds") (endpoint pairs), or
+#c("()") when absent. For example, acetic acid with
+#c("C(=O)[OX2H1]") gives #c("((atoms: (1, 2, 3), bonds: ((1, 2), (1, 3))),)").
+
+=== Named functional groups
+
+Names accept spaces or hyphens and ignore letter case. The exported
+#c("functional-groups") dictionary contains the exact SMARTS definitions.
+
+#table(
+  columns: (auto, 1fr), inset: 6pt,
+  table.header([*Name*], [*Selection*]),
+  [`carboxylic-acid` / `carboxylate`], [Carbonyl carbon and both oxygens; neutral OH / negatively charged O.],
+  [`alcohol` / `phenol`], [Neutral OH attached to saturated / aromatic carbon.],
+  [`amine`], [Neutral primary, secondary, or tertiary amine N; excludes amides, sulfonamides, amidines, guanidines, and cyanamides.],
+  [`ester`], [Carboxylic ester C(=O)O; includes formates, excludes anhydrides, carbonates, and carbamates.],
+  [`amide`], [Each local O=C–N motif, including lactams, ureas, and carbamates. Urea has two overlapping matches.],
+  [`carbonyl`], [C=O, including aromatic carbonyl atoms and carbonyls in acids, esters, and amides.],
+  [`aldehyde` / `ketone`], [C=O with aldehyde H (including formaldehyde) / two carbon neighbors.],
+  [`nitrile`], [C triple-bonded to terminal N, attached to carbon or H; excludes cyanamide.],
+  [`ether` / `thiol`], [Neutral ether O excluding esters / neutral SH attached to carbon.],
+  [`nitro`], [The charged N(=O)O group attached directly to carbon; excludes nitrate esters.],
+  [`alkene` / `alkyne`], [Non-aromatic C=C / C triple-bonded to C.],
+)
+
+These are structural definitions; matching does not normalize protonation or
+tautomers. Alcohol excludes phenol and carboxylic-acid OH. Recursive predicates
+check neighboring chemistry without adding those neighbors to the highlight.
+Alcohol, phenol, amine, and thiol shade their O, N, or S atom together with
+displayed attached H, including #c("SH"), #c("OH"), and #c("NH₂") labels.
+Skeleton mode shades the corresponding H atoms and bonds. Carboxylic-acid OH,
+amide NH, and aldehyde H are included likewise. Omitted hydrogens stay hidden;
+bond-only requests leave endpoint atoms and their H unshaded. Ether selects O.
+Carboxylic acid and carboxylate exclude carbonic and carbamic acids.
+
+#c("substructure-matches") returns only query atom/bond indices; named-group
+highlights add the displayed H fragments during drawing. Raw SMARTS highlights
+follow their query selection.
+
+#demo[
+  #smiles("CCS", highlight-groups: "thiol",
+    highlight-colors: (rgb("#BBE1FA"),))
+  #smiles("CCS", show-h: "skeleton", highlight-groups: "thiol",
+    highlight-colors: (rgb("#BBE1FA"),))
+]
+
+The test corpus checks 63 PubChem compounds and all 16 groups against reviewed
+chemical counts and independent RDKit atom/bond selections. It also checks
+both #c("include-atoms") settings and explicit uppercase Kekulé notation.
+
+=== SMARTS subset and aromaticity
+
+Supported syntax includes element/aromatic symbols, wildcard #c("*"), atomic
+numbers (#c("[#6]")), hydrogen count #c("H"), graph degree #c("D"), total
+connectivity #c("X") including attached H, formal charges (#c("+"), #c("-"),
+#c("+0")), ring membership #c("R") / #c("R0"), branches, ring closures
+(digits and #c("%nn")), and dot-separated components. Atom predicates support
+negation #c("!"), high-precedence AND (#c("&") or juxtaposition), OR
+#c(","), low-precedence AND #c(";"), and anchored recursive #c("$(...)").
+Bonds support #c("-"), #c("="), #c("#"), #c(":"), and any bond #c("~").
+An omitted bond accepts single or aromatic bonds.
+
+Hydrogens and charges reuse the molecule graph, including bracket and folded
+terminal hydrogens. #c("[H]") selects a retained hydrogen atom; #c("[OH1]")
+counts attached hydrogens. Display-only H fragments are not independent query
+atoms. Abbreviations have no inferred composition; use #c("*") to select them.
+
+Lowercase input retains aromatic flags after single/double assignment, so
+#c("c:c") matches both Kekulé and circle drawing styles. Uppercase
+#c("C1=CC=CC=C1") has no perceived aromatic flags. Use lowercase input for
+aromatic predicates, or #c("[#6]~[#6]") to match carbon bonds in either notation.
+An explicit biphenyl #c("-") linker remains non-aromatic.
+
+PubChem commonly exports uppercase Kekulé strings. Use lowercase aromatic
+notation when classifying aromatic molecules with named groups: uppercase
+phenol will not match #c("phenol"), and its explicit C=C bonds can match
+#c("alkene"). Aromatic nitrogen classification also depends on this notation.
+
+This is a documented subset, not full RDKit/Daylight SMARTS. Stereo, isotope,
+atom-map, implicit-H (#c("h")), valence/hybridization, ring-size/count, and bond
+logical predicates produce explicit unsupported-syntax errors. Limits are
+4096 pattern bytes, 64 atoms per query, 16 nesting levels, 1,000,000 search steps,
+and 4096 distinct matches. Exceeding a limit gives an error without partial
+highlight results.
+
 == #raw("arrow()") and #raw("highlight()")
 
 #demo[
@@ -1969,6 +2104,10 @@ parameter.
   [#c("lone-pairs")], [`none`], [Draw lone pairs as #c("\"dots\"") or #c("\"lines\"").],
   [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
   [#c("show-indices")], [`false`], [Stamp atom indices for writing references.],
+  [#c("highlight-smarts")], [`()`], [SMARTS string, #c("(pattern:, include-atoms:)") dictionary, or tuple mixing both.],
+  [#c("highlight-groups")], [`()`], [Group name, #c("(group:, include-atoms:)") dictionary, or tuple mixing both.],
+  [#c("highlight-colors")], [`auto`], [Non-empty color tuple; cycle across matches.],
+  [#c("highlight-unmatched")], [`"error"`], [Diagnostic on absent matches; #c("\"ignore\"") permits absence.],
   [#c("..annotations")], [—], [#c("arrow()") / #c("highlight()") items on this molecule.],
 )
 

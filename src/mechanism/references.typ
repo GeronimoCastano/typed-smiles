@@ -12,6 +12,8 @@
   _visible-implicit-h,
   _has-label,
   _rendered-atom-position,
+  _skeleton-hydrogen-directions,
+  _skeleton-hydrogen-label-distance,
   _abbreviation-label,
   _abbreviation-lone-pair-directions,
 )
@@ -26,7 +28,7 @@
 
 // Absolute canvas position of an atom in a placed species. Label references use
 // the rendered atom glyph center rather than the full label box.
-#let _atom-position(placed-species, atom-index) = {
+#let _atom-position(placed-species, atom-index, fragment: "sym") = {
   // `mol-scale` shrinks or grows one species around its own origin; layout
   // coordinates are stored unscaled, so every read multiplies by it.
   let molecule-scale = placed-species.at("mol-scale", default: 1.0)
@@ -45,6 +47,11 @@
   let font-size = placed-species.at("actual-font-size", default: 11pt)
   let font = placed-species.at("font", default: "New Computer Modern")
   let show-h-state = _normalize-show-h(placed-species.at("show-h", default: ()))
+  // Skeleton mode draws H separately and centers the heavy-atom glyph on its
+  // layout position. Inline XH fragment offsets would shift its highlights.
+  if show-h-state.skeleton and not atom.at("virtual_h", default: false) {
+    return base
+  }
   let show-all-h = show-h-state.all
   let label-margin = calc.max(0.27 * molecule-scale, font-size / canvas-scale * 0.70)
   let subscript-size = font-size * 1.00
@@ -95,6 +102,7 @@
   let hydrogen-label(atom, index) = {
     let force = show-h-list.contains(index)
     let count = atom.hcount + _visible-implicit-h(atom, show-all-h: show-all-h, force: force)
+    let count = calc.max(0, count - if atom.at("stereo_h", default: "none") != "none" { 1 } else { 0 })
     if atom.at("abbrev", default: "") != "" or count == 0 or (_is-carbon(atom) and not (show-all-h or force)) {
       []
     } else if count == 1 {
@@ -204,7 +212,10 @@
     let stacked-h = degree >= 2 and not _is-carbon(atom)
     if stacked-h {
       if fragment == "h" {
-        return (px, py + label-margin * 0.95)
+        return (
+          px - content-width(hydrogen-text) / 2 + content-width(atom-label("H")) / 2,
+          py + label-margin * 0.95,
+        )
       }
       let label-content = symbol-text + charge
       return (
@@ -257,9 +268,78 @@
   ) {
     return base
   }
+  if fragment == "h" { return label-fragment-position(atom-index, "h") }
   let child = virtual-child(atom-index)
   if child == none { return base }
   label-fragment-position(atom-index, "sym")
+}
+
+// Visible H fragments attached to a selected heavy atom. Positions follow the
+// same label anchors and skeleton directions as the molecular renderer.
+#let _highlight-hydrogens(placed-species, atom-index) = {
+  let layout = placed-species.layout
+  let atom = layout.atoms.at(atom-index)
+  let show-h = _normalize-show-h(placed-species.at("show-h", default: ()))
+  let scale = placed-species.at("mol-scale", default: 1.0)
+  let origin = placed-species.origin
+  let rotation = placed-species.rotation
+  let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+  let font-size = placed-species.at("actual-font-size", default: 11pt)
+  let font = placed-species.at("font", default: "New Computer Modern")
+  let label = body => text(size: font-size, font: font, style: "normal", weight: "regular", body)
+  let count = if show-h.skeleton {
+    atom.hcount + atom.at("implicit_h", default: 0)
+  } else {
+    atom.hcount + _visible-implicit-h(atom,
+      show-all-h: show-h.all, force: show-h.indices.contains(atom-index))
+  }
+  let stereo = atom.at("stereo_h", default: "none") != "none"
+  let count = calc.max(0, count - if stereo { 1 } else { 0 })
+  let parent = _rendered-atom-position(atom, rotation, scale: scale)
+  let fragments = ()
+
+  if show-h.skeleton {
+    for direction in _skeleton-hydrogen-directions(layout, atom-index, count, rotation: rotation) {
+      fragments.push((
+        position: (
+          origin.at(0) + parent.x + direction.x * _skeleton-hydrogen-label-distance * scale,
+          origin.at(1) + parent.y + direction.y * _skeleton-hydrogen-label-distance * scale,
+        ),
+        width: measure(label("H")).width / canvas-scale,
+      ))
+    }
+  } else if count > 0 and (not _is-carbon(atom) or show-h.all or show-h.indices.contains(atom-index)) {
+    let hydrogen = if count == 1 { label("H") } else { label("H") + sub(label(str(count))) }
+    let center = _atom-position(placed-species, atom-index, fragment: "h")
+    let extra-width = (measure(hydrogen).width - measure(label("H")).width) / canvas-scale
+    fragments.push((
+      position: (center.at(0) + extra-width / 2, center.at(1)),
+      width: measure(hydrogen).width / canvas-scale,
+    ))
+  }
+
+  if stereo {
+    let direction = atom.at("stereo_h_dir", default: (x: 0.0, y: -1.0))
+    let rotated = _rotate-point((direction.x, direction.y), rotation)
+    fragments.push((
+      position: (origin.at(0) + parent.x + rotated.at(0) * 0.82 * scale,
+                 origin.at(1) + parent.y + rotated.at(1) * 0.82 * scale),
+      width: measure(label("H")).width / canvas-scale,
+    ))
+  }
+
+  // Retained isotope/charged hydrogens are real graph neighbors; ordinary
+  // terminal [H] atoms have already been folded into the parent's H count.
+  for bond in layout.bonds {
+    if bond.at("virtual_bond", default: false) { continue }
+    let neighbor = if bond.from == atom-index { bond.to }
+      else if bond.to == atom-index { bond.from } else { none }
+    if neighbor != none and layout.atoms.at(neighbor).symbol == "H" {
+      fragments.push((position: _atom-position(placed-species, neighbor),
+                      width: measure(label("H")).width / canvas-scale))
+    }
+  }
+  fragments
 }
 
 // Find the bond record joining two atoms in a species' layout.

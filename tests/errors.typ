@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight
+#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, substructure-matches
 
 #let selected-case = sys.inputs.at("case", default: "")
 
@@ -72,6 +72,40 @@
   cycle("CO", step(), step(), "CC")
 } else if selected-case == "invalid-step-reagent" {
   cycle("CO", step(into: mol("C")), "CC")
+} else if selected-case == "invalid-smarts" {
+  smiles("CCO", highlight-smarts: "[O")
+} else if selected-case == "unsupported-smarts" {
+  substructure-matches("CCO", "[C@H]")
+} else if selected-case == "empty-smarts" {
+  smiles("CCO", highlight-smarts: "")
+} else if selected-case == "smarts-wrong-type" {
+  smiles("CCO", highlight-smarts: 1)
+} else if selected-case == "smarts-invalid-item" {
+  smiles("CCO", highlight-smarts: ("O", 1))
+} else if selected-case == "unknown-functional-group" {
+  smiles("CCO", highlight-groups: "acetylated unicorn")
+} else if selected-case == "unmatched-smarts" {
+  smiles("CCO", highlight-smarts: "N")
+} else if selected-case == "unmatched-group" {
+  reaction(mol("CCO", highlight-groups: "amide"))
+} else if selected-case == "invalid-highlight-colors" {
+  smiles("CCO", highlight-colors: ())
+} else if selected-case == "invalid-highlight-color-item" {
+  smiles("CCO", highlight-colors: ("yellow",))
+} else if selected-case == "invalid-highlight-policy" {
+  smiles("CCO", highlight-unmatched: "silent")
+} else if selected-case == "query-invalid-smiles" {
+  substructure-matches("C1CC", "C")
+} else if selected-case == "highlight-request-missing-pattern" {
+  smiles("CCO", highlight-smarts: (include-atoms: false))
+} else if selected-case == "highlight-request-missing-group" {
+  smiles("CCO", highlight-groups: (include-atoms: false))
+} else if selected-case == "highlight-request-invalid-bool" {
+  smiles("CCO", highlight-smarts: (pattern: "CC", include-atoms: "false"))
+} else if selected-case == "highlight-group-invalid-bool" {
+  reaction(mol("CCO", highlight-groups: (group: "alcohol", include-atoms: 1)))
+} else if selected-case == "highlight-request-unknown-option" {
+  smiles("CCO", highlight-smarts: (pattern: "CC", include-atom: false))
 } else {
   panic("unknown validation test case: " + selected-case)
 }

@@ -3,8 +3,10 @@ mod graph;
 mod kekulize;
 mod layout;
 mod render;
+mod substructure;
 
 pub use render::LayoutOutput;
+pub use substructure::SubstructureMatch;
 
 use graph::{BondMarker, BondMarkerStyle, BondOrder, MoleculeGraph};
 use layout::compute_layout;
@@ -739,6 +741,17 @@ mod wasm_entrypoint {
         serde_json::to_vec(&layout).map_err(|error| format!("JSON error: {error}"))
     }
 
+    #[wasm_func]
+    pub fn substructure_matches(smiles: &[u8], pattern: &[u8]) -> Result<Vec<u8>, String> {
+        let smiles =
+            core::str::from_utf8(smiles).map_err(|error| format!("UTF-8 error: {error}"))?;
+        let pattern =
+            core::str::from_utf8(pattern).map_err(|error| format!("UTF-8 error: {error}"))?;
+        let molecule = parse_molecule(smiles)?;
+        let matches = substructure::find_matches(&molecule, pattern)?;
+        serde_json::to_vec(&matches).map_err(|error| format!("JSON error: {error}"))
+    }
+
     /// Called from Typst as `smiles-plugin.mol_weight(bytes(smiles-str))`.
     /// Returns the molecular weight in g/mol as a JSON number.
     #[wasm_func]
@@ -780,6 +793,14 @@ pub fn mol_weight_native(smiles: &str) -> Result<f64, String> {
 pub fn mol_formula_native(smiles: &str) -> Result<String, String> {
     let molecule = parse_molecule(smiles)?;
     compute_molecular_formula(&molecule)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn substructure_matches_native(
+    smiles: &str,
+    pattern: &str,
+) -> Result<Vec<SubstructureMatch>, String> {
+    substructure::find_matches(&parse_molecule(smiles)?, pattern)
 }
 
 #[cfg(test)]

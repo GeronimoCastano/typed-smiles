@@ -47,6 +47,27 @@
   json(_smiles-plugin.layout(bytes(smiles-str)))
 }
 
+/// Finds distinct SMARTS substructures in depiction writing-order indices.
+/// Returns an array of (atoms: (indices...), bonds: ((from, to)...)) dictionaries.
+/// No match returns (); malformed or unsupported patterns produce a diagnostic.
+#let substructure-matches(smiles-str, pattern) = {
+  if type(smiles-str) != str or smiles-str.trim() == "" {
+    _invalid-input(
+      "substructure-matches SMILES expression",
+      "expected a non-empty string, got " + repr(smiles-str),
+      "Pass a SMILES string such as \"CCO\".",
+    )
+  }
+  if type(pattern) != str or pattern.trim() == "" {
+    _invalid-input(
+      "SMARTS pattern",
+      "expected a non-empty string, got " + repr(pattern),
+      "Pass a pattern such as \"C(=O)[OX2H1]\".",
+    )
+  }
+  json(_smiles-plugin.substructure_matches(bytes(smiles-str), bytes(pattern)))
+}
+
 /// Computes the molecular weight of a SMILES string in g/mol, summing IUPAC
 /// standard atomic weights over all atoms including implicit and explicit
 /// hydrogens. Errors on input whose mass is undefined: wildcard `*` atoms,

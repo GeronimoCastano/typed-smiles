@@ -1,0 +1,4171 @@
+{
+  "source": "PubChem PUG REST: ConnectivitySMILES and IUPACName",
+  "retrieved": "2026-10-02",
+  "cases": [
+    {
+      "name": "aspirin",
+      "cid": 2244,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/2244",
+      "iupac-name": "2-acetyloxybenzoic acid",
+      "pubchem-smiles": "CC(=O)OC1=CC=CC=C1C(=O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "ester": 1,
+        "carbonyl": 2
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(=O)Oc1ccccc1C(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  10,
+                  11,
+                  12
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ],
+                  [
+                    10,
+                    12
+                  ]
+                ]
+              }
+            ],
+            "ester": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CC(=O)OC1=CC=CC=C1C(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  10,
+                  11,
+                  12
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ],
+                  [
+                    10,
+                    12
+                  ]
+                ]
+              }
+            ],
+            "ester": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acetaminophen",
+      "cid": 1983,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/1983",
+      "iupac-name": "N-(4-hydroxyphenyl)acetamide",
+      "pubchem-smiles": "CC(=O)NC1=CC=C(C=C1)O",
+      "reviewed-counts": {
+        "phenol": 1,
+        "amide": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(=O)Nc1ccc(O)cc1",
+          "matches": {
+            "phenol": [
+              {
+                "atoms": [
+                  8
+                ],
+                "bonds": []
+              }
+            ],
+            "amide": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CC(=O)NC1=CC=C(C=C1)O",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "caffeine",
+      "cid": 2519,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/2519",
+      "iupac-name": "1,3,7-trimethylpurine-2,6-dione",
+      "pubchem-smiles": "CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
+      "reviewed-counts": {
+        "amide": 3,
+        "carbonyl": 2
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "Cn1cnc2c1c(=O)n(C)c(=O)n2C",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  6,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ],
+                  [
+                    6,
+                    8
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    8,
+                    10
+                  ],
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11,
+                  12
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ],
+                  [
+                    10,
+                    12
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  6,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ],
+                  [
+                    6,
+                    8
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9,
+                  10
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ],
+                  [
+                    9,
+                    10
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  9,
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    9,
+                    10
+                  ],
+                  [
+                    9,
+                    11
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  9,
+                  10
+                ],
+                "bonds": [
+                  [
+                    9,
+                    10
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ibuprofen",
+      "cid": 3672,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/3672",
+      "iupac-name": "2-[4-(2-methylpropyl)phenyl]propanoic acid",
+      "pubchem-smiles": "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(C)Cc1ccc(C(C)C(=O)O)cc1",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  10,
+                  11,
+                  12
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ],
+                  [
+                    10,
+                    12
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  12,
+                  13,
+                  14
+                ],
+                "bonds": [
+                  [
+                    12,
+                    13
+                  ],
+                  [
+                    12,
+                    14
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  12,
+                  13
+                ],
+                "bonds": [
+                  [
+                    12,
+                    13
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "salicylic acid",
+      "cid": 338,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/338",
+      "iupac-name": "2-hydroxybenzoic acid",
+      "pubchem-smiles": "C1=CC=C(C(=C1)C(=O)O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "phenol": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc(O)c(C(=O)O)c1",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  6,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ],
+                  [
+                    6,
+                    8
+                  ]
+                ]
+              }
+            ],
+            "phenol": [
+              {
+                "atoms": [
+                  4
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C(C(=C1)C(=O)O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  6,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ],
+                  [
+                    6,
+                    8
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "arginine",
+      "cid": 6322,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6322",
+      "iupac-name": "(2S)-2-amino-5-(diaminomethylideneamino)pentanoic acid",
+      "pubchem-smiles": "C(CC(C(=O)O)N)CN=C(N)N",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "amine": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(CC(C(=O)O)N)CN=C(N)N",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  3,
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ],
+                  [
+                    3,
+                    5
+                  ]
+                ]
+              }
+            ],
+            "amine": [
+              {
+                "atoms": [
+                  6
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alanine",
+      "cid": 5950,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/5950",
+      "iupac-name": "(2S)-2-aminopropanoic acid",
+      "pubchem-smiles": "CC(C(=O)O)N",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "amine": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(C(=O)O)N",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  2,
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ],
+                  [
+                    2,
+                    4
+                  ]
+                ]
+              }
+            ],
+            "amine": [
+              {
+                "atoms": [
+                  5
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "sodium chloride",
+      "cid": 5234,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/5234",
+      "iupac-name": "sodium chloride",
+      "pubchem-smiles": "[Na+].[Cl-]",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "[Na+].[Cl-]",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "ethanol",
+      "cid": 702,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/702",
+      "iupac-name": "ethanol",
+      "pubchem-smiles": "CCO",
+      "reviewed-counts": {
+        "alcohol": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCO",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  2
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "glycerol",
+      "cid": 753,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/753",
+      "iupac-name": "propane-1,2,3-triol",
+      "pubchem-smiles": "C(C(CO)O)O",
+      "reviewed-counts": {
+        "alcohol": 3
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C(CO)O)O",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  3
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  4
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  5
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "benzyl alcohol",
+      "cid": 244,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/244",
+      "iupac-name": "phenylmethanol",
+      "pubchem-smiles": "C1=CC=C(C=C1)CO",
+      "reviewed-counts": {
+        "alcohol": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc(CO)cc1",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  5
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C(C=C1)CO",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  7
+                ],
+                "bonds": []
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "benzaldehyde",
+      "cid": 240,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/240",
+      "iupac-name": "benzaldehyde",
+      "pubchem-smiles": "C1=CC=C(C=C1)C=O",
+      "reviewed-counts": {
+        "carbonyl": 1,
+        "aldehyde": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc(C=O)cc1",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ],
+            "aldehyde": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C(C=C1)C=O",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              }
+            ],
+            "aldehyde": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "diethyl ether",
+      "cid": 3283,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/3283",
+      "iupac-name": "ethoxyethane",
+      "pubchem-smiles": "CCOCC",
+      "reviewed-counts": {
+        "ether": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCOCC",
+          "matches": {
+            "ether": [
+              {
+                "atoms": [
+                  2
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "glycine",
+      "cid": 750,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/750",
+      "iupac-name": "2-aminoacetic acid",
+      "pubchem-smiles": "C(C(=O)O)N",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "amine": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C(=O)O)N",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "amine": [
+              {
+                "atoms": [
+                  4
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "methanol",
+      "cid": 887,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/887",
+      "iupac-name": "methanol",
+      "pubchem-smiles": "CO",
+      "reviewed-counts": {
+        "alcohol": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CO",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  1
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "naphthalene",
+      "cid": 931,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/931",
+      "iupac-name": "naphthalene",
+      "pubchem-smiles": "C1=CC=C2C=CC=CC2=C1",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc2ccccc2c1",
+          "matches": {}
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C2C=CC=CC2=C1",
+          "matches": {
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "dichloromethane",
+      "cid": 6344,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6344",
+      "iupac-name": "dichloromethane",
+      "pubchem-smiles": "C(Cl)Cl",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(Cl)Cl",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "1-propanol",
+      "cid": 1031,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/1031",
+      "iupac-name": "propan-1-ol",
+      "pubchem-smiles": "CCCO",
+      "reviewed-counts": {
+        "alcohol": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCCO",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  3
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "pyruvic acid",
+      "cid": 1060,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/1060",
+      "iupac-name": "2-oxopropanoic acid",
+      "pubchem-smiles": "CC(=O)C(=O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "carbonyl": 2,
+        "ketone": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(=O)C(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  3,
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ],
+                  [
+                    3,
+                    5
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ]
+                ]
+              }
+            ],
+            "ketone": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "succinic acid",
+      "cid": 1110,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/1110",
+      "iupac-name": "butanedioic acid",
+      "pubchem-smiles": "C(CC(=O)O)C(=O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 2,
+        "carbonyl": 2
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(CC(=O)O)C(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  2,
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ],
+                  [
+                    2,
+                    4
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  5,
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    5,
+                    6
+                  ],
+                  [
+                    5,
+                    7
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  5,
+                  6
+                ],
+                "bonds": [
+                  [
+                    5,
+                    6
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vanillic acid",
+      "cid": 8468,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/8468",
+      "iupac-name": "4-hydroxy-3-methoxybenzoic acid",
+      "pubchem-smiles": "COC1=C(C=CC(=C1)C(=O)O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "phenol": 1,
+        "carbonyl": 1,
+        "ether": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "COc1c(O)ccc(C(=O)O)c1",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  8,
+                  9,
+                  10
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ],
+                  [
+                    8,
+                    10
+                  ]
+                ]
+              }
+            ],
+            "phenol": [
+              {
+                "atoms": [
+                  4
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ],
+            "ether": [
+              {
+                "atoms": [
+                  1
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "COC1=C(C=CC(=C1)C(=O)O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  8,
+                  9,
+                  10
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ],
+                  [
+                    8,
+                    10
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ],
+            "ether": [
+              {
+                "atoms": [
+                  1
+                ],
+                "bonds": []
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "theophylline",
+      "cid": 2153,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/2153",
+      "iupac-name": "1,3-dimethyl-7H-purine-2,6-dione",
+      "pubchem-smiles": "CN1C2=C(C(=O)N(C1=O)C)NC=N2",
+      "reviewed-counts": {
+        "amide": 3,
+        "carbonyl": 2
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "Cn1c2c(c(=O)n(C)c1=O)[nH]cn2",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  1,
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    1,
+                    8
+                  ],
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5,
+                  6
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ],
+                  [
+                    4,
+                    6
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    6,
+                    8
+                  ],
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CN1C2=C(C(=O)N(C1=O)C)NC=N2",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  1,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    1,
+                    7
+                  ],
+                  [
+                    7,
+                    8
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5,
+                  6
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ],
+                  [
+                    4,
+                    6
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ],
+                  [
+                    7,
+                    8
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    7,
+                    8
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "dimethyltryptamine",
+      "cid": 6089,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6089",
+      "iupac-name": "2-(1H-indol-3-yl)-N,N-dimethylethanamine",
+      "pubchem-smiles": "CN(C)CCC1=CNC2=CC=CC=C21",
+      "reviewed-counts": {
+        "amine": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CN(C)CCc1c[nH]c2ccccc12",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  1
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CN(C)CCC1=CNC2=CC=CC=C21",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  1
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  7
+                ],
+                "bonds": []
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  5,
+                  6
+                ],
+                "bonds": [
+                  [
+                    5,
+                    6
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  12,
+                  13
+                ],
+                "bonds": [
+                  [
+                    12,
+                    13
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "triethylamine",
+      "cid": 8471,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/8471",
+      "iupac-name": "N,N-diethylethanamine",
+      "pubchem-smiles": "CCN(CC)CC",
+      "reviewed-counts": {
+        "amine": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCN(CC)CC",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  2
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "glucose",
+      "cid": 5793,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/5793",
+      "iupac-name": "(3R,4S,5S,6R)-6-(hydroxymethyl)oxane-2,3,4,5-tetrol",
+      "pubchem-smiles": "C(C1C(C(C(C(O1)O)O)O)O)O",
+      "reviewed-counts": {
+        "alcohol": 5,
+        "ether": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C1C(O)C(O)C(O)C(O)O1)O",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  3
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  5
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  7
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  9
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  11
+                ],
+                "bonds": []
+              }
+            ],
+            "ether": [
+              {
+                "atoms": [
+                  10
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C(C1C(C(C(C(O1)O)O)O)O)O",
+          "matches": {
+            "alcohol": [
+              {
+                "atoms": [
+                  7
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  8
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  9
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  10
+                ],
+                "bonds": []
+              },
+              {
+                "atoms": [
+                  11
+                ],
+                "bonds": []
+              }
+            ],
+            "ether": [
+              {
+                "atoms": [
+                  6
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "palmitic acid",
+      "cid": 985,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/985",
+      "iupac-name": "hexadecanoic acid",
+      "pubchem-smiles": "CCCCCCCCCCCCCCCC(=O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCCCCCCCCCCCCCCC(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  15,
+                  16,
+                  17
+                ],
+                "bonds": [
+                  [
+                    15,
+                    16
+                  ],
+                  [
+                    15,
+                    17
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  15,
+                  16
+                ],
+                "bonds": [
+                  [
+                    15,
+                    16
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "malic acid",
+      "cid": 525,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/525",
+      "iupac-name": "2-hydroxybutanedioic acid",
+      "pubchem-smiles": "C(C(C(=O)O)O)C(=O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 2,
+        "alcohol": 1,
+        "carbonyl": 2
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C(C(=O)O)O)C(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  2,
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ],
+                  [
+                    2,
+                    4
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ],
+                  [
+                    6,
+                    8
+                  ]
+                ]
+              }
+            ],
+            "alcohol": [
+              {
+                "atoms": [
+                  5
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "tyrosine",
+      "cid": 6057,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6057",
+      "iupac-name": "(2S)-2-amino-3-(4-hydroxyphenyl)propanoic acid",
+      "pubchem-smiles": "C1=CC(=CC=C1CC(C(=O)O)N)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "phenol": 1,
+        "amine": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1cc(O)ccc1CC(C(=O)O)N",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  9,
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    9,
+                    10
+                  ],
+                  [
+                    9,
+                    11
+                  ]
+                ]
+              }
+            ],
+            "phenol": [
+              {
+                "atoms": [
+                  3
+                ],
+                "bonds": []
+              }
+            ],
+            "amine": [
+              {
+                "atoms": [
+                  12
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  9,
+                  10
+                ],
+                "bonds": [
+                  [
+                    9,
+                    10
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC(=CC=C1CC(C(=O)O)N)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  8,
+                  9,
+                  10
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ],
+                  [
+                    8,
+                    10
+                  ]
+                ]
+              }
+            ],
+            "amine": [
+              {
+                "atoms": [
+                  11
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "pentaerythritol tetranitrate",
+      "cid": 6518,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6518",
+      "iupac-name": "[3-nitrooxy-2,2-bis(nitrooxymethyl)propyl] nitrate",
+      "pubchem-smiles": "C(C(CO[N+](=O)[O-])(CO[N+](=O)[O-])CO[N+](=O)[O-])O[N+](=O)[O-]",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C(CO[N+](=O)[O-])(CO[N+](=O)[O-])CO[N+](=O)[O-])O[N+](=O)[O-]",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "heptacosane",
+      "cid": 11636,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/11636",
+      "iupac-name": "heptacosane",
+      "pubchem-smiles": "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "xanthene",
+      "cid": 7107,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/7107",
+      "iupac-name": "9H-xanthene",
+      "pubchem-smiles": "C1C2=CC=CC=C2OC3=CC=CC=C31",
+      "reviewed-counts": {
+        "ether": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C1c2ccccc2Oc2ccccc21",
+          "matches": {
+            "ether": [
+              {
+                "atoms": [
+                  7
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1C2=CC=CC=C2OC3=CC=CC=C31",
+          "matches": {
+            "ether": [
+              {
+                "atoms": [
+                  7
+                ],
+                "bonds": []
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  5,
+                  6
+                ],
+                "bonds": [
+                  [
+                    5,
+                    6
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  8,
+                  9
+                ],
+                "bonds": [
+                  [
+                    8,
+                    9
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  12,
+                  13
+                ],
+                "bonds": [
+                  [
+                    12,
+                    13
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "phenol",
+      "cid": 996,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/996",
+      "iupac-name": "phenol",
+      "pubchem-smiles": "C1=CC=C(C=C1)O",
+      "reviewed-counts": {
+        "phenol": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc(O)cc1",
+          "matches": {
+            "phenol": [
+              {
+                "atoms": [
+                  4
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C(C=C1)O",
+          "matches": {
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "aniline",
+      "cid": 6115,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6115",
+      "iupac-name": "aniline",
+      "pubchem-smiles": "C1=CC=C(C=C1)N",
+      "reviewed-counts": {
+        "amine": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc(N)cc1",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  4
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C(C=C1)N",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  6
+                ],
+                "bonds": []
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acetonitrile",
+      "cid": 6342,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6342",
+      "iupac-name": "acetonitrile",
+      "pubchem-smiles": "CC#N",
+      "reviewed-counts": {
+        "nitrile": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC#N",
+          "matches": {
+            "nitrile": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "benzonitrile",
+      "cid": 7505,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/7505",
+      "iupac-name": "benzonitrile",
+      "pubchem-smiles": "C1=CC=C(C=C1)C#N",
+      "reviewed-counts": {
+        "nitrile": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc(C#N)cc1",
+          "matches": {
+            "nitrile": [
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C(C=C1)C#N",
+          "matches": {
+            "nitrile": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ethanethiol",
+      "cid": 6343,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6343",
+      "iupac-name": "ethanethiol",
+      "pubchem-smiles": "CCS",
+      "reviewed-counts": {
+        "thiol": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCS",
+          "matches": {
+            "thiol": [
+              {
+                "atoms": [
+                  2
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cysteine",
+      "cid": 5862,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/5862",
+      "iupac-name": "(2R)-2-amino-3-sulfanylpropanoic acid",
+      "pubchem-smiles": "C(C(C(=O)O)N)S",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "amine": 1,
+        "carbonyl": 1,
+        "thiol": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C(C(=O)O)N)S",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  2,
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ],
+                  [
+                    2,
+                    4
+                  ]
+                ]
+              }
+            ],
+            "amine": [
+              {
+                "atoms": [
+                  5
+                ],
+                "bonds": []
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "thiol": [
+              {
+                "atoms": [
+                  6
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acetone",
+      "cid": 180,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/180",
+      "iupac-name": "propan-2-one",
+      "pubchem-smiles": "CC(=O)C",
+      "reviewed-counts": {
+        "carbonyl": 1,
+        "ketone": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(=O)C",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "ketone": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "formaldehyde",
+      "cid": 712,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/712",
+      "iupac-name": "formaldehyde",
+      "pubchem-smiles": "C=O",
+      "reviewed-counts": {
+        "carbonyl": 1,
+        "aldehyde": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C=O",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ],
+            "aldehyde": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ethyl acetate",
+      "cid": 8857,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/8857",
+      "iupac-name": "ethyl acetate",
+      "pubchem-smiles": "CCOC(=O)C",
+      "reviewed-counts": {
+        "ester": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCOC(=O)C",
+          "matches": {
+            "ester": [
+              {
+                "atoms": [
+                  2,
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ],
+                  [
+                    3,
+                    4
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acetic anhydride",
+      "cid": 7918,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/7918",
+      "iupac-name": "acetyl acetate",
+      "pubchem-smiles": "CC(=O)OC(=O)C",
+      "reviewed-counts": {
+        "carbonyl": 2
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(=O)OC(=O)C",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "nitrobenzene",
+      "cid": 7416,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/7416",
+      "iupac-name": "nitrobenzene",
+      "pubchem-smiles": "C1=CC=C(C=C1)[N+](=O)[O-]",
+      "reviewed-counts": {
+        "nitro": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "c1ccc([N+](=O)[O-])cc1",
+          "matches": {
+            "nitro": [
+              {
+                "atoms": [
+                  4,
+                  5,
+                  6
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ],
+                  [
+                    4,
+                    6
+                  ]
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "C1=CC=C(C=C1)[N+](=O)[O-]",
+          "matches": {
+            "nitro": [
+              {
+                "atoms": [
+                  6,
+                  7,
+                  8
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ],
+                  [
+                    6,
+                    8
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    4,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "nitroglycerin",
+      "cid": 4510,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/4510",
+      "iupac-name": "1,3-dinitrooxypropan-2-yl nitrate",
+      "pubchem-smiles": "C(C(CO[N+](=O)[O-])O[N+](=O)[O-])O[N+](=O)[O-]",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C(CO[N+](=O)[O-])O[N+](=O)[O-])O[N+](=O)[O-]",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "urea",
+      "cid": 1176,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/1176",
+      "iupac-name": "urea",
+      "pubchem-smiles": "C(=O)(N)N",
+      "reviewed-counts": {
+        "amide": 2,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(=O)(N)N",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  0,
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ],
+                  [
+                    0,
+                    2
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  0,
+                  1,
+                  3
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ],
+                  [
+                    0,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "dimethyl carbonate",
+      "cid": 12021,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/12021",
+      "iupac-name": "dimethyl carbonate",
+      "pubchem-smiles": "COC(=O)OC",
+      "reviewed-counts": {
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "COC(=O)OC",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ethyl carbamate",
+      "cid": 5641,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/5641",
+      "iupac-name": "ethyl carbamate",
+      "pubchem-smiles": "CCOC(=O)N",
+      "reviewed-counts": {
+        "amide": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CCOC(=O)N",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  3,
+                  4,
+                  5
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ],
+                  [
+                    3,
+                    5
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  3,
+                  4
+                ],
+                "bonds": [
+                  [
+                    3,
+                    4
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acetamide",
+      "cid": 178,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/178",
+      "iupac-name": "acetamide",
+      "pubchem-smiles": "CC(=O)N",
+      "reviewed-counts": {
+        "amide": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(=O)N",
+          "matches": {
+            "amide": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acrolein",
+      "cid": 7847,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/7847",
+      "iupac-name": "prop-2-enal",
+      "pubchem-smiles": "C=CC=O",
+      "reviewed-counts": {
+        "carbonyl": 1,
+        "aldehyde": 1,
+        "alkene": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C=CC=O",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "aldehyde": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acrylonitrile",
+      "cid": 7855,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/7855",
+      "iupac-name": "prop-2-enenitrile",
+      "pubchem-smiles": "C=CC#N",
+      "reviewed-counts": {
+        "nitrile": 1,
+        "alkene": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C=CC#N",
+          "matches": {
+            "nitrile": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "acetylene",
+      "cid": 6326,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6326",
+      "iupac-name": "acetylene",
+      "pubchem-smiles": "C#C",
+      "reviewed-counts": {
+        "alkyne": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C#C",
+          "matches": {
+            "alkyne": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ethylene",
+      "cid": 6325,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/6325",
+      "iupac-name": "ethene",
+      "pubchem-smiles": "C=C",
+      "reviewed-counts": {
+        "alkene": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C=C",
+          "matches": {
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vinyl alcohol",
+      "cid": 11199,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/11199",
+      "iupac-name": "ethenol",
+      "pubchem-smiles": "C=CO",
+      "reviewed-counts": {
+        "alkene": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C=CO",
+          "matches": {
+            "alkene": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "guanidine",
+      "cid": 3520,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/3520",
+      "iupac-name": "guanidine",
+      "pubchem-smiles": "C(=N)(N)N",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(=N)(N)N",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "hydroxylamine",
+      "cid": 787,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/787",
+      "iupac-name": "hydroxylamine",
+      "pubchem-smiles": "NO",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "NO",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "sulfamethoxazole",
+      "cid": 5329,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/5329",
+      "iupac-name": "4-amino-N-(5-methyl-1,2-oxazol-3-yl)benzenesulfonamide",
+      "pubchem-smiles": "CC1=CC(=NO1)NS(=O)(=O)C2=CC=C(C=C2)N",
+      "reviewed-counts": {
+        "amine": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "Cc1cc(NS(=O)(=O)c2ccc(N)cc2)no1",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  12
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CC1=CC(=NO1)NS(=O)(=O)C2=CC=C(C=C2)N",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  16
+                ],
+                "bonds": []
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  12,
+                  13
+                ],
+                "bonds": [
+                  [
+                    12,
+                    13
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  14,
+                  15
+                ],
+                "bonds": [
+                  [
+                    14,
+                    15
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "nicotine",
+      "cid": 89594,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/89594",
+      "iupac-name": "3-[(2S)-1-methylpyrrolidin-2-yl]pyridine",
+      "pubchem-smiles": "CN1CCCC1C2=CN=CC=C2",
+      "reviewed-counts": {
+        "amine": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CN1CCCC1c1cnccc1",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  1
+                ],
+                "bonds": []
+              }
+            ]
+          }
+        },
+        {
+          "notation": "pubchem",
+          "smiles": "CN1CCCC1C2=CN=CC=C2",
+          "matches": {
+            "amine": [
+              {
+                "atoms": [
+                  1
+                ],
+                "bonds": []
+              }
+            ],
+            "alkene": [
+              {
+                "atoms": [
+                  6,
+                  7
+                ],
+                "bonds": [
+                  [
+                    6,
+                    7
+                  ]
+                ]
+              },
+              {
+                "atoms": [
+                  10,
+                  11
+                ],
+                "bonds": [
+                  [
+                    10,
+                    11
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "sodium acetate",
+      "cid": 31372,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/31372",
+      "iupac-name": "sodium acetate",
+      "pubchem-smiles": "CC(=O)[O-].[Na+]",
+      "reviewed-counts": {
+        "carboxylate": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "CC(=O)[O-].[Na+]",
+          "matches": {
+            "carboxylate": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "glycine zwitterion",
+      "cid": 5257127,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/5257127",
+      "iupac-name": "2-azaniumylacetate",
+      "pubchem-smiles": "C(C(=O)[O-])[NH3+]",
+      "reviewed-counts": {
+        "carboxylate": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(C(=O)[O-])[NH3+]",
+          "matches": {
+            "carboxylate": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "thiourea",
+      "cid": 2723790,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/2723790",
+      "iupac-name": "thiourea",
+      "pubchem-smiles": "C(=S)(N)N",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(=S)(N)N",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "cyanamide",
+      "cid": 9864,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/9864",
+      "iupac-name": "cyanamide",
+      "pubchem-smiles": "C(#N)N",
+      "reviewed-counts": {},
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(#N)N",
+          "matches": {}
+        }
+      ]
+    },
+    {
+      "name": "formic acid",
+      "cid": 284,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/284",
+      "iupac-name": "formic acid",
+      "pubchem-smiles": "C(=O)O",
+      "reviewed-counts": {
+        "carboxylic-acid": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(=O)O",
+          "matches": {
+            "carboxylic-acid": [
+              {
+                "atoms": [
+                  0,
+                  1,
+                  2
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ],
+                  [
+                    0,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "methyl formate",
+      "cid": 7865,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/7865",
+      "iupac-name": "methyl formate",
+      "pubchem-smiles": "COC=O",
+      "reviewed-counts": {
+        "ester": 1,
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "COC=O",
+          "matches": {
+            "ester": [
+              {
+                "atoms": [
+                  1,
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    1,
+                    2
+                  ],
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ],
+            "carbonyl": [
+              {
+                "atoms": [
+                  2,
+                  3
+                ],
+                "bonds": [
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "carbonic acid",
+      "cid": 767,
+      "source": "https://pubchem.ncbi.nlm.nih.gov/compound/767",
+      "iupac-name": "carbonic acid",
+      "pubchem-smiles": "C(=O)(O)O",
+      "reviewed-counts": {
+        "carbonyl": 1
+      },
+      "variants": [
+        {
+          "notation": "aromatic",
+          "smiles": "C(=O)(O)O",
+          "matches": {
+            "carbonyl": [
+              {
+                "atoms": [
+                  0,
+                  1
+                ],
+                "bonds": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "patterns": {
+    "carboxylic-acid": "[CX3;H1,$(C-[#6])](=O)[OX2H1;+0]",
+    "carboxylate": "[CX3;H1,$(C-[#6])](=O)[O-]",
+    "alcohol": "[OX2H1;+0;$(O-[CX4])]",
+    "phenol": "[OX2H1;+0;$(O-c)]",
+    "amine": "[NX3;+0;$(N-[#6]);!$(N-[!#6;!#1]);!$(N-[#6]=[O,N,S]);!$(N-C#N)]",
+    "ester": "[CX3;H1,$(C-[#6]);!$(C(=O)-O-C=O)](=O)[OX2H0;+0;$(O-[#6])]",
+    "amide": "[#6X3](=O)[#7X3]",
+    "carbonyl": "[#6X3]=O",
+    "aldehyde": "[CX3;H2,H1$(C-[#6])]=O",
+    "ketone": "[CX3;$(C(-[#6])-[#6])]=O",
+    "nitrile": "[CX2;H1,$(C-[#6])]#[NX1]",
+    "ether": "[OX2H0;+0;$(O(-[#6])-[#6]);!$(O-C=O)]",
+    "thiol": "[SX2H1;+0;$(S-[#6])]",
+    "nitro": "[N+;X3;$(N-[#6])](=O)[O-]",
+    "alkene": "C=C",
+    "alkyne": "C#C"
+  },
+  "rdkit-version": "2026.03.1"
+}
