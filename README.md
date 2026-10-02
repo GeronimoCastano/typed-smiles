@@ -20,7 +20,8 @@ source instead of copying diagrams from a separate editor.
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
 mechanism helpers: `smiles`, `ce`, `mol`, `rxn-arrow`, `reaction`, `atom`,
-`bond`, `lp`, `species`, `arrow`, `highlight`, and `brackets`.
+`bond`, `lp`, `species`, `arrow`, `highlight`, and `brackets`, plus the
+`molecules` library of named SMILES strings.
 
 ## Basic molecule drawing
 
@@ -48,6 +49,33 @@ on parse and both render identically.
 ```
 
 ![Basic molecule examples](assets/readme/basics.png)
+
+## Named molecules
+
+`molecules` holds SMILES strings for over a hundred common molecules, bundled
+with the package so it works offline: solvents, aromatics and heterocycles,
+nucleobases, the 20 amino acids, sugars, common drugs and hormones, and
+laboratory reagents. Type `molecules.` and the editor suggests the available
+names.
+
+```typst
+#import "@preview/typed-smiles:0.11.0": smiles, molecules
+
+#smiles(molecules.caffeine)
+#smiles(molecules.alanine)
+#smiles(molecules.aspirin)
+#smiles(molecules.serotonin)
+```
+
+![Named molecule examples](assets/readme/molecules.png)
+
+Each entry is a plain SMILES string, so it works anywhere a SMILES string does:
+`mol(molecules.ethanol)`, `mol-weight(molecules.aspirin)`, or
+`smiles(molecules.benzene, aromatic: "circle")`. Names are lowercase and
+hyphenated (`molecules.acetic-acid`); use `molecules.at("acetic-acid")` for a
+name stored in a variable. Stereocenters encode the natural or commonly sold
+isomer, such as L amino acids and D sugars. The full list is in the
+documentation.
 
 ## Scaling
 
@@ -463,7 +491,7 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
   let hb = (paint: rgb("#3A78C9"), thickness: 1pt, dash: "densely-dashed")
   let off(anchor, by) = (rel: by, to: anchor)
   line(off("A.atom-11", (0.4, -0.15)), off("T.atom-9", (-0.2, 0.06)), stroke: hb)
-  line(off("A.atom-2", (0.15, 0)), off("T.atom-7", (-0.2, 0)), stroke: hb)
+  line(off("A.atom-2", (0.15, 0)), off("T.atom-7", (-0.42, 0.02)), stroke: hb)
 
   content((rel: (0.2, 0.2), to: ("A.atom-11", 50%, "T.atom-9")), text(size: 7.5pt, fill: rgb("#3A78C9"))[2.9 Å])
   content((rel: (0, 0.28), to: ("A.atom-2", 50%, "T.atom-7")), text(size: 7.5pt, fill: rgb("#3A78C9"))[2.8 Å])
@@ -889,6 +917,12 @@ charges are summed. Errors on wildcards, abbreviations, and isotopes.
 #mol-formula("CC(=O)[O-].[Na+]")            // C₂H₃NaO₂
 #mol-formula("CN1C=NC2=C1C(=O)N(C(=O)N2C)C") // C₈H₁₀N₄O₂
 ```
+
+### `molecules`
+
+A dictionary from lowercase, hyphenated names to SMILES strings for about a
+hundred common molecules. Access entries as `molecules.caffeine` or
+`molecules.at("caffeine")`; a misspelled name is a compile error.
 
 ### `#smiles-inline(smiles-str, height: 1.4em, baseline: auto, …args)`
 

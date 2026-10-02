@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, substructure-matches
+#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, molecules, substructure-matches
 
 #let selected-case = sys.inputs.at("case", default: "")
 
@@ -106,6 +106,10 @@
   reaction(mol("CCO", highlight-groups: (group: "alcohol", include-atoms: 1)))
 } else if selected-case == "highlight-request-unknown-option" {
   smiles("CCO", highlight-smarts: (pattern: "CC", include-atom: false))
+} else if selected-case == "unknown-library-molecule" {
+  smiles(molecules.cafeine)
+} else if selected-case == "one-sided-directional-bond" {
+  smiles("F/C=CF")
 } else {
   panic("unknown validation test case: " + selected-case)
 }

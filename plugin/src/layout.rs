@@ -11,7 +11,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::f64::consts::PI;
 
-use crate::graph::{AtomChirality, BondDirection, BondOrder, BondStereo, MoleculeGraph};
+use crate::graph::{AtomChirality, Bond, BondDirection, BondOrder, BondStereo, MoleculeGraph};
 use crate::render::{AromaticRing, AtomOutput, BondOutput, LayoutOutput, Vec2};
 
 /// Gap between the bounding boxes of dot-separated fragments, in bond lengths.
@@ -702,30 +702,19 @@ fn apply_cis_trans_layout(
 ) -> Result<(), String> {
     let mut handled_directional_bonds = HashSet::new();
 
+    // A directional bond between two double bonds describes both of them, so
+    // each double bond reads every marked neighbor bond. Reorienting a shared
+    // neighbor reflects across an axis through the shared atom, which keeps
+    // the geometry of double bonds that were already placed.
     for double_bond in &molecule.bonds {
         if double_bond.order != BondOrder::Double {
             continue;
         }
 
-        let left = directional_neighbors(
-            molecule,
-            double_bond.from,
-            double_bond.to,
-            &handled_directional_bonds,
-        )?;
-        let right = directional_neighbors(
-            molecule,
-            double_bond.to,
-            double_bond.from,
-            &handled_directional_bonds,
-        )?;
+        let left = directional_neighbors(molecule, double_bond.from, double_bond.to)?;
+        let right = directional_neighbors(molecule, double_bond.to, double_bond.from)?;
 
         if left.is_empty() || right.is_empty() {
-            if !left.is_empty() || !right.is_empty() {
-                return Err(
-                    "Directional / and \\ bonds must mark both ends of a double bond".into(),
-                );
-            }
             continue;
         }
 
@@ -766,12 +755,24 @@ fn apply_cis_trans_layout(
     }
 
     for (index, bond) in molecule.bonds.iter().enumerate() {
-        if bond.direction != BondDirection::None && !handled_directional_bonds.contains(&index) {
-            return Err("Directional / and \\ bonds are only supported around double bonds; use !w or !h for manual wedge drawing".into());
+        if bond.direction == BondDirection::None || handled_directional_bonds.contains(&index) {
+            continue;
         }
+        if touches_double_bond(molecule, bond) {
+            return Err("Directional / and \\ bonds must mark both ends of a double bond".into());
+        }
+        return Err("Directional / and \\ bonds are only supported around double bonds; use !w or !h for manual wedge drawing".into());
     }
 
     Ok(())
+}
+
+fn touches_double_bond(molecule: &MoleculeGraph, bond: &Bond) -> bool {
+    [bond.from, bond.to].iter().any(|&atom| {
+        molecule.adj[atom]
+            .iter()
+            .any(|&(_, bond_index)| molecule.bonds[bond_index].order == BondOrder::Double)
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -798,11 +799,10 @@ fn directional_neighbors(
     molecule: &MoleculeGraph,
     center: usize,
     double_partner: usize,
-    handled: &HashSet<usize>,
 ) -> Result<Vec<DirectionalNeighbor>, String> {
     let mut found = Vec::new();
     for &(neighbor, bond_index) in &molecule.adj[center] {
-        if neighbor == double_partner || handled.contains(&bond_index) {
+        if neighbor == double_partner {
             continue;
         }
         let bond = &molecule.bonds[bond_index];

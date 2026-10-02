@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, molecules
 #import "@preview/cetz:0.5.2"
 
 #set text(font: "New Computer Modern", size: 11pt)
@@ -2618,7 +2618,7 @@ stubs to the sugar backbone.
   let hb = (paint: rgb("#3A78C9"), thickness: 1.0pt, dash: "densely-dashed")
   let off(anchor, by) = (rel: by, to: anchor)
   line(off("A.atom-11", (0.4, -0.15)), off("T.atom-9", (-0.2, 0.06)), stroke: hb)
-  line(off("A.atom-2", (0.15, 0)), off("T.atom-7", (-0.2, 0)), stroke: hb)
+  line(off("A.atom-2", (0.15, 0)), off("T.atom-7", (-0.42, 0.02)), stroke: hb)
 
   // Hydrogen-bond distances.
   content((rel: (0.2, 0.2), to: ("A.atom-11", 50%, "T.atom-9")), text(size: 7.5pt, fill: rgb("#3A78C9"))[2.9 Å])
@@ -2673,7 +2673,7 @@ carbonyl; the C=O breaks), lone pairs, and residue labels.
 
   // Charge-relay hydrogen bonds.
   let hb = (paint: rgb("#3A78C9"), thickness: 1.0pt, dash: "densely-dashed")
-  line(off("asp.atom-3", (0.15, 0)), off("his.atom-4", (-0.2, 0)), stroke: hb)
+  line(off("asp.atom-3", (0.15, 0)), off("his.atom-4", (-0.42, 0.02)), stroke: hb)
   line(off("his.atom-2", (0.1, -0.1)), off("ser.atom-0", (-0.28, 0)), stroke: hb)
   content(off("asp.atom-3", (0.62, 0.42)), text(size: 7pt, fill: rgb("#3A78C9"))[2.8 Å])
 
@@ -4154,6 +4154,158 @@ chains, branches, functional groups, halogens, sulfur, and an aromatic ring.
     #smiles("c1ccccc1", show-h: "skeleton", scale: 0.58)],
 )
 
+
+#pagebreak()
+
+= Conjugated cis/trans double bonds
+
+A directional bond between two double bonds describes both of them, and a mark
+next to a carbonyl only constrains the alkene it borders.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*trans,trans-Diene* \ #text(size: 8pt, `C/C=C/C=C/C`) \ #smiles("C/C=C/C=C/C")],
+  [*trans,cis-Diene* \ #text(size: 8pt, `C/C=C/C=C\C`) \ #smiles("C/C=C/C=C\\C")],
+  [*Terminal diene* \ #text(size: 8pt, `C=C/C=C/C`) \ #smiles("C=C/C=C/C")],
+
+  [*Fumaric acid (trans)* \ #text(size: 8pt, `OC(=O)/C=C/C(=O)O`) \ #smiles("OC(=O)/C=C/C(=O)O")],
+  [*Maleic acid (cis)* \ #text(size: 8pt, `OC(=O)/C=C\C(=O)O`) \ #smiles("OC(=O)/C=C\\C(=O)O")],
+  [*trans-Enone* \ #text(size: 8pt, `CC(=O)/C=C/C`) \ #smiles("CC(=O)/C=C/C")],
+)
+
+
+= Lone hydride labels
+
+A carbon without bonds is labeled with its hydrogens. Lone neutral hydrides of
+oxygen, sulfur, and the halogens write hydrogen first; nitrogen, carbon, and
+charged ions keep the symbol first.
+
+#grid(
+  columns: (1fr,) * 6,
+  gutter: 1em,
+  align: center + horizon,
+
+  [#text(size: 8pt, `C`) \ #smiles("C")],
+  [#text(size: 8pt, `O`) \ #smiles("O")],
+  [#text(size: 8pt, `S`) \ #smiles("S")],
+  [#text(size: 8pt, `Cl`) \ #smiles("Cl")],
+  [#text(size: 8pt, `N`) \ #smiles("N")],
+  [#text(size: 8pt, `[OH-]`) \ #smiles("[OH-]")],
+
+  [#text(size: 8pt, `C.C`) \ #smiles("C.C")],
+  [#text(size: 8pt, `Br`) \ #smiles("Br")],
+  [#text(size: 8pt, `[OH3+]`) \ #smiles("[OH3+]")],
+  [#text(size: 8pt)[`O` all H] \ #smiles("O", show-h: "all")],
+  [#text(size: 8pt)[`C` mirrored] \ #smiles("C", mirror: "horizontal")],
+  [#text(size: 8pt)[`O` dark] \ #box(fill: black, inset: 3pt, smiles("O", theme: "dark", fg: white))],
+)
+
+
+#pagebreak()
+
+= Named molecule library (`molecules`)
+
+Every entry of the bundled `molecules` dictionary, in library order, drawn at a
+size that fits its cell.
+
+#let library-cell(name, smiles-str) = box(width: 100%, height: 3.3cm)[
+  #text(size: 7pt, raw(name)) \
+  #box(width: 100%, height: 2.8cm, align(center + horizon, {
+    let drawing = smiles(smiles-str)
+    context {
+      let size = measure(drawing)
+      let fit = if size.width == 0pt or size.height == 0pt {
+        1.0
+      } else {
+        calc.min(1.0, 3.1cm / size.width, 2.7cm / size.height)
+      }
+      scale(fit * 100%, reflow: true, drawing)
+    }
+  }))
+]
+
+#grid(
+  columns: (1fr,) * 5,
+  gutter: 0.6em,
+  align: center + horizon,
+  ..molecules.pairs().map(((name, smiles-str)) => library-cell(name, smiles-str)),
+)
+
+#pagebreak()
+
+= Named molecules through other APIs
+
+Library entries are plain SMILES strings, so they work with every function that
+accepts one.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*`aromatic: "circle"`* \
+    #smiles(molecules.caffeine, scale: 0.8)
+    #smiles(molecules.naphthalene, aromatic: "circle", scale: 0.8)],
+  [*`mol-weight` / `mol-formula`* \
+    Aspirin: #mol-formula(molecules.aspirin),
+    #calc.round(mol-weight(molecules.aspirin), digits: 2) g/mol],
+
+  [*Inline* \
+    Ethanol #smiles-inline(molecules.ethanol) burns to
+    #smiles-inline(molecules.carbon-dioxide).],
+  [*`at()` lookup* \ #smiles(molecules.at("acetic-acid"), scale: 0.8)],
+)
+
+#reaction(
+  mol(molecules.salicylic-acid, label: [salicylic acid]),
+  rxn-arrow(above: smiles(molecules.acetic-anhydride, scale: 0.5)),
+  mol(molecules.aspirin, label: [aspirin]),
+)
+
+
+#pagebreak()
+
+= Stacked hydrogens on the free side
+
+Ring and chain heteroatoms with two or more bonds place their hydrogen on the
+side opposite their bonds: above, below, left (`HN`), or right (`NH`). The
+placement follows the rendered drawing, so rotation and mirroring move the
+hydrogen with the free side.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.2em,
+  align: center + horizon,
+
+  [*Pyrrole* \ #text(size: 8pt, `c1cc[nH]c1`) \ #smiles("c1cc[nH]c1")],
+  [*Indole* \ #text(size: 8pt, `c1ccc2[nH]ccc2c1`) \ #smiles("c1ccc2[nH]ccc2c1")],
+  [*Imidazole* \ #text(size: 8pt, `c1c[nH]cn1`) \ #smiles("c1c[nH]cn1")],
+
+  [*Histidine* \ #text(size: 8pt, `N[C@@H](Cc1c[nH]cn1)C(=O)O`) \ #smiles("N[C@@H](Cc1c[nH]cn1)C(=O)O", scale: 0.85)],
+  [*Guanine* \ #text(size: 8pt, `NC1=NC2=C(N=CN2)C(=O)N1`) \ #smiles("NC1=NC2=C(N=CN2)C(=O)N1", scale: 0.85)],
+  [*Dimethylamine (above)* \ #text(size: 8pt, `CNC`) \ #smiles("CNC")],
+
+  [*Pyrrole, rotated 90°* \ #text(size: 8pt, `rotation: 90deg`) \ #smiles("c1cc[nH]c1", rotation: 90deg)],
+  [*Indole, rotated 180°* \ #text(size: 8pt, `rotation: 180deg`) \ #smiles("c1ccc2[nH]ccc2c1", rotation: 180deg)],
+  [*Indole, mirrored* \ #text(size: 8pt, `mirror: "horizontal"`) \ #smiles("c1ccc2[nH]ccc2c1", mirror: "horizontal")],
+
+  [*Imidazolium* \ #text(size: 8pt, `c1c[nH+]c[nH]1`) \ #smiles("c1c[nH+]c[nH]1", bond-length: 1.15, lone-pairs: "dots", show-indices: true)],
+  [*Pyrrole indices + pairs* \ #text(size: 8pt, `c1cc[nH]c1`) \ #smiles("c1cc[nH]c1", bond-length: 1.15, lone-pairs: "dots", show-indices: true)],
+  [*Imidazole indices + pairs* \ #text(size: 8pt, `c1c[nH]cn1`) \ #smiles("c1c[nH]cn1", bond-length: 1.15, lone-pairs: "dots", show-indices: true)],
+)
+
+Mechanism references follow the moved hydrogen: the arrow ends on the
+pyrrole N–H hydrogen.
+
+#reaction(
+  show-indices: true,
+  mol("[OH-]", lone-pairs: "dots"),
+  mol("c1cc[nH]c1", offset: (1.2, 0.0)),
+  arrow(from: lp(0, 0), to: atom(1, 5), bend: "right", color: red),
+)
 // Assertion and rendering coverage for automatic substructure highlighting.
 #pagebreak()
 #include "substructure.typ"

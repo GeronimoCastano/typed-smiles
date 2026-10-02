@@ -72,5 +72,7 @@ expect_error "highlight-request-missing-group" "expected a non-empty group strin
 expect_error "highlight-request-invalid-bool" "highlight-smarts include-atoms is invalid"
 expect_error "highlight-group-invalid-bool" "highlight-groups include-atoms is invalid"
 expect_error "highlight-request-unknown-option" "unknown request option"
+expect_error "unknown-library-molecule" 'dictionary does not contain key "cafeine"'
+expect_error "one-sided-directional-bond" "must mark both ends of a double bond"
 
 echo "All editor-visible validation cases passed."

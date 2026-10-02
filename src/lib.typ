@@ -8,3 +8,4 @@
 #import "molecule/api.typ": smiles, smiles-inline, smiles-cetz
 #import "reaction/schemes.typ": rxn-arrow, mol, reaction, brackets
 #import "reaction/cycles.typ": step, cycle
+#import "molecule/library.typ": molecules
