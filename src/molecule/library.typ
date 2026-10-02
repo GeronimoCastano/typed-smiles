@@ -109,7 +109,7 @@
   adrenaline: "CNC[C@H](O)c1ccc(O)c(O)c1",
   serotonin: "NCCc1c[nH]c2ccc(O)cc12",
   histamine: "NCCc1cnc[nH]1",
-  melatonin: "COc1ccc2[nH]cc(CCNC(C)=O)c2c1",
+  melatonin: "CC(=O)NCCc1c[nH]c2ccc(OC)cc12",
   acetylcholine: "CC(=O)OCC[N+](C)(C)C",
   gamma-aminobutyric-acid: "NCCCC(=O)O",
   capsaicin: "COc1cc(CNC(=O)CCCC/C=C/C(C)C)ccc1O",
