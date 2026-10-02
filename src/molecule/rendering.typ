@@ -14,6 +14,17 @@
 
 #let _is-carbon(atom) = atom.symbol == "C" or atom.symbol == "c"
 
+// A carbon without bonds has no skeleton to imply it, so it is always drawn
+// with its hydrogens (CH4) instead of disappearing.
+#let _is-isolated-carbon(atom, degree) = _is-carbon(atom) and degree == 0
+
+// Lone neutral hydrides of groups 16 and 17 are conventionally written
+// hydrogen-first (H2O, H2S, HCl), unlike NH3 or CH4.
+#let _writes-hydrogen-first(lone-atom) = (
+  lone-atom.charge == 0
+    and lone-atom.symbol in ("O", "S", "Se", "Te", "F", "Cl", "Br", "I")
+)
+
 #let _visible-implicit-h(atom, show-all-h: false, force: false) = {
   let count = atom.at("implicit_h", default: 0)
   if count == 0 {
@@ -735,7 +746,10 @@
       bonds.filter(bond-output => bond-output.order == 2).len() == 2
     }
   }
-  let forced-hydrogen(atom-index) = show-h-list.contains(atom-index)
+  let forced-hydrogen(atom-index) = (
+    show-h-list.contains(atom-index)
+      or _is-isolated-carbon(layout.atoms.at(atom-index), atom-degree(atom-index))
+  )
   let has-label(atom-index) = {
     let atom = layout.atoms.at(atom-index)
     _has-label(
@@ -1708,7 +1722,11 @@
             superscript-size,
           )
           } else {
-            let reverse-inline = if h-text == [] or degree != 1 {
+            let reverse-inline = if h-text == [] {
+              false
+            } else if degree == 0 {
+              _writes-hydrogen-first(atom)
+            } else if degree != 1 {
               false
             } else {
               let neighbor-index = first-neighbor(i)
@@ -2065,7 +2083,10 @@
     )
     visible-boxes.push(visual-box(position.x, position.y, 0.0, 0.0))
 
-    let force-hydrogen = show-h-state.indices.contains(atom-index)
+    let force-hydrogen = (
+      show-h-state.indices.contains(atom-index)
+        or _is-isolated-carbon(atom, atom-degree(atom-index))
+    )
     let displays-label = _has-label(
       atom,
       show-all-h: show-h-state.all,

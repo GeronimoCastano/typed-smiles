@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, molecules
 #import "@preview/cetz:0.5.2"
 
 #set text(font: "New Computer Modern", size: 11pt)
@@ -4149,4 +4149,115 @@ chains, branches, functional groups, halogens, sulfur, and an aromatic ring.
 
   [*Benzene* \
     #smiles("c1ccccc1", show-h: "skeleton", scale: 0.58)],
+)
+
+
+#pagebreak()
+
+= Conjugated cis/trans double bonds
+
+A directional bond between two double bonds describes both of them, and a mark
+next to a carbonyl only constrains the alkene it borders.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*trans,trans-Diene* \ #text(size: 8pt, `C/C=C/C=C/C`) \ #smiles("C/C=C/C=C/C")],
+  [*trans,cis-Diene* \ #text(size: 8pt, `C/C=C/C=C\C`) \ #smiles("C/C=C/C=C\\C")],
+  [*Terminal diene* \ #text(size: 8pt, `C=C/C=C/C`) \ #smiles("C=C/C=C/C")],
+
+  [*Fumaric acid (trans)* \ #text(size: 8pt, `OC(=O)/C=C/C(=O)O`) \ #smiles("OC(=O)/C=C/C(=O)O")],
+  [*Maleic acid (cis)* \ #text(size: 8pt, `OC(=O)/C=C\C(=O)O`) \ #smiles("OC(=O)/C=C\\C(=O)O")],
+  [*trans-Enone* \ #text(size: 8pt, `CC(=O)/C=C/C`) \ #smiles("CC(=O)/C=C/C")],
+)
+
+
+= Lone hydride labels
+
+A carbon without bonds is labeled with its hydrogens. Lone neutral hydrides of
+oxygen, sulfur, and the halogens write hydrogen first; nitrogen, carbon, and
+charged ions keep the symbol first.
+
+#grid(
+  columns: (1fr,) * 6,
+  gutter: 1em,
+  align: center + horizon,
+
+  [#text(size: 8pt, `C`) \ #smiles("C")],
+  [#text(size: 8pt, `O`) \ #smiles("O")],
+  [#text(size: 8pt, `S`) \ #smiles("S")],
+  [#text(size: 8pt, `Cl`) \ #smiles("Cl")],
+  [#text(size: 8pt, `N`) \ #smiles("N")],
+  [#text(size: 8pt, `[OH-]`) \ #smiles("[OH-]")],
+
+  [#text(size: 8pt, `C.C`) \ #smiles("C.C")],
+  [#text(size: 8pt, `Br`) \ #smiles("Br")],
+  [#text(size: 8pt, `[OH3+]`) \ #smiles("[OH3+]")],
+  [#text(size: 8pt)[`O` all H] \ #smiles("O", show-h: "all")],
+  [#text(size: 8pt)[`C` mirrored] \ #smiles("C", mirror: "horizontal")],
+  [#text(size: 8pt)[`O` dark] \ #box(fill: black, inset: 3pt, smiles("O", theme: "dark", fg: white))],
+)
+
+
+#pagebreak()
+
+= Named molecule library (`molecules`)
+
+Every entry of the bundled `molecules` dictionary, in library order, drawn at a
+size that fits its cell.
+
+#let library-cell(name, smiles-str) = box(width: 100%, height: 3.3cm)[
+  #text(size: 7pt, raw(name)) \
+  #box(width: 100%, height: 2.8cm, align(center + horizon, {
+    let drawing = smiles(smiles-str)
+    context {
+      let size = measure(drawing)
+      let fit = if size.width == 0pt or size.height == 0pt {
+        1.0
+      } else {
+        calc.min(1.0, 3.1cm / size.width, 2.7cm / size.height)
+      }
+      scale(fit * 100%, reflow: true, drawing)
+    }
+  }))
+]
+
+#grid(
+  columns: (1fr,) * 5,
+  gutter: 0.6em,
+  align: center + horizon,
+  ..molecules.pairs().map(((name, smiles-str)) => library-cell(name, smiles-str)),
+)
+
+#pagebreak()
+
+= Named molecules through other APIs
+
+Library entries are plain SMILES strings, so they work with every function that
+accepts one.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*`aromatic: "circle"`* \
+    #smiles(molecules.caffeine, scale: 0.8)
+    #smiles(molecules.naphthalene, aromatic: "circle", scale: 0.8)],
+  [*`mol-weight` / `mol-formula`* \
+    Aspirin: #mol-formula(molecules.aspirin),
+    #calc.round(mol-weight(molecules.aspirin), digits: 2) g/mol],
+
+  [*Inline* \
+    Ethanol #smiles-inline(molecules.ethanol) burns to
+    #smiles-inline(molecules.carbon-dioxide).],
+  [*`at()` lookup* \ #smiles(molecules.at("acetic-acid"), scale: 0.8)],
+)
+
+#reaction(
+  mol(molecules.salicylic-acid, label: [salicylic acid]),
+  rxn-arrow(above: smiles(molecules.acetic-anhydride, scale: 0.5)),
+  mol(molecules.aspirin, label: [aspirin]),
 )

@@ -1471,6 +1471,42 @@ mod tests {
     }
 
     #[test]
+    fn conjugated_diene_shares_directional_bond_between_double_bonds() {
+        let trans_trans = layout_native("C/C=C/C=C/C").expect("trans,trans-diene failed");
+        assert_eq!(double_bond_substituent_side_product(&trans_trans, 0, (1, 2), 3), -1);
+        assert_eq!(double_bond_substituent_side_product(&trans_trans, 2, (3, 4), 5), -1);
+
+        let trans_cis = layout_native("C/C=C/C=C\\C").expect("trans,cis-diene failed");
+        assert_eq!(double_bond_substituent_side_product(&trans_cis, 0, (1, 2), 3), -1);
+        assert_eq!(double_bond_substituent_side_product(&trans_cis, 2, (3, 4), 5), 1);
+    }
+
+    #[test]
+    fn directional_bond_next_to_carbonyl_marks_only_the_alkene() {
+        // Atoms: O0 C1 O2 C3 C4 C5 O6 O7; the alkene is C3=C4.
+        let fumaric = layout_native("OC(=O)/C=C/C(=O)O").expect("fumaric acid failed");
+        assert_eq!(double_bond_substituent_side_product(&fumaric, 1, (3, 4), 5), -1);
+
+        let maleic = layout_native("OC(=O)/C=C\\C(=O)O").expect("maleic acid failed");
+        assert_eq!(double_bond_substituent_side_product(&maleic, 1, (3, 4), 5), 1);
+
+        layout_native("CC(=O)/C=C/C").expect("trans enone failed");
+        layout_native("C=C/C=C/C").expect("terminal diene failed");
+    }
+
+    #[test]
+    fn one_sided_directional_bond_errors() {
+        let err = layout_native("F/C=CF").expect_err("one-sided marker should fail");
+        assert!(err.contains("must mark both ends"));
+    }
+
+    #[test]
+    fn directional_bond_away_from_double_bonds_errors() {
+        let err = layout_native("F/CC").expect_err("stray marker should fail");
+        assert!(err.contains("only supported around double bonds"));
+    }
+
+    #[test]
     fn conflicting_cis_trans_markers_error() {
         let err = layout_native("C/C(\\F)=C/F").expect_err("conflicting markers should fail");
         assert!(err.contains("Conflicting"));
@@ -2318,6 +2354,20 @@ mod tests {
             layout_output.atoms[second_alkene_atom].pos,
             layout_output.atoms[right_neighbor].pos,
         )
+    }
+
+    /// Returns 1 when the two substituents sit on the same side of the
+    /// double bond (cis) and -1 when they sit on opposite sides (trans).
+    fn double_bond_substituent_side_product(
+        layout_output: &LayoutOutput,
+        first_substituent: usize,
+        double_bond_atoms: (usize, usize),
+        second_substituent: usize,
+    ) -> i8 {
+        let line_start = layout_output.atoms[double_bond_atoms.0].pos;
+        let line_end = layout_output.atoms[double_bond_atoms.1].pos;
+        side(line_start, line_end, layout_output.atoms[first_substituent].pos)
+            * side(line_start, line_end, layout_output.atoms[second_substituent].pos)
     }
 
     fn side(

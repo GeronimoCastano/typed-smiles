@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight
+#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, molecules
 
 #let selected-case = sys.inputs.at("case", default: "")
 
@@ -72,6 +72,10 @@
   cycle("CO", step(), step(), "CC")
 } else if selected-case == "invalid-step-reagent" {
   cycle("CO", step(into: mol("C")), "CC")
+} else if selected-case == "unknown-library-molecule" {
+  smiles(molecules.cafeine)
+} else if selected-case == "one-sided-directional-bond" {
+  smiles("F/C=CF")
 } else {
   panic("unknown validation test case: " + selected-case)
 }

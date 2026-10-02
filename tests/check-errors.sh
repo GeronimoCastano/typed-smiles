@@ -55,5 +55,7 @@ expect_error "empty-cycle" "cycle items is invalid"
 expect_error "leading-cycle-step" "a step appears before the first species"
 expect_error "duplicate-cycle-step" "more than one step follows the same species"
 expect_error "invalid-step-reagent" "step into is invalid"
+expect_error "unknown-library-molecule" 'dictionary does not contain key "cafeine"'
+expect_error "one-sided-directional-bond" "must mark both ends of a double bond"
 
 echo "All editor-visible validation cases passed."

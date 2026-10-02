@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, molecules
 #import "@preview/cetz:0.5.2"
 
 #let version = "0.11.0"
@@ -63,6 +63,7 @@
   mol: mol, reaction: reaction, cycle: cycle, step: step,
   atom: atom, bond: bond, lp: lp, species: species, arrow: arrow,
   highlight: highlight, brackets: brackets, mol-formula: mol-formula, mol-weight: mol-weight,
+  molecules: molecules,
   cetz: cetz,
 )
 
@@ -197,6 +198,7 @@ The package exports these main symbols:
   [#c("brackets")], [Draw square brackets with optional corner marks.],
   [#c("mol-formula")], [Compute and render a molecular formula from a SMILES string.],
   [#c("mol-weight")], [Compute molecular weight from a SMILES string.],
+  [#c("molecules")], [Bundled SMILES strings for common molecules, looked up by name.],
 )
 
 == Your first molecule
@@ -208,6 +210,39 @@ The package exports these main symbols:
   Ethanol: #smiles("CCO")
   ```)
 ]
+
+== Named molecules <sec-named-molecules>
+
+#demo[
+  #c("molecules") is a dictionary of SMILES strings for over a hundred common
+  molecules, bundled with the package so it works offline. Write
+  #c("molecules.") followed by a name; the editor suggests the available names
+  as you type.
+
+  #example(```typ
+  #smiles(molecules.caffeine) \
+  #smiles(molecules.alanine)
+  ```)
+]
+
+#demo[
+  Each entry is an ordinary SMILES string, so it works with every function and
+  argument that accepts one. Names are lowercase and hyphenated; use
+  #c("molecules.at(\"name\")") when the name comes from a variable.
+
+  #example(```typ
+  #smiles(molecules.naphthalene, aromatic: "circle") \
+  #mol-formula(molecules.aspirin),
+  #calc.round(mol-weight(molecules.aspirin), digits: 2) g/mol \
+  #smiles(molecules.at("acetic-acid"), scale: 0.8)
+  ```)
+]
+
+#note[Stereocenters encode the natural or commonly sold isomer: L amino acids,
+D sugars (glucose as the pyranose, ribose as the furanose), and, for example,
+(−)-menthol, (S)-naproxen, and (S)-nicotine. Ibuprofen is racemic. A misspelled
+name stops compilation with a #c("dictionary does not contain key") error at the
+call site. See @sec-library for every entry.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = The #raw("smiles()") function
@@ -1915,6 +1950,39 @@ parameter.
   #c("!h") wedges).
 
 // ═════════════════════════════════════════════════════════════════════════════
+= Molecule library <sec-library>
+// ═════════════════════════════════════════════════════════════════════════════
+
+Every name available as #c("molecules.<name>"), grouped by category: small
+molecules and solvents, aromatics and heterocycles, nucleobases, amino acids,
+sugars, acids, drugs and natural products, and laboratory reagents.
+
+#let library-entry(name, smiles-str) = block(breakable: false, width: 100%, {
+  text(size: 7.5pt, c(name))
+  v(-0.4em)
+  box(width: 100%, height: 2.4cm, align(center + horizon, {
+    let drawing = smiles(smiles-str)
+    context {
+      let size = measure(drawing)
+      let fit = if size.width == 0pt or size.height == 0pt {
+        1.0
+      } else {
+        calc.min(1.0, 2.9cm / size.width, 2.3cm / size.height)
+      }
+      scale(fit * 100%, reflow: true, drawing)
+    }
+  }))
+})
+
+#grid(
+  columns: (1fr,) * 4,
+  column-gutter: 0.6em,
+  row-gutter: 0.9em,
+  align: center,
+  ..molecules.pairs().map(((name, smiles-str)) => library-entry(name, smiles-str)),
+)
+
+// ═════════════════════════════════════════════════════════════════════════════
 = Quick reference
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -2014,6 +2082,7 @@ parameter.
   [#c("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float"); errors on wildcards, abbreviations, and isotopes.],
   [#c("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],
   [#c("smiles-cetz(smiles, name:, origin:, fg:, theme:, ..opts)")], [Molecule as CeTZ elements with #c("atom-<i>") / #c("bond-<i>-<j>") / #c("center") anchors.],
+  [#c("molecules.<name>")], [Bundled SMILES string for a common molecule (@sec-library); #c("molecules.at(\"name\")") for computed names.],
 )
 
 == Mechanism helpers
