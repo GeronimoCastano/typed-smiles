@@ -59,6 +59,191 @@
   )
 }
 
+// Choose displayed H geometry before page transforms. This keeps the existing
+// cardinal/electron-domain placement and rotates the entire skeleton together.
+#let _skeleton-hydrogen-directions(layout, atom-index, count, rotation: 0deg) = {
+  let structural-bonds = layout.bonds.filter(bond => not bond.at("virtual_bond", default: false))
+  let atom-neighbor-indices(index) = {
+    let indices = ()
+    for bond in structural-bonds {
+      if bond.from == index { indices.push(bond.to) }
+      else if bond.to == index { indices.push(bond.from) }
+    }
+    indices
+  }
+  let atom-base-position(atom) = atom.at("skeleton_pos", default: atom.pos)
+  // Full-skeleton hydrogens are separate labels and bonds rather than an H
+  // count attached to the parent atom. Fully displayed formulas are schematics,
+  // so their unrotated H bonds use clean cardinal directions instead
+  // of pretending to be a literal projection of tetrahedral geometry.
+  let normalize-direction(x, y, fallback: (x: 1.0, y: 0.0)) = {
+    let length = calc.sqrt(x * x + y * y)
+    if length > 0.001 {
+      (x: x / length, y: y / length)
+    } else {
+      fallback
+    }
+  }
+
+  let nearest-cardinal(direction, fallback: (x: 1.0, y: 0.0)) = {
+    if calc.abs(direction.x) < 0.001 and calc.abs(direction.y) < 0.001 {
+      fallback
+    } else if calc.abs(direction.x) >= calc.abs(direction.y) {
+      (x: if direction.x < 0.0 { -1.0 } else { 1.0 }, y: 0.0)
+    } else {
+      (x: 0.0, y: if direction.y < 0.0 { -1.0 } else { 1.0 })
+    }
+  }
+
+  let opposite(direction) = (x: -direction.x, y: -direction.y)
+  let perpendicular(direction) = (x: -direction.y, y: direction.x)
+
+  let rotate-direction(direction, angle) = (
+    x: direction.x * calc.cos(angle) - direction.y * calc.sin(angle),
+    y: direction.x * calc.sin(angle) + direction.y * calc.cos(angle),
+  )
+
+  let spread-directions(center, count, angle) = {
+    if count <= 0 {
+      return ()
+    }
+    if count == 1 {
+      return (center,)
+    }
+    let middle = (count - 1) / 2
+    range(count).map(index => rotate-direction(
+      center,
+      (index - middle) * angle,
+    ))
+  }
+
+  // Electron domains determine the local shape. Three visible bonds are
+  // spread at 120° in the 2D displayed formula; two bonds on an oxygen with
+  // two lone pairs retain water's characteristic 104.5° bend.
+  let displayed-bond-angle(atom, visible-bond-count) = {
+    let lone-pairs = atom.at("lone_pairs", default: 0)
+    let electron-domain-count = visible-bond-count + lone-pairs
+    if atom.symbol == "O" and visible-bond-count == 2 and lone-pairs >= 2 {
+      104.5deg
+    } else if visible-bond-count == 3 and electron-domain-count >= 3 {
+      120deg
+    } else if visible-bond-count == 2 and lone-pairs > 0 {
+      107deg
+    } else if visible-bond-count == 2 {
+      180deg
+    } else {
+      109.5deg
+    }
+  }
+
+  let base-directions(atom-index, count) = {
+    if count <= 0 {
+      return ()
+    }
+    let atom-position = atom-base-position(layout.atoms.at(atom-index))
+    let atom = layout.atoms.at(atom-index)
+    let neighbor-indices = atom-neighbor-indices(atom-index)
+    let neighbor-directions = neighbor-indices.map(neighbor-index => {
+      let neighbor-position = atom-base-position(layout.atoms.at(neighbor-index))
+      normalize-direction(
+        neighbor-position.x - atom-position.x,
+        neighbor-position.y - atom-position.y,
+      )
+    })
+    let heavy-count = neighbor-directions.len()
+    let visible-bond-count = heavy-count + count
+    let angle = displayed-bond-angle(atom, visible-bond-count)
+
+    if heavy-count == 0 {
+      let cardinals = ((x: 1.0, y: 0.0), (x: 0.0, y: 1.0), (x: -1.0, y: 0.0), (x: 0.0, y: -1.0))
+      if visible-bond-count == 4 {
+        return range(count).map(index => cardinals.at(calc.rem(index, cardinals.len())))
+      }
+      return spread-directions((x: 0.0, y: -1.0), count, angle)
+    }
+
+    if heavy-count == 1 {
+      let heavy-axis = nearest-cardinal(neighbor-directions.first())
+      let away = opposite(heavy-axis)
+      let side = perpendicular(away)
+      if _is-carbon(atom) and atom.at("lone_pairs", default: 0) == 0 {
+        if count == 1 {
+          return (away,)
+        }
+        if count == 2 {
+          return (side, opposite(side))
+        }
+        return (away, side, opposite(side))
+      }
+
+      if visible-bond-count == 3 {
+        // A three-bond 2D display places the remaining bonds evenly around
+        // the bond opposite the heavy-atom attachment.
+        return spread-directions(
+          opposite(neighbor-directions.first()),
+          count,
+          120deg,
+        )
+      }
+      if visible-bond-count == 2 {
+        return (rotate-direction(neighbor-directions.first(), angle),)
+      }
+      return spread-directions(away, count, angle)
+    }
+
+    if count == 1 {
+      let away = normalize-direction(
+        -neighbor-directions.map(direction => direction.x).sum(),
+        -neighbor-directions.map(direction => direction.y).sum(),
+        fallback: opposite(neighbor-directions.first()),
+      )
+      return (nearest-cardinal(away),)
+    }
+
+    // For a CH₂-like center, use the axis perpendicular to the line joining
+    // the heavy neighbors. This keeps the two H bonds as a straight,
+    // vertically or horizontally separated pair in a displayed formula.
+    let first-neighbor = atom-base-position(layout.atoms.at(neighbor-indices.first()))
+    let second-neighbor = atom-base-position(layout.atoms.at(neighbor-indices.at(1)))
+    let neighbor-span = normalize-direction(
+      first-neighbor.x - second-neighbor.x,
+      first-neighbor.y - second-neighbor.y,
+    )
+    let heavy-axis = nearest-cardinal(neighbor-span)
+    let hydrogen-axis = perpendicular(heavy-axis)
+    if count == 2 {
+      if visible-bond-count == 3 {
+        return spread-directions(
+          nearest-cardinal(normalize-direction(
+            -neighbor-directions.map(direction => direction.x).sum(),
+            -neighbor-directions.map(direction => direction.y).sum(),
+            fallback: opposite(neighbor-directions.first()),
+          )),
+          count,
+          120deg,
+        )
+      }
+      return (hydrogen-axis, opposite(hydrogen-axis))
+    }
+
+    let away = nearest-cardinal(normalize-direction(
+      -neighbor-directions.map(direction => direction.x).sum(),
+      -neighbor-directions.map(direction => direction.y).sum(),
+      fallback: opposite(neighbor-directions.first()),
+    ))
+    (away, hydrogen-axis, opposite(hydrogen-axis))
+  }
+
+  let transform = layout.at("skeleton_transform", default: (xx: 1.0, xy: 0.0, yx: 0.0, yy: 1.0))
+  base-directions(atom-index, count).map(direction => {
+    let transformed = (
+      x: transform.xx * direction.x + transform.xy * direction.y,
+      y: transform.yx * direction.x + transform.yy * direction.y,
+    )
+    rotate-direction(transformed, rotation)
+  })
+}
+
 // Applies the package's coordinate normalization plus optional page-axis
 // reflection. Requested mirror axes are resolved after rotation, so a vertical
 // mirror always preserves left/right in the rendered drawing.
@@ -95,9 +280,10 @@
       coordinate-normalization,
     )
   }
-  if transformation.xx == 1.0 and transformation.xy == 0.0 and transformation.yx == 0.0 and transformation.yy == 1.0 {
-    return layout
-  }
+  let identity-transformation = (
+    transformation.xx == 1.0 and transformation.xy == 0.0
+      and transformation.yx == 0.0 and transformation.yy == 1.0
+  )
   let flip-stereobond(stereobond) = {
     if stereobond == "wedge_up" { "wedge_down" }
     else if stereobond == "wedge_down" { "wedge_up" }
@@ -113,9 +299,16 @@
   )
   let flips-handedness = determinant < 0.0
   let mirrored-layout = layout
+  // H placement uses the normalized, unrotated geometry. Keep that frame and
+  // its reflection transform so cardinal snapping never happens in page space.
+  mirrored-layout.skeleton_transform = (
+    xx: -transformation.xx, xy: transformation.xy,
+    yx: -transformation.yx, yy: transformation.yy,
+  )
   mirrored-layout.atoms = layout.atoms.map(atom => {
     let transformed-atom = atom
     transformed-atom.pos = transform-point(atom.pos.x, atom.pos.y)
+    transformed-atom.skeleton_pos = (x: -atom.pos.x, y: atom.pos.y)
     if "lone_pair_dirs" in atom {
       transformed-atom.lone_pair_dirs = atom.lone_pair_dirs.map(direction => (
         transform-point(direction.x, direction.y)
@@ -146,7 +339,7 @@
       transformed-ring
     })
   }
-  if mirrored-layout.atoms.len() > 0 {
+  if mirrored-layout.atoms.len() > 0 and not identity-transformation {
     let first-position = mirrored-layout.atoms.first().pos
     let min-x = mirrored-layout.atoms.fold(
       first-position.x,
@@ -1086,168 +1279,6 @@
       }
     }
 
-    // Full-skeleton hydrogens are separate labels and bonds rather than an H
-    // count attached to the parent atom. Fully displayed formulas are page-space
-    // schematics, so their local H bonds use clean cardinal directions instead
-    // of pretending to be a literal projection of tetrahedral geometry.
-    let normalize-direction(x, y, fallback: (x: 1.0, y: 0.0)) = {
-      let length = calc.sqrt(x * x + y * y)
-      if length > 0.001 {
-        (x: x / length, y: y / length)
-      } else {
-        fallback
-      }
-    }
-
-    let nearest-cardinal(direction, fallback: (x: 1.0, y: 0.0)) = {
-      if calc.abs(direction.x) < 0.001 and calc.abs(direction.y) < 0.001 {
-        fallback
-      } else if calc.abs(direction.x) >= calc.abs(direction.y) {
-        (x: if direction.x < 0.0 { -1.0 } else { 1.0 }, y: 0.0)
-      } else {
-        (x: 0.0, y: if direction.y < 0.0 { -1.0 } else { 1.0 })
-      }
-    }
-
-    let opposite(direction) = (x: -direction.x, y: -direction.y)
-    let perpendicular(direction) = (x: -direction.y, y: direction.x)
-
-    let rotate-direction(direction, angle) = (
-      x: direction.x * calc.cos(angle) - direction.y * calc.sin(angle),
-      y: direction.x * calc.sin(angle) + direction.y * calc.cos(angle),
-    )
-
-    let spread-directions(center, count, angle) = {
-      if count <= 0 {
-        return ()
-      }
-      if count == 1 {
-        return (center,)
-      }
-      let middle = (count - 1) / 2
-      range(count).map(index => rotate-direction(
-        center,
-        (index - middle) * angle,
-      ))
-    }
-
-    // Electron domains determine the local shape. Three visible bonds are
-    // spread at 120° in the 2D displayed formula; two bonds on an oxygen with
-    // two lone pairs retain water's characteristic 104.5° bend.
-    let displayed-bond-angle(atom, visible-bond-count) = {
-      let lone-pairs = atom.at("lone_pairs", default: 0)
-      let electron-domain-count = visible-bond-count + lone-pairs
-      if atom.symbol == "O" and visible-bond-count == 2 and lone-pairs >= 2 {
-        104.5deg
-      } else if visible-bond-count == 3 and electron-domain-count >= 3 {
-        120deg
-      } else if visible-bond-count == 2 and lone-pairs > 0 {
-        107deg
-      } else if visible-bond-count == 2 {
-        180deg
-      } else {
-        109.5deg
-      }
-    }
-
-    let skeleton-hydrogen-directions(atom-index, count) = {
-      if count <= 0 {
-        return ()
-      }
-      let atom-position = atom-screen-position(layout.atoms.at(atom-index))
-      let atom = layout.atoms.at(atom-index)
-      let neighbor-indices = atom-neighbor-indices(atom-index)
-      let neighbor-directions = neighbor-indices.map(neighbor-index => {
-        let neighbor-position = atom-screen-position(layout.atoms.at(neighbor-index))
-        normalize-direction(
-          neighbor-position.x - atom-position.x,
-          neighbor-position.y - atom-position.y,
-        )
-      })
-      let heavy-count = neighbor-directions.len()
-      let visible-bond-count = heavy-count + count
-      let angle = displayed-bond-angle(atom, visible-bond-count)
-
-      if heavy-count == 0 {
-        let cardinals = ((x: 1.0, y: 0.0), (x: 0.0, y: 1.0), (x: -1.0, y: 0.0), (x: 0.0, y: -1.0))
-        if visible-bond-count == 4 {
-          return range(count).map(index => cardinals.at(calc.rem(index, cardinals.len())))
-        }
-        return spread-directions((x: 0.0, y: -1.0), count, angle)
-      }
-
-      if heavy-count == 1 {
-        let heavy-axis = nearest-cardinal(neighbor-directions.first())
-        let away = opposite(heavy-axis)
-        let side = perpendicular(away)
-        if _is-carbon(atom) and atom.at("lone_pairs", default: 0) == 0 {
-          if count == 1 {
-            return (away,)
-          }
-          if count == 2 {
-            return (side, opposite(side))
-          }
-          return (away, side, opposite(side))
-        }
-
-        if visible-bond-count == 3 {
-          // A three-bond 2D display places the remaining bonds evenly around
-          // the bond opposite the heavy-atom attachment.
-          return spread-directions(
-            opposite(neighbor-directions.first()),
-            count,
-            120deg,
-          )
-        }
-        if visible-bond-count == 2 {
-          return (rotate-direction(neighbor-directions.first(), angle),)
-        }
-        return spread-directions(away, count, angle)
-      }
-
-      if count == 1 {
-        let away = normalize-direction(
-          -neighbor-directions.map(direction => direction.x).sum(),
-          -neighbor-directions.map(direction => direction.y).sum(),
-          fallback: opposite(neighbor-directions.first()),
-        )
-        return (nearest-cardinal(away),)
-      }
-
-      // For a CH₂-like center, use the axis perpendicular to the line joining
-      // the heavy neighbors. This keeps the two H bonds as a straight,
-      // vertically or horizontally separated pair in a displayed formula.
-      let first-neighbor = atom-screen-position(layout.atoms.at(neighbor-indices.first()))
-      let second-neighbor = atom-screen-position(layout.atoms.at(neighbor-indices.at(1)))
-      let neighbor-span = normalize-direction(
-        first-neighbor.x - second-neighbor.x,
-        first-neighbor.y - second-neighbor.y,
-      )
-      let heavy-axis = nearest-cardinal(neighbor-span)
-      let hydrogen-axis = perpendicular(heavy-axis)
-      if count == 2 {
-        if visible-bond-count == 3 {
-          return spread-directions(
-            nearest-cardinal(normalize-direction(
-              -neighbor-directions.map(direction => direction.x).sum(),
-              -neighbor-directions.map(direction => direction.y).sum(),
-              fallback: opposite(neighbor-directions.first()),
-            )),
-            count,
-            120deg,
-          )
-        }
-        return (hydrogen-axis, opposite(hydrogen-axis))
-      }
-
-      let away = nearest-cardinal(normalize-direction(
-        -neighbor-directions.map(direction => direction.x).sum(),
-        -neighbor-directions.map(direction => direction.y).sum(),
-        fallback: opposite(neighbor-directions.first()),
-      ))
-      (away, hydrogen-axis, opposite(hydrogen-axis))
-    }
-
     let skeleton-hydrogen-label-trim(direction-x, direction-y) = {
       let label-size = measure(atom-label("H"))
       let half-width = label-size.width / canvas-scale / 2
@@ -1266,7 +1297,7 @@
         if count <= 0 { continue }
         let parent-position = atom-screen-position(atom)
         let parent-fill = display-color(atom)
-        for direction in skeleton-hydrogen-directions(atom-index, count) {
+        for direction in _skeleton-hydrogen-directions(layout, atom-index, count, rotation: rotation) {
           let parent-trim = label-trim(atom, atom-index, direction.x, direction.y)
           let hydrogen-position = (
             x: parent-position.x + direction.x * skeleton-hydrogen-label-distance,
