@@ -4,6 +4,8 @@
 #set text(font: "New Computer Modern", size: 11pt)
 #set page(margin: 2cm)
 
+#include "skeleton-hydrogen-rotation.typ"
+
 = SMILES Rendering Test
 
 #grid(

@@ -153,6 +153,8 @@ Use `show-h: "all"` for carbon hydrogens, `[NH3]` bracket syntax for
 explicit hydrogens, and `{label}` / `{label|style}` for custom group labels.
 Use `show-h: "skeleton"` to draw every hydrogen as a separate `H` atom with
 its own single bond, turning the molecule into a fully explicit 2D skeleton.
+`rotation` and `mirror` transform the entire skeleton, including H positions and
+their bonds, while atom labels stay upright.
 Eligible unbranched heavy-atom chains become straight rows, with carbon-bound
 hydrogens using clean horizontal/vertical displayed-formula directions. Lone
 pairs influence non-carbon angles, so water remains bent and three-bond
