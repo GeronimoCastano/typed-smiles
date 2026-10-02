@@ -5,6 +5,7 @@
 #set page(margin: 2cm)
 
 #include "skeleton-hydrogen-rotation.typ"
+#include "skeleton-highlight-centers.typ"
 
 = SMILES Rendering Test
 

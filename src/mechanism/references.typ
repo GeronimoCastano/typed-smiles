@@ -47,6 +47,11 @@
   let font-size = placed-species.at("actual-font-size", default: 11pt)
   let font = placed-species.at("font", default: "New Computer Modern")
   let show-h-state = _normalize-show-h(placed-species.at("show-h", default: ()))
+  // Skeleton mode draws H separately and centers the heavy-atom glyph on its
+  // layout position. Inline XH fragment offsets would shift its highlights.
+  if show-h-state.skeleton and not atom.at("virtual_h", default: false) {
+    return base
+  }
   let show-all-h = show-h-state.all
   let label-margin = calc.max(0.27 * molecule-scale, font-size / canvas-scale * 0.70)
   let subscript-size = font-size * 1.00
