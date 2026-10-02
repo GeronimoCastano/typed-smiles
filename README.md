@@ -977,10 +977,10 @@ Current limitations:
 ## Chemical verification
 
 The named functional groups are checked against a pinned
-[PubChem corpus](https://github.com/GeronimoCastano/typed-smiles/blob/main/tests/fixtures/substructure-pubchem.json)
+[PubChem corpus](https://github.com/GeronimoCastano/typed-smiles/blob/b031c16c2ae451d46fcd06114449066d91a9e39a/tests/fixtures/substructure-pubchem.json)
 of 63 compounds covering all 16 groups. Each group's selected atoms and bonds
 match an independent RDKit search. The
-[fixture notes](https://github.com/GeronimoCastano/typed-smiles/blob/main/tests/fixtures/README.md)
+[fixture notes](https://github.com/GeronimoCastano/typed-smiles/blob/b031c16c2ae451d46fcd06114449066d91a9e39a/tests/fixtures/README.md)
 list the sources and scope.
 
 ## License
