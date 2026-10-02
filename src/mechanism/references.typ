@@ -12,6 +12,8 @@
   _visible-implicit-h,
   _has-label,
   _rendered-atom-position,
+  _stacked-hydrogen-side,
+  _stacked-hydrogen-direction,
   _abbreviation-label,
   _abbreviation-lone-pair-directions,
 )
@@ -201,16 +203,37 @@
       return (hydrogen-x, symbol-center.at(1))
     }
 
-    let stacked-h = degree >= 2 and not _is-carbon(atom)
-    if stacked-h {
+    let stacked-h-side = if degree >= 2 and not _is-carbon(atom) {
+      _stacked-hydrogen-side(placed-species.layout, parent, placed-species.rotation)
+    } else {
+      none
+    }
+    if stacked-h-side in ("above", "below") {
       if fragment == "h" {
-        return (px, py + label-margin * 0.95)
+        let direction = _stacked-hydrogen-direction(stacked-h-side)
+        return (
+          px - content-width(hydrogen-text) / 2 + content-width(atom-label("H")) / 2,
+          py + direction.y * label-margin * 0.95,
+        )
       }
       let label-content = symbol-text + charge
       return (
         px - content-width(label-content) / 2 + content-width(symbol-text) / 2,
         py,
       )
+    }
+    if stacked-h-side in ("left", "right") {
+      // The symbol stays centered on the atom; the hydrogen sits beside it.
+      if fragment == "sym" {
+        return (px, py)
+      }
+      let symbol-half-width = content-width(symbol-text) / 2
+      let hydrogen-half-width = content-width(atom-label("H")) / 2
+      if stacked-h-side == "left" {
+        let hydrogen-label-left = px - symbol-half-width - content-width(hydrogen-text)
+        return (hydrogen-label-left + hydrogen-half-width, py)
+      }
+      return (px + symbol-half-width + hydrogen-half-width, py)
     }
 
     let reverse-inline = if degree != 1 {

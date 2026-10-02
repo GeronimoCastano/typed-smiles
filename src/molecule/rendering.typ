@@ -70,6 +70,61 @@
   )
 }
 
+// Side of a heteroatom label that holds its stacked hydrogen ("above",
+// "below", "left", or "right"). The hydrogen faces away from the mean
+// direction of the atom's structural bonds in rendered space, so it lands on
+// the open side of the atom rather than inside a ring or across a bond.
+// Vertical sides win ties, and balanced surroundings keep the hydrogen above.
+#let _stacked-hydrogen-side(layout, atom-index, rotation) = {
+  let atom-position = _rendered-atom-position(
+    layout.atoms.at(atom-index),
+    rotation,
+  )
+  let bond-direction-sum = (x: 0.0, y: 0.0)
+  for bond-output in layout.bonds {
+    if bond-output.at("virtual_bond", default: false) { continue }
+    let neighbor-index = if bond-output.from == atom-index {
+      bond-output.to
+    } else if bond-output.to == atom-index {
+      bond-output.from
+    } else {
+      none
+    }
+    if neighbor-index == none { continue }
+    let neighbor-position = _rendered-atom-position(
+      layout.atoms.at(neighbor-index),
+      rotation,
+    )
+    let offset-x = neighbor-position.x - atom-position.x
+    let offset-y = neighbor-position.y - atom-position.y
+    let distance = calc.sqrt(offset-x * offset-x + offset-y * offset-y)
+    if distance > 0.001 {
+      bond-direction-sum = (
+        x: bond-direction-sum.x + offset-x / distance,
+        y: bond-direction-sum.y + offset-y / distance,
+      )
+    }
+  }
+  let free-x = -bond-direction-sum.x
+  let free-y = -bond-direction-sum.y
+  if calc.abs(free-x) < 0.05 and calc.abs(free-y) < 0.05 {
+    return "above"
+  }
+  if calc.abs(free-x) > calc.abs(free-y) {
+    if free-x > 0 { "right" } else { "left" }
+  } else {
+    if free-y >= 0 { "above" } else { "below" }
+  }
+}
+
+// Unit screen direction from an atom toward its stacked-hydrogen side.
+#let _stacked-hydrogen-direction(side) = (
+  above: (x: 0.0, y: 1.0),
+  below: (x: 0.0, y: -1.0),
+  left: (x: -1.0, y: 0.0),
+  right: (x: 1.0, y: 0.0),
+).at(side)
+
 // Applies the package's coordinate normalization plus optional page-axis
 // reflection. Requested mirror axes are resolved after rotation, so a vertical
 // mirror always preserves left/right in the rendered drawing.
@@ -1366,8 +1421,9 @@
         if direction != none { occupied.push(direction) }
       }
       if atom-degree(atom-index) >= 2 {
-        // A stacked hydrogen is drawn directly above the symbol.
-        occupied.push((x: 0.0, y: 1.0))
+        occupied.push(_stacked-hydrogen-direction(
+          _stacked-hydrogen-side(layout, atom-index, rotation),
+        ))
       } else {
         // An inline "XH" runs horizontally: the hydrogen sits opposite a
         // horizontal bond, or to the right of a vertical one.
@@ -1711,158 +1767,120 @@
             padding: 0pt,
           )
         } else {
-          let draw-h-above = false
-          let h-above-content = []
-          let h-above-marker = none
-        let label-content = if abbrev != "" {
-          _abbreviation-label(
-            abbrev,
-            (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
-            subscript-size,
-            superscript-size,
-          )
+          let reverse-inline = if h-text == [] {
+            false
+          } else if degree == 0 {
+            _writes-hydrogen-first(atom)
+          } else if degree != 1 {
+            false
           } else {
-            let reverse-inline = if h-text == [] {
-              false
-            } else if degree == 0 {
-              _writes-hydrogen-first(atom)
-            } else if degree != 1 {
+            let neighbor-index = first-neighbor(i)
+            if neighbor-index == none {
               false
             } else {
-              let neighbor-index = first-neighbor(i)
-              if neighbor-index == none {
-                false
-              } else {
-                let neighbor = layout.atoms.at(neighbor-index)
-                let vx = atom-screen-position(neighbor).x - px
-                vx > 0.05
-              }
+              let neighbor = layout.atoms.at(neighbor-index)
+              let vx = atom-screen-position(neighbor).x - px
+              vx > 0.05
             }
-            let stacked-h = h-text != [] and degree >= 2 and not _is-carbon(atom)
-            let base-text = if stacked-h {
-              draw-h-above = true
-              h-above-content = h-text
-              if (show-indices or lone-pairs != none) and str(i) in virtual-hydrogen-child {
-                h-above-marker = (
-                  child: virtual-hydrogen-child.at(str(i)),
-                  group: h-text,
-                  prefix: [],
-                  fragment: atom-label("H", fill: transparent),
-                )
-              }
-              symbol-text
-            } else if reverse-inline {
-              h-text + symbol-text
-            } else {
-              symbol-text + h-text
-            }
-            base-text + charge-content
+          }
+          let stacked-h-side = if h-text != [] and degree >= 2 and not _is-carbon(atom) {
+            _stacked-hydrogen-side(layout, i, rotation)
+          } else {
+            none
+          }
+          let stacked-h-vertical = stacked-h-side in ("above", "below")
+          let stacked-h-horizontal = stacked-h-side in ("left", "right")
+          let hydrogen-leads = reverse-inline or stacked-h-side == "left"
+          let label-content = if abbrev != "" {
+            _abbreviation-label(
+              abbrev,
+              (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
+              subscript-size,
+              superscript-size,
+            )
+          } else if stacked-h-vertical {
+            symbol-text + charge-content
+          } else if hydrogen-leads {
+            h-text + symbol-text + charge-content
+          } else {
+            symbol-text + h-text + charge-content
           }
 
+          // Symbol-anchored labels keep the heavy symbol on the atom position so
+          // the bonds meet the element rather than its hydrogen or charge.
           let symbol-centered-charge = abbrev == "" and h-text == [] and charge-content != []
+          let label-center-x = if abbrev != "" {
+            px - _label-anchor-offset(
+              abbrev,
+              atom.at("abbrev_anchor", default: 0),
+              atom.at("abbrev_anchor_len", default: 0),
+              text => content-width(_abbreviation-label(
+                text,
+                (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
+                subscript-size,
+                superscript-size,
+              )),
+            )
+          } else if symbol-centered-charge or stacked-h-horizontal {
+            let symbol-prefix = if hydrogen-leads { h-text } else { [] }
+            (
+              px
+              - content-width(symbol-prefix)
+              - content-width(symbol-text) / 2
+              + content-width(label-content) / 2
+            )
+          } else {
+            px
+          }
+          let label-left = label-center-x - content-width(label-content) / 2
+          content((label-center-x, py), label-content, anchor: "center", padding: 1pt)
 
-          if symbol-centered-charge {
+          let stacked-h-center = if stacked-h-vertical {
+            let direction = _stacked-hydrogen-direction(stacked-h-side)
+            (x: px, y: py + direction.y * label-margin * 0.95)
+          } else {
+            none
+          }
+          if stacked-h-center != none {
             content(
-              (px + (content-width(label-content) - content-width(symbol-text)) / 2, py),
-              label-content,
+              (stacked-h-center.x, stacked-h-center.y),
+              h-text,
               anchor: "center",
               padding: 1pt,
             )
-          } else if draw-h-above {
-            let h-center = (x: px, y: py + label-margin * 0.95)
-            content(
-              (h-center.x, h-center.y),
-              h-above-content,
-              anchor: "center",
-              padding: 1pt,
-            )
-            if h-above-marker != none {
-              let symbol-marker = atom-label(atom.symbol, fill: transparent)
-              let symbol-x = (
-                px
-                - content-width(label-content) / 2
-                + content-width(symbol-marker) / 2
-              )
-              content(
-                (symbol-x, py),
-                symbol-marker,
-                anchor: "center",
-                padding: 0pt,
-                name: index-marker-name(i, "-sym"),
-              )
-            }
-            if h-above-marker != none {
-              let marker-x = (
-                h-center.x
-                - content-width(h-above-marker.group) / 2
-                + content-width(h-above-marker.prefix)
-                + content-width(h-above-marker.fragment) / 2
-              )
-              content(
-                (marker-x, h-center.y),
-                h-above-marker.fragment,
-                anchor: "center",
-                padding: 0pt,
-                name: index-marker-name(h-above-marker.child, "-h"),
-              )
-            }
           }
 
-          if (show-indices or lone-pairs != none) and str(i) in virtual-hydrogen-child and not draw-h-above {
+          if (show-indices or lone-pairs != none) and str(i) in virtual-hydrogen-child {
             let h-child = virtual-hydrogen-child.at(str(i))
             let symbol-marker = atom-label(atom.symbol, fill: transparent)
             let h-marker = atom-label("H", fill: transparent)
-            let h-prefix = if label-content == h-text + symbol-text + charge-content {
-              []
-            } else {
-              symbol-text
-            }
-            let symbol-prefix = if h-prefix == [] { h-text } else { [] }
-            let symbol-x = (
-              px
-              - content-width(label-content) / 2
-              + content-width(symbol-prefix)
-              + content-width(symbol-marker) / 2
-            )
-            let h-x = (
-              px
-              - content-width(label-content) / 2
-              + content-width(h-prefix)
-              + content-width(h-marker) / 2
-            )
+            let symbol-prefix = if hydrogen-leads { h-text } else { [] }
             content(
-              (symbol-x, py),
+              (
+                label-left + content-width(symbol-prefix) + content-width(symbol-marker) / 2,
+                py,
+              ),
               symbol-marker,
               anchor: "center",
               padding: 0pt,
               name: index-marker-name(i, "-sym"),
             )
+            let h-marker-position = if stacked-h-center != none {
+              (
+                stacked-h-center.x - content-width(h-text) / 2 + content-width(h-marker) / 2,
+                stacked-h-center.y,
+              )
+            } else {
+              let h-prefix = if hydrogen-leads { [] } else { symbol-text }
+              (label-left + content-width(h-prefix) + content-width(h-marker) / 2, py)
+            }
             content(
-              (h-x, py),
+              h-marker-position,
               h-marker,
               anchor: "center",
               padding: 0pt,
               name: index-marker-name(h-child, "-h"),
             )
-          }
-
-          if not symbol-centered-charge {
-            let label-x = if abbrev != "" {
-              px - _label-anchor-offset(
-                abbrev,
-                atom.at("abbrev_anchor", default: 0),
-                atom.at("abbrev_anchor_len", default: 0),
-                text => content-width(_abbreviation-label(
-                  text,
-                  (body, size: actual-font-size) => atom-label(body, fill: fill, size: size),
-                  subscript-size,
-                  superscript-size,
-                )),
-              )
-            } else {
-              px
-            }
-            content((label-x, py), label-content, anchor: "center", padding: 1pt)
           }
         }
       }
@@ -2210,7 +2228,12 @@
         and degree >= 2
         and not _is-carbon(atom)
     )
-    if stacked-hydrogen {
+    let stacked-hydrogen-side = if stacked-hydrogen {
+      _stacked-hydrogen-side(molecule-layout, atom-index, rotation)
+    } else {
+      none
+    }
+    if stacked-hydrogen-side in ("above", "below") {
       let base-content = symbol-content + charge-content
       let base-size = content-size(base-content)
       let symbol-size = content-size(symbol-content)
@@ -2221,11 +2244,36 @@
         base-size.height + 2 * padding,
       ))
       let hydrogen-size = content-size(hydrogen-content)
+      let hydrogen-direction = _stacked-hydrogen-direction(stacked-hydrogen-side)
       visible-boxes.push(visual-box(
         position.x,
-        position.y + label-margin * 0.95,
+        position.y + hydrogen-direction.y * label-margin * 0.95,
         hydrogen-size.width + 2 * padding,
         hydrogen-size.height + 2 * padding,
+      ))
+      continue
+    }
+    if stacked-hydrogen-side in ("left", "right") {
+      let hydrogen-leads = stacked-hydrogen-side == "left"
+      let complete-label = if hydrogen-leads {
+        hydrogen-content + symbol-content + charge-content
+      } else {
+        symbol-content + hydrogen-content + charge-content
+      }
+      let complete-size = content-size(complete-label)
+      let symbol-prefix-width = if hydrogen-leads {
+        content-size(hydrogen-content).width
+      } else {
+        0.0
+      }
+      visible-boxes.push(visual-box(
+        position.x
+          - symbol-prefix-width
+          - content-size(symbol-content).width / 2
+          + complete-size.width / 2,
+        position.y,
+        complete-size.width + 2 * padding,
+        complete-size.height + 2 * padding,
       ))
       continue
     }
