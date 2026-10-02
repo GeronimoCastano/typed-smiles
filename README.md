@@ -976,17 +976,12 @@ Current limitations:
 
 ## Chemical verification
 
-The pinned [PubChem corpus](tests/fixtures/substructure-pubchem.json) covers
-63 compounds and all 16 named groups. Reviewed group counts check chemical
-classification; independent RDKit match sets check the exact selected atoms
-and bonds. Native Rust and shipped WASM tests cover 1,328 group/notation cases,
-including the documented uppercase Kekulé boundary. Annotation tests also
-check both `include-atoms` settings.
-
-Compile `tests/substructure-chemistry.typ` to inspect the highlighted examples.
-Run `python3 tests/verify-substructures.py` in an environment with RDKit to
-repeat the independent check; ordinary Rust/Typst tests need no RDKit or network.
-See [fixture notes](tests/fixtures/README.md) for sources and scope.
+The named functional groups are checked against a pinned
+[PubChem corpus](https://github.com/GeronimoCastano/typed-smiles/blob/main/tests/fixtures/substructure-pubchem.json)
+of 63 compounds covering all 16 groups. Each group's selected atoms and bonds
+match an independent RDKit search. The
+[fixture notes](https://github.com/GeronimoCastano/typed-smiles/blob/main/tests/fixtures/README.md)
+list the sources and scope.
 
 ## License
 
