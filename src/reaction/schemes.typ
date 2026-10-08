@@ -28,6 +28,7 @@
   _annotation-configuration,
 )
 #import "../molecule/api.typ": smiles, _typst-scale
+#import "../molecule/alignment.typ": _is-aligned-molecule, _aligned-molecule-drawing
 
 // ── Reaction scheme helpers ───────────────────────────────────────────────────
 
@@ -107,8 +108,9 @@
 /// position offset. Consumed by #reaction() and by the above/below slots of
 /// #rxn-arrow().
 ///
-/// - spec (str / content): A SMILES string (rendered by #reaction with addressable
-///   atoms) or any content (e.g. ce(...), smiles(...), text — an opaque block).
+/// - spec (str / dictionary / content): A SMILES string or a molecule from
+///   align-molecules() (rendered by #reaction with addressable atoms), or any
+///   content (e.g. ce(...), smiles(...), text — an opaque block).
 /// - label (content): Optional label shown below. Default: none.
 /// - offset (array): (dx, dy) page-axis nudge in bond-length units. Positive x
 ///   moves right and positive y moves up, independent of reaction flow.
@@ -119,11 +121,11 @@
 ///   `reaction(scale: ...)` scales the complete scheme uniformly.
 /// -> dictionary  (consumed by #reaction / #rxn-arrow)
 #let mol(spec, label: none, offset: (0, 0), ..opts) = {
-  if type(spec) != str and type(spec) != _content-type {
+  if type(spec) != str and type(spec) != _content-type and not _is-aligned-molecule(spec) {
     _invalid-input(
       "mol specification",
-      "expected a SMILES string or content, got " + repr(spec),
-      "Pass a string such as \"CCO\" or rendered content such as ce(\"H2O\").",
+      "expected a SMILES string, aligned molecule, or content, got " + repr(spec),
+      "Pass a string such as \"CCO\", an align-molecules() result, or rendered content such as ce(\"H2O\").",
     )
   }
   _validate-offset(offset, "mol offset")
@@ -143,7 +145,12 @@
       )
     }
   }
-  let options = opts.named()
+  let (spec, options) = if _is-aligned-molecule(spec) {
+    let aligned-drawing = _aligned-molecule-drawing(spec, opts.named(), "mol")
+    (aligned-drawing.smiles, aligned-drawing.options)
+  } else {
+    (spec, opts.named())
+  }
   let allowed-options = (
     "style", "scale", "bond-length", "font-size", "font", "bond-stroke",
     "color", "fg", "theme", "rotation", "mirror", "show-h", "aromatic",
@@ -491,6 +498,7 @@
   let steps = ()
   let next-bracket-group-index = 0
   for item in items.pos() {
+    let item = if _is-aligned-molecule(item) { mol(item) } else { item }
     let recognized-item = (
       is-bracket-group(item)
         or is-reaction-arrow(item)

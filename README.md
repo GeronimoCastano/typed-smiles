@@ -20,8 +20,9 @@ source instead of copying diagrams from a separate editor.
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
 mechanism helpers: `smiles`, `ce`, `mol`, `rxn-arrow`, `reaction`, `atom`,
-`bond`, `lp`, `species`, `arrow`, `highlight`, and `brackets`, plus the
-`molecules` library of named SMILES strings.
+`bond`, `lp`, `species`, `arrow`, `highlight`, and `brackets`, the series
+helpers `align-molecules` and `molecule-grid`, plus the `molecules` library of
+named SMILES strings.
 
 ## Basic molecule drawing
 
@@ -730,6 +731,64 @@ a `mol` offset.
 
 ![Wilkinson-style catalytic cycle with vertical entry](assets/readme/cycle-wilkinson.png)
 
+## Aligned molecule series
+
+`align-molecules` orients a series of molecules so a shared scaffold keeps the
+reference molecule's orientation, which makes before/after reactions and
+compound series comparable at a glance. Pass the results wherever a SMILES
+string is accepted: `smiles()`, `mol()`, `reaction()`, `cycle()`,
+`smiles-inline()`, `smiles-cetz()`, and `molecule-grid()`.
+
+`molecule-grid` lays out a series in equal-width columns at one shared bond
+length, so small molecules are never enlarged to fill their cells. Captions
+from `mol(label: ...)` start on one line per row, and page breaks fall only
+between rows.
+
+```typst
+#import "@preview/typed-smiles:0.12.0": *
+
+#let aligned = align-molecules(
+  ("CC(=O)c1ccccc1", "CC(O)c1ccccc1"),
+  scaffold: "c1ccccc1",
+)
+
+#reaction(
+  mol(aligned.at(0)),
+  rxn-arrow(above: [NaBH#sub[4]]),
+  mol(aligned.at(1)),
+)
+
+#molecule-grid(
+  columns: 4,
+  scale: 0.5,
+  scaffold: "c1ccccc1C(=O)O",
+  mol("c1ccccc1C(=O)O", label: [*1* Benzoic acid]),
+  mol("O=C(O)c1ccccc1O", label: [*2* Salicylic acid]),
+  mol("Nc1ccc(C(=O)O)cc1", label: [*3* PABA]),
+  mol("OC(=O)c1ccc(cc1)[N+](=O)[O-]", label: [*4* 4-Nitrobenzoic acid]),
+)
+```
+
+![Aligned reduction and a compound grid](assets/readme/molecule-series.png)
+
+A scaffold is a SMARTS pattern that must occur in every molecule. Symmetric
+scaffolds keep substituents on the reference's side; when a scaffold occurs at
+chemically distinct places in one molecule, alignment stops with an error
+listing them. Select one with `atoms:`, one entry per molecule: for the series
+`("Clc1ccccc1", "c1ccccc1-c1ccc(Cl)cc1")` with scaffold `"c1ccccc1"`,
+`atoms: (auto, (6, 7, 8, 9, 11, 12))` picks the chlorinated ring. Without a
+scaffold, `atoms:` arrays give an exact atom-by-atom correspondence.
+
+Alignment rotates, and if it fits better mirrors, each molecule's own layout;
+it does not redraw the scaffold. Ring cores coincide, but chain scaffolds drawn
+with different zigzags keep a residual mismatch, reported in each result's
+`deviation` field (bond lengths). Mirroring exchanges wedges and hashes, so
+stereochemistry is preserved. Orient the whole series with
+`align-molecules(rotation:, mirror:)`; an aligned molecule rejects its own
+`rotation` or `mirror`. In a grid, `sizing: "fixed"` (the default) reports a
+molecule wider than its column, while `sizing: "fit"` scales the whole series
+by one common factor so the widest molecule fills its column.
+
 ## Stereochemistry and drawing extensions
 
 `[C@H]` / `[C@@H]` mark tetrahedral centers; `/` and `\` describe cis/trans
@@ -891,8 +950,9 @@ values scale too.
 
 ### `#mol(spec, label: none, offset: (0,0), …opts)`
 
-A reaction item. `spec` is any content (`smiles(...)`, `ce(...)`, text) or a SMILES
-*string* — a string lets `reaction()` render it with addressable atoms. `offset`
+A reaction item. `spec` is any content (`smiles(...)`, `ce(...)`, text), a SMILES
+*string*, or an `align-molecules()` result — a string or aligned molecule lets
+`reaction()` render it with addressable atoms. `offset`
 nudges it in page coordinates, in bond-length units: positive x moves right and
 positive y moves up regardless of `reaction(flow:)`. String molecules accept
 common drawing options such as `scale`, `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-h`,
@@ -919,6 +979,23 @@ a branch out of a released molecule. Incoming content attaches by the last
 upstream item; outgoing content attaches by the first downstream item.
 `step(rotation: "auto")` angles labels along the circle while keeping them upright;
 an explicit angle such as `rotation: 45deg` is also accepted.
+
+### `#align-molecules(molecules, scaffold: none, atoms: none, reference: 0, rotation: 0deg, mirror: none, allow-reflection: true)`
+
+Returns one aligned molecule per SMILES string in `molecules`, oriented so the
+`scaffold` (or the `atoms` correspondence) overlays the `reference` molecule's.
+`rotation` and `mirror` orient the whole series; `allow-reflection: false`
+forbids mirrored results. Each result exposes `smiles`, `rotation`, `mirror`,
+`atoms` (its atoms matching the reference's atoms position by position), and
+`deviation`.
+
+### `#molecule-grid(columns: auto, scale: 1.0, bond-length: none, sizing: "fixed", scaffold: none, column-gutter: 1.5em, row-gutter: 1.5em, label-gap: 0.6em, breakable: true, …items)`
+
+Lays out SMILES strings, aligned molecules, and `mol()` items at one shared
+bond length with row-aligned captions. `columns: auto` uses one column per
+molecule, up to four. `sizing: "fit"` scales the series by one common factor to
+fill the columns; `scaffold:` aligns string molecules onto the first one.
+Per-item `scale` and `bond-length` are rejected.
 
 ### Mechanism helpers
 

@@ -47,6 +47,13 @@
   json(_smiles-plugin.layout(bytes(smiles-str)))
 }
 
+// Orients molecules onto a reference through the WASM plugin. The request
+// carries molecules, scaffold, atoms, reference, and allow_reflection, already
+// validated at the public call boundary.
+#let _compute-alignment(request) = {
+  json(_smiles-plugin.align_molecules(bytes(json.encode(request))))
+}
+
 /// Finds distinct SMARTS substructures in depiction writing-order indices.
 /// Returns an array of (atoms: (indices...), bonds: ((from, to)...)) dictionaries.
 /// No match returns (); malformed or unsupported patterns produce a diagnostic.

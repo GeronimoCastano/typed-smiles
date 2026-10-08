@@ -4583,3 +4583,181 @@ crowded macrocycle side chains turn away from each other.
   ring-cell([Cyclic peptide], "CCC1NC(=O)C(C)N(C)C(=O)C(CC(C)C)N(C)C(=O)C(CC(C)C)N(C)C(=O)C(C)NC(=O)C(C)NC(=O)C(CC(C)C)N(C)C(=O)C(C(C)C)NC(=O)C(CC(C)C)N(C)C(=O)CN(C)C1=O", scale: 0.28),
   ring-cell([Sucrose], "OC[C@H]1O[C@H](O[C@]2(CO)O[C@H](CO)[C@@H](O)[C@@H]2O)[C@H](O)[C@@H](O)[C@@H]1O", scale: 0.55),
 )
+
+#pagebreak()
+
+#import "../src/lib.typ": align-molecules, molecule-grid
+
+= Scaffold alignment (`align-molecules`)
+
+A reduction keeps the shared ring in one orientation. The aligned molecules
+pass straight into `reaction()`, with or without `mol()`, and mechanism arrows
+still address their atoms.
+
+#let reduction = align-molecules(
+  ("CC(=O)c1ccccc1", "CC(O)c1ccccc1"),
+  scaffold: "c1ccccc1",
+)
+#reaction(
+  reduction.at(0),
+  rxn-arrow(above: [NaBH₄]),
+  mol(reduction.at(1), label: [rac]),
+  arrow(from: atom(0, 2), to: atom(1, 1)),
+)
+
+The same acid written in different atom orders draws in different orientations
+on its own (top row) and in one orientation once aligned (bottom row).
+
+#let acid-series = ("c1ccccc1C(=O)O", "O=C(O)c1ccccc1", "OC(=O)c1ccccc1O", "Nc1ccc(C(=O)O)cc1")
+#let aligned-acids = align-molecules(acid-series, scaffold: "c1ccccc1C(=O)O")
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  ..acid-series.map(acid => smiles(acid, scale: 0.8)),
+  ..aligned-acids.map(acid => smiles(acid, scale: 0.8)),
+)
+
+A symmetric scaffold keeps substituents on the reference's side: the methoxy
+group stays on top whichever halogen sits next to it, and the
+symmetry-equivalent rings of biphenyl and methyls of isobutylbenzene are chosen
+automatically.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  ..align-molecules(
+    ("COc1ccccc1Cl", "Brc1ccccc1OC", "c1ccc(OC)c(I)c1", "COc1ccccc1"),
+    scaffold: "c1ccccc1",
+  ).map(molecule => smiles(molecule, scale: 0.8)),
+  ..align-molecules(
+    ("Cc1ccccc1", "c1ccccc1-c1ccccc1", "CC(C)Cc1ccccc1", "OCc1ccccc1"),
+    scaffold: "[#6]c1ccccc1",
+  ).map(molecule => smiles(molecule, scale: 0.8)),
+)
+
+Explicit atoms choose one of two chemically distinct rings (the chlorinated
+ring of 4-chlorobiphenyl, then the plain ring), and an explicit
+correspondence aligns molecules without any scaffold.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  ..align-molecules(
+    ("Clc1ccccc1", "c1ccccc1-c1ccc(Cl)cc1"),
+    scaffold: "Clc1ccccc1",
+  ).map(molecule => smiles(molecule, scale: 0.7)),
+  ..align-molecules(
+    ("c1ccccc1C", "c1ccccc1-c1ccc(Cl)cc1"),
+    scaffold: "c1ccccc1",
+    atoms: (auto, (0, 1, 2, 3, 4, 5)),
+  ).map(molecule => smiles(molecule, scale: 0.7)),
+  ..align-molecules(
+    ("CCOC(=O)C", "CC(=O)OCC"),
+    atoms: ((0, 1, 2, 3), (5, 4, 3, 1)),
+  ).map(molecule => smiles(molecule, scale: 0.8)),
+)
+
+`rotation` and `mirror` orient the whole series; `allow-reflection: false`
+keeps every molecule unreflected. Reflected molecules exchange wedges and
+hashes, so each drawing below remains (S)-1-phenylethylamine.
+
+#let amine-series = ("C[C@H](N)c1ccccc1", "c1ccccc1[C@H](C)N", "N[C@@H](C)c1ccccc1")
+#grid(
+  columns: (1fr,) * 3,
+  gutter: 1em,
+  align: center + horizon,
+  ..align-molecules(amine-series, scaffold: "CC(N)c1ccccc1", rotation: 90deg)
+    .map(molecule => smiles(molecule, scale: 0.8)),
+  ..align-molecules(amine-series, scaffold: "CC(N)c1ccccc1", mirror: "horizontal")
+    .map(molecule => smiles(molecule, scale: 0.8)),
+  ..align-molecules(amine-series, scaffold: "CC(N)c1ccccc1", allow-reflection: false)
+    .map(molecule => [#smiles(molecule, scale: 0.8) \ #text(size: 7pt)[mirror: #repr(molecule.mirror)]]),
+)
+
+Rigid alignment does not redraw the core: chain scaffolds drawn with different
+zigzags keep a residual `deviation` (bond lengths, printed under each).
+
+#grid(
+  columns: (1fr,) * 3,
+  gutter: 1em,
+  align: center + horizon,
+  ..align-molecules(
+    ("CCCCC(=O)O", "CC(C)(C)CC(C)(C)C(=O)O", "OC(=O)CCCC"),
+    scaffold: "CCCCC(=O)O",
+    atoms: (auto, (0, 1, 4, 5, 8, 9, 10), auto),
+  ).map(molecule => [
+    #smiles(molecule, scale: 0.8) \
+    #text(size: 7pt)[deviation #calc.round(molecule.deviation, digits: 2)]
+  ]),
+)
+
+Aligned molecules also work in running text
+(#smiles-inline(reduction.at(0)) → #smiles-inline(reduction.at(1))), as CeTZ
+elements, and as catalytic-cycle species.
+
+#let cycle-series = align-molecules(
+  ("O=Cc1ccccc1", "OCc1ccccc1", "OC(=O)c1ccccc1"),
+  scaffold: "[#6]c1ccccc1",
+)
+#grid(
+  columns: (1fr, 2fr),
+  align: center + horizon,
+  context cetz.canvas(length: 30pt, {
+    smiles-cetz(cycle-series.at(0), name: "aldehyde")
+    smiles-cetz(cycle-series.at(1), name: "alcohol", origin: (4, 0))
+    cetz.draw.line("aldehyde.atom-1", "alcohol.atom-1", stroke: (dash: "dashed", paint: gray))
+  }),
+  cycle(scale: 0.6, ..cycle-series, step(label: [ox])),
+)
+
+= Molecule series grids (`molecule-grid`)
+
+Every molecule shares one bond length, so chlorobenzene and the larger
+ibuprofen keep their relative size. Captions in a row start on one line, and a
+long caption wraps within its column.
+
+#molecule-grid(
+  columns: 3,
+  bond-length: 0.8,
+  mol("Oc1ccccc1", label: [*1* — Phenol]),
+  mol("COc1ccccc1", label: [*2* — Anisole]),
+  mol("Clc1ccccc1", label: [*3* — Chlorobenzene]),
+  mol("CC(C)Cc1ccc(cc1)C(C)C(=O)O", label: [*4* — Ibuprofen, an anti-inflammatory with a long caption]),
+  mol("C", label: [*5* — Methane]),
+  mol("C1CCCCC1", label: [*6*]),
+)
+
+`sizing: "fit"` scales the whole series by one factor so the widest molecule
+fills its column; `scaffold:` aligns the series onto the first molecule, and
+uncaptioned strings and opaque content are accepted.
+
+#molecule-grid(
+  columns: 4,
+  sizing: "fit",
+  scaffold: "c1ccccc1C(=O)O",
+  mol("c1ccccc1C(=O)O", label: [Benzoic acid]),
+  mol("O=C(O)c1ccccc1", label: [Same acid, reversed]),
+  mol("OC(=O)c1ccccc1O", label: [Salicylic acid], highlight-smarts: "[OX2H]"),
+  "Nc1ccc(C(=O)O)cc1",
+)
+
+#molecule-grid(
+  columns: 3,
+  scale: 0.7,
+  ..aligned-acids.slice(0, 2).map(acid => mol(acid, label: [aligned])),
+  mol(ce("C6H5COOH"), label: [formula content]),
+)
+
+A long series breaks across pages only between rows.
+
+#molecule-grid(
+  columns: 3,
+  scale: 0.6,
+  ..range(18).map(index => mol(
+    "c1ccccc1" + "C" * (calc.rem(index, 4) + 1) + "O",
+    label: [*#(index + 1)*],
+  )),
+)

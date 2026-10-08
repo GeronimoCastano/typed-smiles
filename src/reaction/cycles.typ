@@ -16,6 +16,7 @@
 #import "../molecule/rendering.typ": _mirror-layout, _draw-molecule
 #import "../molecule/api.typ": smiles, _typst-rotate
 #import "schemes.typ": mol, reaction
+#import "../molecule/alignment.typ": _is-aligned-molecule
 
 // ── Catalytic cycle ───────────────────────────────────────────────────────────
 
@@ -118,8 +119,8 @@
 /// between them. Items alternate species and step()s, like #reaction()
 /// alternates molecules and rxn-arrow()s, but the sequence closes into a ring
 /// (the last step returns to the first species). Species are mol() items or any
-/// content (SMILES strings are rendered by #smiles); a mol(label:) is drawn
-/// under its species.
+/// content (SMILES strings and align-molecules() results are rendered by
+/// #smiles); a mol(label:) is drawn under its species.
 ///
 /// step(label:) names the transformation on an arc; step(into:) adds a reagent
 /// merging into the arc from outside the ring, and step(out:) a product leaving
@@ -157,7 +158,7 @@
   breakable: false,
   ..items,
 ) = {
-  let cycle-items = items.pos()
+  let cycle-items = items.pos().map(item => if _is-aligned-molecule(item) { mol(item) } else { item })
   if radius != auto {
     _validate-positive-number(radius, "cycle radius")
   }
