@@ -11,11 +11,12 @@
 use std::collections::HashSet;
 use std::f64::consts::PI;
 
+use crate::geometry::{angle_delta, largest_angular_gap, normalize_angle};
 use crate::graph::{AtomChirality, BondDirection, BondOrder, BondStereo, MoleculeGraph};
-use crate::layout::{
-    angle_delta, implicit_h_count, largest_angular_gap, lone_pair_count, normalize_angle,
-};
+use crate::layout::{implicit_h_count, lone_pair_count};
+use crate::macrocycles::{ring_double_bond_requirements, TRANS_RING_MIN_ATOMS};
 use crate::render::Vec2;
+use crate::rings::ring_has_edge;
 
 /// A written stereo configuration that the drawing does not show.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +38,7 @@ pub(crate) struct StereoDepiction {
 pub(crate) fn depict_stereo(
     molecule: &MoleculeGraph,
     coordinates: &[Vec2],
+    rings: &[Vec<usize>],
     ring_bonds: &HashSet<usize>,
 ) -> StereoDepiction {
     let mut depiction = StereoDepiction {
@@ -78,7 +80,12 @@ pub(crate) fn depict_stereo(
         }
     }
 
-    report_undrawn_double_bond_configurations(molecule, coordinates, &mut depiction.undepicted);
+    report_undrawn_double_bond_configurations(
+        molecule,
+        coordinates,
+        rings,
+        &mut depiction.undepicted,
+    );
     depiction
 }
 
@@ -481,6 +488,7 @@ fn check_square_planar_geometry(
 fn report_undrawn_double_bond_configurations(
     molecule: &MoleculeGraph,
     coordinates: &[Vec2],
+    rings: &[Vec<usize>],
     undepicted: &mut Vec<UndepictedStereo>,
 ) {
     for double_bond in molecule
@@ -516,16 +524,53 @@ fn report_undrawn_double_bond_configurations(
             reason: format!(
                 "the double bond between `{}` at character {} and `{}` at character {} (atoms \
                  {} and {}): the layout cannot place its `/` and `\\` substituents on the \
-                 written sides",
+                 written sides{}",
                 from_atom.written_symbol(),
                 from_atom.source_position,
                 to_atom.written_symbol(),
                 to_atom.source_position,
                 double_bond.from,
-                double_bond.to
+                double_bond.to,
+                small_ring_trans_advice(molecule, rings, double_bond.from, double_bond.to)
             ),
         });
     }
+}
+
+/// Explains why a trans double bond written inside a small ring cannot be
+/// drawn, or returns an empty string for any other double bond.
+fn small_ring_trans_advice(
+    molecule: &MoleculeGraph,
+    rings: &[Vec<usize>],
+    first_atom: usize,
+    second_atom: usize,
+) -> String {
+    let Some(smallest_ring) = rings
+        .iter()
+        .filter(|ring| ring_has_edge(ring, first_atom, second_atom))
+        .min_by_key(|ring| ring.len())
+    else {
+        return String::new();
+    };
+    let requests_trans = ring_double_bond_requirements(molecule, smallest_ring)
+        .iter()
+        .any(|requirement| {
+            let bond_atoms = [
+                smallest_ring[requirement.double_bond_start],
+                smallest_ring[requirement.double_bond_end],
+            ];
+            bond_atoms.contains(&first_atom)
+                && bond_atoms.contains(&second_atom)
+                && !requirement.same_side
+        });
+    if !requests_trans || smallest_ring.len() >= TRANS_RING_MIN_ATOMS {
+        return String::new();
+    }
+    format!(
+        "; it lies in a ring of {} atoms, and a flat drawing can show a trans ring double bond \
+         only in a ring of at least {TRANS_RING_MIN_ATOMS} atoms",
+        smallest_ring.len()
+    )
 }
 
 /// Directional substituents of one double-bond end with the side of the bond

@@ -95,7 +95,7 @@
       "smiles": "c1cc2cc3ccc(cc4ccc(cc5ccc(cc1n2)[nH]5)n4)[nH]3",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "distorted-bonds"
+      "layout": "clean"
     },
     {
       "category": "aromatic",
@@ -103,7 +103,7 @@
       "smiles": "c12c3c4c5c1c1c6c7c2c2c8c3c3c9c4c4c%10c5c5c1c1c6c6c%11c7c2c2c7c8c3c3c8c9c4c4c9c%10c5c5c1c1c6c6c%11c2c2c7c3c3c8c4c4c9c5c1c1c6c2c3c41",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "crossing-bonds,distorted-bonds,overlapping-atoms"
+      "layout": "crossing-bonds,distorted-bonds"
     },
     {
       "category": "aromatic",
@@ -881,7 +881,7 @@
       "smiles": "C1CCC/C=C/CC1",
       "expect": "accept",
       "undepicted": true,
-      "note": "Ring layout forces cis geometry; reported instead of drawn wrongly.",
+      "note": "A ring of fewer than 9 atoms cannot show a trans double bond flat; reported instead of drawn wrongly.",
       "rdkit": "accept",
       "layout": "clean"
     },
@@ -1044,7 +1044,7 @@
       "smiles": "C1CC2CCC1C2",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "distorted-bonds"
+      "layout": "clean"
     },
     {
       "category": "cages",
@@ -1052,7 +1052,7 @@
       "smiles": "C1C2CC3CC1CC(C2)C3",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "distorted-bonds"
+      "layout": "crossing-bonds"
     },
     {
       "category": "cages",
@@ -1060,7 +1060,7 @@
       "smiles": "C12C3C4C1C5C2C3C45",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "distorted-bonds"
+      "layout": "crossing-bonds,distorted-bonds"
     },
     {
       "category": "cages",
@@ -1068,7 +1068,7 @@
       "smiles": "C1CC2CC3CC1CC2C3",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "crossing-bonds,distorted-bonds"
+      "layout": "crossing-bonds"
     },
     {
       "category": "cages",
@@ -1076,7 +1076,7 @@
       "smiles": "C1CN2CCC1CC2",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "crossing-bonds,distorted-bonds"
+      "layout": "clean"
     },
     {
       "category": "cages",
@@ -1092,7 +1092,7 @@
       "smiles": "CN1CC[C@]23c4c5ccc(O)c4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "crossing-bonds,distorted-bonds"
+      "layout": "crossing-bonds"
     },
     {
       "category": "cages",
@@ -1100,7 +1100,7 @@
       "smiles": "O=C1C[C@@H]2OCC=C3CN4CC[C@@]56[C@H]4C[C@H]3[C@H]2[C@H]6N1c1ccccc15",
       "expect": "accept",
       "rdkit": "accept",
-      "layout": "distorted-bonds,overlapping-atoms"
+      "layout": "clean"
     },
     {
       "category": "crowded-fused",
@@ -1109,7 +1109,7 @@
       "expect": "accept",
       "note": "Both junction methyls are placed inside the ring; a layout failure, not a parsing one.",
       "rdkit": "accept",
-      "layout": "overlapping-atoms"
+      "layout": "clean"
     },
     {
       "category": "stereo-tetrahedral",
@@ -1148,8 +1148,6 @@
       "name": "trans-cyclododecene",
       "smiles": "C1CCCCC/C=C/CCCC1",
       "expect": "accept",
-      "undepicted": true,
-      "note": "Macrocycle layout cannot yet place trans double bonds.",
       "rdkit": "accept",
       "layout": "clean"
     },

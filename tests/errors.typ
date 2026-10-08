@@ -138,6 +138,8 @@
   smiles("CCO", undepicted-stereo: "ignore")
 } else if selected-case == "show-maps-type" {
   smiles("[CH3:1]O", show-maps: "yes")
+} else if selected-case == "trans-double-bond-in-small-ring" {
+  smiles("C1CCC/C=C/CC1")
 } else {
   panic("unknown validation test case: " + selected-case)
 }

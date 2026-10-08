@@ -1,14 +1,22 @@
 #[cfg(test)]
 mod conformance_tests;
 mod error;
+mod geometry;
 mod graph;
 mod kekulize;
 mod label;
 mod layout;
+#[cfg(test)]
+mod layout_quality;
+mod layout_relaxation;
+mod macrocycles;
 mod parser;
 #[cfg(test)]
 mod performance_tests;
 mod render;
+mod ring_system_layout;
+mod ring_templates;
+mod rings;
 mod stereo;
 mod substructure;
 

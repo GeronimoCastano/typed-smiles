@@ -1016,7 +1016,10 @@ Current limitations:
 - Trigonal-bipyramidal (`@TB`), octahedral (`@OH`), and allene (`@AL`)
   stereochemistry is not drawn and is reported unless
   `undepicted-stereo: "omit"` is set.
-- Bridged bicyclics and cages may overlap; template matching is not implemented.
+- A trans double bond (`/` and `\` markers) inside a ring needs a ring of at
+  least nine atoms; in a smaller ring it is reported the same way.
+- Some three-dimensional skeletons, such as triptycene, cannot be drawn flat
+  without one ring overlapping another.
 - Reaction SMILES (`A>>B`), dative arrows (`->`), and `%(nnn)` ring numbers are
   not read; draw reactions with `reaction()`.
 

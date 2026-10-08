@@ -285,6 +285,13 @@ impl MoleculeGraph {
     pub fn n_atoms(&self) -> usize {
         self.atoms.len()
     }
+
+    /// Index of the bond joining two atoms, if they are bonded.
+    pub(crate) fn bond_between(&self, first_atom: usize, second_atom: usize) -> Option<usize> {
+        self.adj[first_atom]
+            .iter()
+            .find_map(|&(neighbor, bond_index)| (neighbor == second_atom).then_some(bond_index))
+    }
 }
 
 /// Accumulates atoms and bonds in SMILES writing order and checks that every

@@ -873,7 +873,7 @@ extensions for bond styles and local acyclic-chain layout.
 ]
 
 #note[R/S descriptors are not available. Ring stereochemistry between adjacent
-centers and bridged bicyclics may need a manual adjustment (see @sec-limits).]
+centers may need a manual adjustment (see @sec-limits).]
 
 == Double bonds: #raw("/") and #raw("\\")
 
@@ -887,6 +887,19 @@ centers and bridged bicyclics may need a manual adjustment (see @sec-limits).]
   trans: #smiles("F/C=C/F")
   #h(2em)
   cis: #smiles("F/C=C\F")
+  ```)
+]
+
+#demo[
+  Markers on a ring double bond set the geometry of the ring itself. A trans
+  double bond needs a ring of at least nine atoms; a smaller ring cannot show
+  it in a flat drawing, so it is reported like other stereochemistry the
+  drawing cannot show (see @sec-undepicted-stereo).
+
+  #example(```typ
+  trans: #smiles("C1CCCCC/C=C/CCCC1", scale: 0.5)
+  #h(2em)
+  cis: #smiles("C1CCCCC/C=C\CCCC1", scale: 0.5)
   ```)
 ]
 
@@ -2144,14 +2157,15 @@ parameter.
 - Trigonal-bipyramidal (#c("@TB")), octahedral (#c("@OH")), and allene
   (#c("@AL")) stereochemistry is not drawn; by default it is reported as an
   error (see @sec-undepicted-stereo).
-- Trans double bonds in rings of fewer than about twelve atoms, and some
-  chelate rings around square-planar centers, cannot be laid out with the
-  written geometry and are reported the same way.
+- Trans double bonds in rings of fewer than nine atoms, and some chelate rings
+  around square-planar centers, cannot be laid out with the written geometry
+  and are reported the same way.
 - Reaction SMILES (#c("A>>B")), dative-bond arrows (#c("->")), and
   #c("%(nnn)") ring numbers are not read; draw reactions with #c("reaction()").
-- Ring stereochemistry between adjacent centers and bridged bicyclics can overlap
-  or need a manual adjustment (try #c("rotation"), or the manual #c("!w") and
-  #c("!h") wedges).
+- Ring stereochemistry between adjacent centers can need a manual adjustment
+  (try #c("rotation"), or the manual #c("!w") and #c("!h") wedges).
+- Some three-dimensional skeletons, such as triptycene, cannot be drawn flat
+  without one ring overlapping another.
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Molecule library <sec-library>

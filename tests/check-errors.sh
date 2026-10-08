@@ -88,5 +88,6 @@ expect_error "undepicted-not-stereocenter" "it carries 2 hydrogens"
 expect_error "undepicted-ring-trans" "cannot place its \`/\` and"
 expect_error "undepicted-stereo-policy" "undepicted-stereo is invalid"
 expect_error "show-maps-type" "show-maps"
+expect_error "trans-double-bond-in-small-ring" "a flat drawing can show a trans ring double bond only in a ring of at least 9 atoms"
 
 echo "All editor-visible validation cases passed."

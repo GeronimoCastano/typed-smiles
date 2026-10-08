@@ -8,13 +8,16 @@
 ///   4. Lay out acyclic chains via DFS, extending each bond at ±120° from
 ///      the incoming direction (standard organic chemistry depiction angle).
 ///   5. Translate the whole molecule so the centroid is at the origin.
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::f64::consts::PI;
 
+use crate::geometry::{angular_gaps, largest_angular_gap, normalize_angle, point_in_polygon};
 use crate::graph::{AtomChirality, Bond, BondDirection, BondOrder, BondStereo, MoleculeGraph};
 use crate::render::{
     AromaticRing, AtomOutput, BondOutput, LayoutOutput, UndepictedStereoOutput, Vec2,
 };
+use crate::ring_system_layout::layout_ring_system;
+use crate::rings::{find_rings, ring_bond_set, ring_has_edge, rings_share_edge};
 use crate::stereo::{depict_stereo, StereoDepiction};
 
 /// Gap between the bounding boxes of dot-separated fragments, in bond lengths.
@@ -28,7 +31,7 @@ pub fn compute_layout(molecule: &MoleculeGraph) -> Result<LayoutOutput, String> 
     let coordinates = layout_coordinates(molecule)?;
     let rings = find_rings(molecule);
     let ring_bonds = ring_bond_set(molecule, &rings);
-    let stereo = depict_stereo(molecule, &coordinates, &ring_bonds);
+    let stereo = depict_stereo(molecule, &coordinates, &rings, &ring_bonds);
 
     let mut atoms = build_atom_outputs(molecule, &coordinates, &stereo.hydrogen_stereo);
     let inner_directions = ring_inner_directions(molecule, &rings, &coordinates);
@@ -244,7 +247,8 @@ fn aromatic_ring_circles(
         let all_aromatic = (0..ring.len()).all(|ring_position| {
             let first_atom = ring[ring_position];
             let second_atom = ring[(ring_position + 1) % ring.len()];
-            bond_between(molecule, first_atom, second_atom)
+            molecule
+                .bond_between(first_atom, second_atom)
                 .map(|index| molecule.bonds[index].aromatic)
                 .unwrap_or(false)
         });
@@ -386,6 +390,7 @@ fn place_connected_molecule(molecule: &MoleculeGraph) -> Result<Vec<Vec2>, Strin
 
     apply_curl_layout(molecule, &mut coordinates)?;
     apply_cis_trans_layout(molecule, &mut coordinates)?;
+    separate_overlapping_branches(molecule, &rings, &mut coordinates);
 
     // ── 5. Center the molecule ────────────────────────────────────────────
 
@@ -525,7 +530,8 @@ fn apply_curl_layout(molecule: &MoleculeGraph, coordinates: &mut [Vec2]) -> Resu
         let first_atom = molecule.preceding_atom[preceding_atom].ok_or_else(|| {
             format!("!c on bond {pivot_atom}-{next_atom} needs two preceding chain bonds")
         })?;
-        let incoming_bond = bond_between(molecule, preceding_atom, pivot_atom)
+        let incoming_bond = molecule
+            .bond_between(preceding_atom, pivot_atom)
             .ok_or_else(|| format!("missing incoming bond {preceding_atom}-{pivot_atom} for !c"))?;
         if ring_bonds.contains(&bond_index) || ring_bonds.contains(&incoming_bond) {
             return Err("!c is not supported on a ring bond or directly after one".into());
@@ -708,6 +714,7 @@ fn apply_cis_trans_layout(
     coordinates: &mut [Vec2],
 ) -> Result<(), String> {
     let mut handled_directional_bonds = HashSet::new();
+    let rings = find_rings(molecule);
 
     // A directional bond between two double bonds describes both of them, so
     // each double bond reads every marked neighbor bond. Reorienting a shared
@@ -722,6 +729,18 @@ fn apply_cis_trans_layout(
         let right = directional_neighbors(molecule, double_bond.to, double_bond.from)?;
 
         if left.is_empty() || right.is_empty() {
+            continue;
+        }
+
+        // Inside a ring, the ring layout itself decides the side of each
+        // neighbor; reflecting a neighbor would tear the ring apart. Stereo
+        // depiction reports a ring the layout could not draw as written.
+        if rings
+            .iter()
+            .any(|ring| ring_has_edge(ring, double_bond.from, double_bond.to))
+        {
+            handled_directional_bonds.extend(left.iter().map(|neighbor| neighbor.bond_index));
+            handled_directional_bonds.extend(right.iter().map(|neighbor| neighbor.bond_index));
             continue;
         }
 
@@ -919,210 +938,10 @@ fn collect_subtree(
     atoms
 }
 
-fn ring_bond_set(molecule: &MoleculeGraph, rings: &[Vec<usize>]) -> HashSet<usize> {
-    let mut ring_bonds = HashSet::new();
-    for ring in rings {
-        for (first_atom, second_atom) in ring_edges(ring) {
-            if let Some(bond_index) = bond_between(molecule, first_atom, second_atom) {
-                ring_bonds.insert(bond_index);
-            }
-        }
-    }
-    ring_bonds
-}
-
-// ── Ring detection ────────────────────────────────────────────────────────────
-
-/// Returns cycles as lists of atom indices (the ring path).
-fn find_rings(molecule: &MoleculeGraph) -> Vec<Vec<usize>> {
-    let target_count = cycle_rank(molecule);
-    if target_count == 0 {
-        return Vec::new();
-    }
-
-    let bit_words = molecule.bonds.len().div_ceil(64);
-    let mut seen_cycles: HashSet<Vec<u64>> = HashSet::new();
-    let mut candidates: Vec<(Vec<usize>, Vec<u64>)> = Vec::new();
-
-    for (bond_index, bond) in molecule.bonds.iter().enumerate() {
-        if let Some(ring) = shortest_path_excluding_bond(molecule, bond.from, bond.to, bond_index) {
-            if ring.len() < 3 {
-                continue;
-            }
-            let bits = ring_bond_bits(molecule, &ring, bit_words);
-            if seen_cycles.insert(bits.clone()) {
-                candidates.push((ring, bits));
-            }
-        }
-    }
-
-    candidates.sort_by(|(first_ring, first_bits), (second_ring, second_bits)| {
-        first_ring
-            .len()
-            .cmp(&second_ring.len())
-            .then_with(|| first_bits.cmp(second_bits))
-    });
-
-    let mut basis: Vec<Vec<u64>> = Vec::new();
-    let mut rings = Vec::new();
-    for (ring, bits) in candidates {
-        if add_independent_cycle(&mut basis, bits) {
-            rings.push(ring);
-            if rings.len() == target_count {
-                break;
-            }
-        }
-    }
-
-    rings
-}
-
-fn cycle_rank(molecule: &MoleculeGraph) -> usize {
-    if molecule.n_atoms() == 0 {
-        return 0;
-    }
-
-    let mut seen = vec![false; molecule.n_atoms()];
-    let mut components = 0;
-    for start in 0..molecule.n_atoms() {
-        if seen[start] {
-            continue;
-        }
-        components += 1;
-        let mut stack = vec![start];
-        seen[start] = true;
-        while let Some(atom) = stack.pop() {
-            for &(neighbor, _) in &molecule.adj[atom] {
-                if !seen[neighbor] {
-                    seen[neighbor] = true;
-                    stack.push(neighbor);
-                }
-            }
-        }
-    }
-
-    molecule.bonds.len() + components - molecule.n_atoms()
-}
-
-/// BFS from `from` to `to`, intentionally skipping one bond so the path plus
-/// that skipped bond is a ring candidate.
-fn shortest_path_excluding_bond(
-    molecule: &MoleculeGraph,
-    from: usize,
-    to: usize,
-    excluded_bond: usize,
-) -> Option<Vec<usize>> {
-    let atom_count = molecule.n_atoms();
-    let mut bfs_parent = vec![None; atom_count];
-
-    bfs_parent[from] = Some(from); // root sentinel
-    let mut queue = VecDeque::new();
-    queue.push_back(from);
-
-    while let Some(atom_index) = queue.pop_front() {
-        for &(neighbor, bond_index) in &molecule.adj[atom_index] {
-            if bond_index == excluded_bond {
-                continue;
-            }
-            if bfs_parent[neighbor].is_some() {
-                continue;
-            }
-            bfs_parent[neighbor] = Some(atom_index);
-
-            if neighbor == to {
-                let mut path = Vec::new();
-                let mut current_atom = to;
-                loop {
-                    path.push(current_atom);
-                    if current_atom == from {
-                        break;
-                    }
-                    current_atom = bfs_parent[current_atom]?;
-                }
-                path.reverse();
-                return Some(path);
-            }
-            queue.push_back(neighbor);
-        }
-    }
-
-    None
-}
-
-fn ring_bond_bits(molecule: &MoleculeGraph, ring: &[usize], bit_words: usize) -> Vec<u64> {
-    let mut bits = vec![0_u64; bit_words];
-    for (first_atom, second_atom) in ring_edges(ring) {
-        if let Some(bond_index) = bond_between(molecule, first_atom, second_atom) {
-            bits[bond_index / 64] |= 1_u64 << (bond_index % 64);
-        }
-    }
-    bits
-}
-
-fn bond_between(molecule: &MoleculeGraph, first_atom: usize, second_atom: usize) -> Option<usize> {
-    molecule.adj[first_atom]
-        .iter()
-        .find_map(|&(neighbor, bond_index)| {
-            if neighbor == second_atom {
-                Some(bond_index)
-            } else {
-                None
-            }
-        })
-}
-
-fn ring_edges(ring: &[usize]) -> impl Iterator<Item = (usize, usize)> + '_ {
-    ring.iter()
-        .copied()
-        .zip(ring.iter().copied().cycle().skip(1))
-        .take(ring.len())
-}
-
-fn add_independent_cycle(basis: &mut Vec<Vec<u64>>, bits: Vec<u64>) -> bool {
-    let mut candidate = bits;
-    for existing in basis.iter() {
-        if let Some(pivot) = pivot_bit(existing) {
-            if bit_is_set(&candidate, pivot) {
-                xor_assign(&mut candidate, existing);
-            }
-        }
-    }
-
-    let Some(pivot) = pivot_bit(&candidate) else {
-        return false;
-    };
-
-    for existing in basis.iter_mut() {
-        if bit_is_set(existing, pivot) {
-            xor_assign(existing, &candidate);
-        }
-    }
-    basis.push(candidate);
-    basis.sort_by_key(|bits| pivot_bit(bits).unwrap_or(usize::MAX));
-    true
-}
-
-fn pivot_bit(bits: &[u64]) -> Option<usize> {
-    for (word_idx, word) in bits.iter().enumerate() {
-        if *word != 0 {
-            return Some(word_idx * 64 + word.trailing_zeros() as usize);
-        }
-    }
-    None
-}
-
-fn bit_is_set(bits: &[u64], bit: usize) -> bool {
-    bits[bit / 64] & (1_u64 << (bit % 64)) != 0
-}
-
-fn xor_assign(lhs: &mut [u64], rhs: &[u64]) {
-    for (a, b) in lhs.iter_mut().zip(rhs.iter()) {
-        *a ^= *b;
-    }
-}
-
 // ── Ring placement ────────────────────────────────────────────────────────────
 
+/// Places the ring system containing the most central ring at the origin.
+/// Other ring systems are anchored later, when a chain reaches them.
 fn place_initial_ring_system(
     molecule: &MoleculeGraph,
     rings: &[Vec<usize>],
@@ -1133,21 +952,11 @@ fn place_initial_ring_system(
         return;
     }
 
-    // Place a central ring in the first ring system. Other standalone ring
-    // systems in the same molecule are anchored later when the connecting
-    // chain reaches them.
-    let initial_ring = initial_ring_index(rings);
-    place_regular_ring(
-        &rings[initial_ring],
-        Vec2::new(0.0, 0.0),
-        90.0_f64.to_radians(),
-        coordinates,
-        placed,
-    );
-
-    let mut placed_rings: HashSet<usize> = HashSet::new();
-    placed_rings.insert(initial_ring);
-    place_connected_fused_rings(molecule, rings, &mut placed_rings, coordinates, placed);
+    let system = layout_ring_system(molecule, rings, initial_ring_index(rings));
+    for &atom in &system.atoms {
+        coordinates[atom] = system.positions[atom];
+        placed[atom] = true;
+    }
 }
 
 fn initial_ring_index(rings: &[Vec<usize>]) -> usize {
@@ -1170,328 +979,28 @@ fn initial_ring_index(rings: &[Vec<usize>]) -> usize {
     best_index
 }
 
-fn rings_share_edge(first_ring: &[usize], second_ring: &[usize]) -> bool {
-    shared_atoms(first_ring, second_ring)
-        .windows(2)
-        .any(|atom_pair| {
-            ring_has_edge(first_ring, atom_pair[0], atom_pair[1])
-                && ring_has_edge(second_ring, atom_pair[0], atom_pair[1])
-        })
-}
-
-fn shared_atoms(first_ring: &[usize], second_ring: &[usize]) -> Vec<usize> {
-    let mut atoms: Vec<usize> = first_ring
-        .iter()
-        .copied()
-        .filter(|atom| second_ring.contains(atom))
-        .collect();
-    atoms.sort_unstable();
-    atoms.dedup();
-    atoms
-}
-
-fn ring_has_edge(ring: &[usize], first_atom: usize, second_atom: usize) -> bool {
-    ring_edges(ring).any(|(edge_start, edge_end)| {
-        (edge_start == first_atom && edge_end == second_atom)
-            || (edge_start == second_atom && edge_end == first_atom)
-    })
-}
-
-fn place_connected_fused_rings(
-    molecule: &MoleculeGraph,
-    rings: &[Vec<usize>],
-    placed_rings: &mut HashSet<usize>,
-    coordinates: &mut [Vec2],
-    placed: &mut [bool],
-) {
-    loop {
-        let mut progressed = false;
-        for (ring_index, ring) in rings.iter().enumerate() {
-            if placed_rings.contains(&ring_index) {
-                continue;
-            }
-
-            if placed_shared_edge(ring, placed).is_some() {
-                place_fused_ring(ring, coordinates, placed);
-                placed_rings.insert(ring_index);
-                progressed = true;
-            }
-        }
-
-        if progressed {
-            continue;
-        }
-
-        // No edge-fused ring is ready: try a spiro ring, which joins the placed
-        // structure at a single shared atom. Placing one may expose further
-        // edge fusions, so re-enter the loop afterwards.
-        let spiro = rings.iter().enumerate().find(|(index, ring)| {
-            !placed_rings.contains(index)
-                && ring
-                    .iter()
-                    .filter(|&&atom_index| placed[atom_index])
-                    .count()
-                    == 1
-        });
-        if let Some((ring_index, ring)) = spiro {
-            place_spiro_ring(molecule, ring, coordinates, placed);
-            placed_rings.insert(ring_index);
-            continue;
-        }
-
-        break;
-    }
-}
-
-/// Place a ring joined to the already-placed structure at a single shared
-/// (spiro) atom, as a regular polygon opening away from that atom's placed
-/// neighbors so the two rings do not overlap.
-fn place_spiro_ring(
-    molecule: &MoleculeGraph,
-    ring: &[usize],
-    coordinates: &mut [Vec2],
-    placed: &mut [bool],
-) {
-    let ring_size = ring.len();
-    let shared_position = (0..ring_size).find(|&ring_position| placed[ring[ring_position]]);
-    let Some(shared_position) = shared_position else {
-        place_regular_ring(ring, Vec2::new(0.0, 0.0), 0.0, coordinates, placed);
-        return;
-    };
-    let spiro_atom = ring[shared_position];
-    let spiro_position = coordinates[spiro_atom];
-
-    let mut inward_horizontal = 0.0;
-    let mut inward_vertical = 0.0;
-    for bond in &molecule.bonds {
-        let neighbor = if bond.from == spiro_atom {
-            bond.to
-        } else if bond.to == spiro_atom {
-            bond.from
-        } else {
-            continue;
-        };
-        if placed[neighbor] {
-            let horizontal_offset = coordinates[neighbor].x - spiro_position.x;
-            let vertical_offset = coordinates[neighbor].y - spiro_position.y;
-            let distance =
-                (horizontal_offset * horizontal_offset + vertical_offset * vertical_offset).sqrt();
-            if distance > 1e-6 {
-                inward_horizontal += horizontal_offset / distance;
-                inward_vertical += vertical_offset / distance;
-            }
-        }
-    }
-    let inward_length =
-        (inward_horizontal * inward_horizontal + inward_vertical * inward_vertical).sqrt();
-    let (inward_x, inward_y) = if inward_length < 1e-6 {
-        (0.0, -1.0)
-    } else {
-        (
-            inward_horizontal / inward_length,
-            inward_vertical / inward_length,
-        )
-    };
-
-    let radius = regular_polygon_radius(ring_size);
-    let center = Vec2::new(
-        spiro_position.x - inward_x * radius,
-        spiro_position.y - inward_y * radius,
-    );
-    let start_angle = (spiro_position.y - center.y).atan2(spiro_position.x - center.x);
-    let angle_step = 2.0 * PI / ring_size as f64;
-    for (ring_position, &atom) in ring.iter().enumerate() {
-        if !placed[atom] {
-            let position_offset = ring_position as i64 - shared_position as i64;
-            let angle = start_angle + angle_step * position_offset as f64;
-            coordinates[atom] = Vec2::new(
-                center.x + radius * angle.cos(),
-                center.y + radius * angle.sin(),
-            );
-            placed[atom] = true;
-        }
-    }
-}
-
-/// Place a standalone ring as a regular n-gon centered at `center`.
-/// `start_angle` is the angle (radians) of the first atom from the center.
-fn place_regular_ring(
-    ring: &[usize],
-    center: Vec2,
-    start_angle: f64,
-    coordinates: &mut [Vec2],
-    placed: &mut [bool],
-) {
-    let ring_size = ring.len() as f64;
-    let radius = regular_polygon_radius(ring.len());
-
-    for (ring_position, &atom) in ring.iter().enumerate() {
-        if !placed[atom] {
-            let angle = start_angle + (2.0 * PI / ring_size) * ring_position as f64;
-            coordinates[atom] = Vec2::new(
-                center.x + radius * angle.cos(),
-                center.y + radius * angle.sin(),
-            );
-            placed[atom] = true;
-        }
-    }
-}
-
-fn regular_polygon_radius(vertex_count: usize) -> f64 {
-    1.0 / (2.0 * (PI / vertex_count as f64).sin())
-}
-
-/// Place a fused ring where two atoms are already positioned.
-fn place_fused_ring(ring: &[usize], coordinates: &mut [Vec2], placed: &mut [bool]) {
-    let ring_size = ring.len();
-    let Some((first_shared_position, second_shared_position)) = placed_shared_edge(ring, placed)
-    else {
-        place_regular_ring(ring, Vec2::new(0.0, 0.0), 0.0, coordinates, placed);
-        return;
-    };
-
-    let first_shared_position_coordinates = coordinates[ring[first_shared_position]];
-    let second_shared_position_coordinates = coordinates[ring[second_shared_position]];
-    let midpoint = Vec2::new(
-        (first_shared_position_coordinates.x + second_shared_position_coordinates.x) / 2.0,
-        (first_shared_position_coordinates.y + second_shared_position_coordinates.y) / 2.0,
-    );
-    let bond_angle = (second_shared_position_coordinates.y - first_shared_position_coordinates.y)
-        .atan2(second_shared_position_coordinates.x - first_shared_position_coordinates.x);
-
-    let ring_size_as_float = ring_size as f64;
-    let center_distance = 0.5 / (PI / ring_size_as_float).tan();
-
-    let first_candidate_center = Vec2::new(
-        midpoint.x + center_distance * (bond_angle + PI / 2.0).cos(),
-        midpoint.y + center_distance * (bond_angle + PI / 2.0).sin(),
-    );
-    let second_candidate_center = Vec2::new(
-        midpoint.x + center_distance * (bond_angle - PI / 2.0).cos(),
-        midpoint.y + center_distance * (bond_angle - PI / 2.0).sin(),
-    );
-    let center = pick_farther_center(
-        first_candidate_center,
-        second_candidate_center,
-        placed,
-        coordinates,
-    );
-
-    let start_angle = (first_shared_position_coordinates.y - center.y)
-        .atan2(first_shared_position_coordinates.x - center.x);
-    let next_angle = (second_shared_position_coordinates.y - center.y)
-        .atan2(second_shared_position_coordinates.x - center.x);
-    let angle_step = 2.0 * PI / ring_size_as_float;
-    let sweep = if angle_delta(start_angle + angle_step, next_angle).abs()
-        <= angle_delta(start_angle - angle_step, next_angle).abs()
-    {
-        1.0
-    } else {
-        -1.0
-    };
-
-    let radius = regular_polygon_radius(ring_size);
-    for (ring_position, &atom) in ring.iter().enumerate() {
-        if !placed[atom] {
-            let position_offset = ring_position as i64 - first_shared_position as i64;
-            let angle = start_angle + sweep * angle_step * position_offset as f64;
-            coordinates[atom] = Vec2::new(
-                center.x + radius * angle.cos(),
-                center.y + radius * angle.sin(),
-            );
-            placed[atom] = true;
-        }
-    }
-}
-
-pub(crate) fn angle_delta(first_angle: f64, second_angle: f64) -> f64 {
-    let mut delta = first_angle - second_angle;
-    while delta > PI {
-        delta -= 2.0 * PI;
-    }
-    while delta < -PI {
-        delta += 2.0 * PI;
-    }
-    delta
-}
-
-fn placed_shared_edge(ring: &[usize], placed: &[bool]) -> Option<(usize, usize)> {
-    for first_position in 0..ring.len() {
-        let second_position = (first_position + 1) % ring.len();
-        if placed[ring[first_position]] && placed[ring[second_position]] {
-            return Some((first_position, second_position));
-        }
-    }
-    None
-}
-
-fn pick_farther_center(
-    first_candidate: Vec2,
-    second_candidate: Vec2,
-    placed: &[bool],
-    coordinates: &[Vec2],
-) -> Vec2 {
-    let mut first_total_distance = 0.0;
-    let mut second_total_distance = 0.0;
-    let mut placed_count = 0;
-    for (atom_index, was_placed) in placed.iter().enumerate() {
-        if *was_placed {
-            first_total_distance += first_candidate.distance_to(coordinates[atom_index]);
-            second_total_distance += second_candidate.distance_to(coordinates[atom_index]);
-            placed_count += 1;
-        }
-    }
-    if placed_count == 0 || first_total_distance >= second_total_distance {
-        first_candidate
-    } else {
-        second_candidate
-    }
-}
-
-fn place_ring_from_anchor(
-    ring: &[usize],
-    anchor: usize,
-    center_direction: f64,
-    coordinates: &mut [Vec2],
-    placed: &mut [bool],
-) {
-    let Some(anchor_position) = ring.iter().position(|&atom_index| atom_index == anchor) else {
-        return;
-    };
-
-    let ring_size = ring.len() as f64;
-    let radius = regular_polygon_radius(ring.len());
-    let center = Vec2::new(
-        coordinates[anchor].x + radius * center_direction.cos(),
-        coordinates[anchor].y + radius * center_direction.sin(),
-    );
-    let angle_step = 2.0 * PI / ring_size;
-    let anchor_angle = (coordinates[anchor].y - center.y).atan2(coordinates[anchor].x - center.x);
-    let start_angle = anchor_angle - angle_step * anchor_position as f64;
-
-    place_regular_ring(ring, center, start_angle, coordinates, placed);
-}
-
+/// Places the ring system containing `ring_index` so that it continues the
+/// bond that reached `anchor` along `incoming_direction`: the system turns
+/// until the side of `anchor` facing away from the rest of the system points
+/// back along that bond.
 fn place_ring_system_from_anchor(
     molecule: &MoleculeGraph,
     rings: &[Vec<usize>],
     ring_index: usize,
     anchor: usize,
-    center_direction: f64,
+    incoming_direction: f64,
     coordinates: &mut [Vec2],
     placed: &mut [bool],
 ) {
-    place_ring_from_anchor(
-        &rings[ring_index],
-        anchor,
-        center_direction,
-        coordinates,
-        placed,
-    );
-
-    let mut placed_rings: HashSet<usize> = HashSet::new();
-    placed_rings.insert(ring_index);
-    place_connected_fused_rings(molecule, rings, &mut placed_rings, coordinates, placed);
+    let system = layout_ring_system(molecule, rings, ring_index);
+    let rotation = incoming_direction + PI - system.outward_angle(molecule, anchor);
+    let anchor_position = coordinates[anchor];
+    let local_anchor_position = system.positions[anchor];
+    for &atom in &system.atoms {
+        coordinates[atom] =
+            anchor_position + (system.positions[atom] - local_anchor_position).rotated(rotation);
+        placed[atom] = true;
+    }
 }
 
 fn unfinished_ring_containing_atom(
@@ -1563,16 +1072,24 @@ fn place_ring_substituents(
         ring_atom,
         unplaced_neighbors.len(),
         outward_direction,
+        rings,
         coordinates,
         placed,
     );
 
     for (neighbor_index, &neighbor) in unplaced_neighbors.iter().enumerate() {
         let direction = directions[neighbor_index];
-        coordinates[neighbor] = Vec2::new(
-            coordinates[ring_atom].x + direction.cos(),
-            coordinates[ring_atom].y + direction.sin(),
-        );
+        let substituent_position = coordinates[ring_atom] + Vec2::from_angle(direction);
+        if nearest_placed_distance(substituent_position, coordinates, placed) < CHAIN_CLEARANCE {
+            mirror_blocking_branch(
+                molecule,
+                ring_atom,
+                substituent_position,
+                coordinates,
+                placed,
+            );
+        }
+        coordinates[neighbor] = substituent_position;
         placed[neighbor] = true;
         if let Some(ring_index) = unfinished_ring_containing_atom(rings, neighbor, placed) {
             place_ring_system_from_anchor(
@@ -1604,6 +1121,7 @@ fn free_substituent_directions(
     atom_index: usize,
     count: usize,
     fallback_direction: f64,
+    rings: &[Vec<usize>],
     coordinates: &[Vec2],
     placed: &[bool],
 ) -> Vec<f64> {
@@ -1625,7 +1143,7 @@ fn free_substituent_directions(
     }
 
     let (best_start, best_gap) =
-        largest_angular_gap(&occupied_angles).expect("occupied angles are nonempty");
+        widest_gap_outside_rings(atom_index, &occupied_angles, rings, coordinates, placed);
 
     let usable_gap = (best_gap - PI / 6.0).max(PI / 6.0);
     if count == 1 {
@@ -1640,6 +1158,43 @@ fn free_substituent_directions(
     }
 }
 
+/// The widest angular gap between an atom's placed bonds. Among equally wide
+/// gaps, such as the three 120° gaps at a fused-ring junction, it picks one
+/// whose middle does not point into a ring containing the atom.
+fn widest_gap_outside_rings(
+    atom_index: usize,
+    occupied_angles: &[f64],
+    rings: &[Vec<usize>],
+    coordinates: &[Vec2],
+    placed: &[bool],
+) -> (f64, f64) {
+    let gaps = angular_gaps(occupied_angles);
+    let widest = gaps.iter().map(|&(_, width)| width).fold(0.0, f64::max);
+    let points_into_ring = |&(start, width): &(f64, f64)| {
+        let probe = coordinates[atom_index] + Vec2::from_angle(start + width / 2.0) * 0.5;
+        rings.iter().any(|ring| {
+            ring.contains(&atom_index)
+                && ring.iter().all(|&atom| placed[atom])
+                && point_in_polygon(
+                    probe,
+                    &ring
+                        .iter()
+                        .map(|&atom| coordinates[atom])
+                        .collect::<Vec<_>>(),
+                )
+        })
+    };
+    let widest_gaps: Vec<(f64, f64)> = gaps
+        .into_iter()
+        .filter(|&(_, width)| width > widest - 1e-6)
+        .collect();
+    widest_gaps
+        .iter()
+        .copied()
+        .find(|gap| !points_into_ring(gap))
+        .unwrap_or(widest_gaps[0])
+}
+
 fn spread_around_direction(center: f64, count: usize, spread: f64) -> Vec<f64> {
     if count == 1 {
         return vec![center];
@@ -1651,17 +1206,6 @@ fn spread_around_direction(center: f64, count: usize, spread: f64) -> Vec<f64> {
             )
         })
         .collect()
-}
-
-pub(crate) fn normalize_angle(angle: f64) -> f64 {
-    let mut angle = angle;
-    while angle > PI {
-        angle -= 2.0 * PI;
-    }
-    while angle <= -PI {
-        angle += 2.0 * PI;
-    }
-    angle
 }
 
 // ── Chain layout via DFS ──────────────────────────────────────────────────────
@@ -2108,6 +1652,202 @@ fn mirror_blocking_branch(
     true
 }
 
+/// Final collision pass. While atoms still overlap, ring-free branches that
+/// contain an overlapping atom are reflected across the bond attaching them.
+/// The single reflection that most reduces the total overlap is applied;
+/// when none helps, pairs of reflections are tried, since two neighboring
+/// branches sometimes have to turn together. Only when every ideal position
+/// is taken is a branch turned slightly off its ideal angle. Branches
+/// attached next to a marked cis/trans double bond or a `!c` curl keep their
+/// side, since moving them would change the requested geometry.
+fn separate_overlapping_branches(
+    molecule: &MoleculeGraph,
+    rings: &[Vec<usize>],
+    coordinates: &mut [Vec2],
+) {
+    let branches = flippable_branches(molecule, rings);
+    for _ in 0..molecule.n_atoms() {
+        let overlapping_atoms: HashSet<usize> = overlapping_atom_pairs(molecule, coordinates)
+            .into_iter()
+            .flat_map(|(first, second)| [first, second])
+            .collect();
+        if overlapping_atoms.is_empty() {
+            return;
+        }
+        let candidates: Vec<&FlippableBranch> = branches
+            .iter()
+            .filter(|branch| {
+                branch
+                    .atoms
+                    .iter()
+                    .any(|atom| overlapping_atoms.contains(atom))
+            })
+            .collect();
+        let current_overlap = total_overlap_depth(molecule, coordinates);
+
+        let mut best = OverlapReduction::new(current_overlap);
+        for branch in &candidates {
+            best.consider(molecule, branch.reflected(coordinates));
+        }
+        if best.coordinates.is_none() {
+            for first in &candidates {
+                let after_first = first.reflected(coordinates);
+                for second in &candidates {
+                    if !std::ptr::eq(*first, *second) {
+                        best.consider(molecule, second.reflected(&after_first));
+                    }
+                }
+            }
+        }
+        if best.coordinates.is_none() {
+            for branch in &candidates {
+                for start in [coordinates.to_vec(), branch.reflected(coordinates)] {
+                    for turn in BRANCH_ESCAPE_TURNS {
+                        best.consider(molecule, branch.rotated(&start, turn));
+                    }
+                }
+            }
+        }
+
+        let Some(reflected) = best.coordinates else {
+            return;
+        };
+        coordinates.copy_from_slice(&reflected);
+    }
+}
+
+/// The candidate drawing with the least total overlap seen so far, kept only
+/// when it improves on the starting overlap.
+struct OverlapReduction {
+    overlap: f64,
+    coordinates: Option<Vec<Vec2>>,
+}
+
+impl OverlapReduction {
+    fn new(starting_overlap: f64) -> Self {
+        Self {
+            overlap: starting_overlap,
+            coordinates: None,
+        }
+    }
+
+    fn consider(&mut self, molecule: &MoleculeGraph, candidate: Vec<Vec2>) {
+        let overlap = total_overlap_depth(molecule, &candidate);
+        if overlap < self.overlap - 1e-9 {
+            self.overlap = overlap;
+            self.coordinates = Some(candidate);
+        }
+    }
+}
+
+/// Small turns of a branch about its attachment atom, tried when every
+/// ideal position of the branch is already occupied.
+const BRANCH_ESCAPE_TURNS: [f64; 4] = [PI / 12.0, -PI / 12.0, PI / 6.0, -PI / 6.0];
+
+/// A ring-free branch hanging off one single bond.
+struct FlippableBranch {
+    attachment: usize,
+    root: usize,
+    atoms: Vec<usize>,
+}
+
+impl FlippableBranch {
+    /// Coordinates with the branch reflected across its attachment bond.
+    fn reflected(&self, coordinates: &[Vec2]) -> Vec<Vec2> {
+        let axis = LineAxis {
+            start: coordinates[self.attachment],
+            end: coordinates[self.root],
+        };
+        let mut reflected = coordinates.to_vec();
+        for &atom in &self.atoms {
+            reflected[atom] = reflect_point_across_line(coordinates[atom], axis);
+        }
+        reflected
+    }
+
+    /// Coordinates with the branch turned by `angle` about its attachment
+    /// atom.
+    fn rotated(&self, coordinates: &[Vec2], angle: f64) -> Vec<Vec2> {
+        let pivot = coordinates[self.attachment];
+        let mut rotated = coordinates.to_vec();
+        for &atom in &self.atoms {
+            rotated[atom] = pivot + (coordinates[atom] - pivot).rotated(angle);
+        }
+        rotated
+    }
+}
+
+fn flippable_branches(molecule: &MoleculeGraph, rings: &[Vec<usize>]) -> Vec<FlippableBranch> {
+    let mut in_ring = vec![false; molecule.n_atoms()];
+    for &atom in rings.iter().flatten() {
+        in_ring[atom] = true;
+    }
+    let mut branches = Vec::new();
+    for (bond_index, bond) in molecule.bonds.iter().enumerate() {
+        if bond.order != BondOrder::Single || is_geometry_constrained_bond(molecule, bond_index) {
+            continue;
+        }
+        for (attachment, root) in [(bond.from, bond.to), (bond.to, bond.from)] {
+            let atoms = collect_subtree(molecule, root, attachment, attachment);
+            if !atoms.contains(&attachment) && atoms.iter().all(|&atom| !in_ring[atom]) {
+                branches.push(FlippableBranch {
+                    attachment,
+                    root,
+                    atoms,
+                });
+            }
+        }
+    }
+    branches
+}
+
+/// Sum over overlapping atom pairs of how far they fall short of the chain
+/// clearance.
+fn total_overlap_depth(molecule: &MoleculeGraph, coordinates: &[Vec2]) -> f64 {
+    overlapping_atom_pairs(molecule, coordinates)
+        .iter()
+        .map(|&(first, second)| {
+            CHAIN_CLEARANCE - coordinates[first].distance_to(coordinates[second])
+        })
+        .sum()
+}
+
+fn overlapping_atom_pairs(molecule: &MoleculeGraph, coordinates: &[Vec2]) -> Vec<(usize, usize)> {
+    let mut pairs = Vec::new();
+    for first in 0..coordinates.len() {
+        for second in first + 1..coordinates.len() {
+            if molecule.bond_between(first, second).is_none()
+                && coordinates[first].distance_to(coordinates[second]) < CHAIN_CLEARANCE
+            {
+                pairs.push((first, second));
+            }
+        }
+    }
+    pairs
+}
+
+/// True for a bond whose neighborhood carries a drawing constraint: it is a
+/// `!c` curl bond, or it touches an atom of a double bond that has
+/// directional markers.
+fn is_geometry_constrained_bond(molecule: &MoleculeGraph, bond_index: usize) -> bool {
+    let bond = &molecule.bonds[bond_index];
+    if bond.curl || bond.direction != BondDirection::None {
+        return true;
+    }
+    [bond.from, bond.to].iter().any(|&atom| {
+        molecule.adj[atom].iter().any(|&(_, neighbor_bond)| {
+            let candidate = &molecule.bonds[neighbor_bond];
+            candidate.curl
+                || (candidate.order == BondOrder::Double
+                    && [candidate.from, candidate.to].iter().any(|&double_atom| {
+                        molecule.adj[double_atom].iter().any(|&(_, marked)| {
+                            molecule.bonds[marked].direction != BondDirection::None
+                        })
+                    }))
+        })
+    })
+}
+
 /// Computes outgoing bond directions for the `count` unplaced neighbors of `u`.
 ///
 /// Exact placement for a square-planar (`@SP`) center with four neighbors:
@@ -2337,36 +2077,6 @@ fn hydrogen_label_angle(occupied_angles: &[f64]) -> f64 {
     normalize_angle(best_start + best_gap / 2.0)
 }
 
-pub(crate) fn largest_angular_gap(angles: &[f64]) -> Option<(f64, f64)> {
-    if angles.is_empty() {
-        return None;
-    }
-
-    let mut sorted_angles = angles.to_vec();
-    sorted_angles.sort_by(|first, second| {
-        first
-            .partial_cmp(second)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    let mut best_start = sorted_angles[0];
-    let mut best_gap = 0.0;
-    for angle_index in 0..sorted_angles.len() {
-        let start = sorted_angles[angle_index];
-        let end = if angle_index + 1 < sorted_angles.len() {
-            sorted_angles[angle_index + 1]
-        } else {
-            sorted_angles[0] + 2.0 * PI
-        };
-        let gap = end - start;
-        if gap > best_gap {
-            best_gap = gap;
-            best_start = start;
-        }
-    }
-    Some((best_start, best_gap))
-}
-
 fn center_coordinates(coordinates: &mut [Vec2]) {
     if coordinates.is_empty() {
         return;
@@ -2446,11 +2156,7 @@ fn best_ring_for_inner_bond<'a>(
 fn ring_unsaturation_score(molecule: &MoleculeGraph, ring: &[usize]) -> usize {
     (0..ring.len())
         .filter_map(|ring_index| {
-            bond_between(
-                molecule,
-                ring[ring_index],
-                ring[(ring_index + 1) % ring.len()],
-            )
+            molecule.bond_between(ring[ring_index], ring[(ring_index + 1) % ring.len()])
         })
         .filter(|&bond_index| {
             matches!(
@@ -2487,6 +2193,60 @@ fn bounding_box(coordinates: &[Vec2]) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ring_atoms_with_substituent_inside(smiles: &str) -> Vec<usize> {
+        let layout = crate::layout_native(smiles).unwrap();
+        let molecule = crate::parse_molecule(smiles).unwrap();
+        let rings = find_rings(&molecule);
+        let in_ring: HashSet<usize> = rings.iter().flatten().copied().collect();
+        (0..molecule.n_atoms())
+            .filter(|atom| !in_ring.contains(atom))
+            .filter(|&atom| {
+                rings.iter().any(|ring| {
+                    let corners: Vec<Vec2> = ring
+                        .iter()
+                        .map(|&ring_atom| layout.atoms[ring_atom].pos)
+                        .collect();
+                    crate::geometry::point_in_polygon(layout.atoms[atom].pos, &corners)
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn junction_methyls_point_away_from_the_fused_rings() {
+        for smiles in [
+            "C[C@]12CC[C@H]3[C@@H](CCC4=CC(=O)CC[C@]34C)[C@@H]1CC[C@@H]2O",
+            "CC(C)CCC[C@@H](C)[C@H]1CC[C@H]2[C@@H]3CC=C4C[C@@H](O)CC[C@]4(C)[C@H]3CC[C@]12C",
+        ] {
+            assert!(
+                ring_atoms_with_substituent_inside(smiles).is_empty(),
+                "{smiles}"
+            );
+        }
+    }
+
+    #[test]
+    fn crowded_macrocycle_side_chains_are_separated() {
+        let layout = crate::layout_native(
+            "CCC1NC(=O)C(C)N(C)C(=O)C(CC(C)C)N(C)C(=O)C(CC(C)C)N(C)C(=O)C(C)NC(=O)C(C)NC(=O)C(CC(C)C)N(C)C(=O)C(C(C)C)NC(=O)C(CC(C)C)N(C)C(=O)CN(C)C1=O",
+        )
+        .unwrap();
+        let heavy: Vec<Vec2> = layout
+            .atoms
+            .iter()
+            .filter(|atom| !atom.virtual_h)
+            .map(|atom| atom.pos)
+            .collect();
+        for first in 0..heavy.len() {
+            for second in first + 1..heavy.len() {
+                assert!(
+                    heavy[first].distance_to(heavy[second]) > 0.5,
+                    "atoms {first} and {second} overlap"
+                );
+            }
+        }
+    }
 
     #[test]
     fn steroid_ring_system_detects_four_rings() {
