@@ -74,5 +74,6 @@ expect_error "highlight-group-invalid-bool" "highlight-groups include-atoms is i
 expect_error "highlight-request-unknown-option" "unknown request option"
 expect_error "unknown-library-molecule" 'dictionary does not contain key "cafeine"'
 expect_error "one-sided-directional-bond" "must mark both ends of a double bond"
+expect_error "trans-double-bond-in-small-ring" "a flat drawing can show a trans ring double bond only in a ring of at least 9 atoms"
 
 echo "All editor-visible validation cases passed."

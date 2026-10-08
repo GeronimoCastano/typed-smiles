@@ -972,7 +972,10 @@ Current limitations:
 - Trigonal-bipyramidal (`@TB`), octahedral (`@OH`), and allenal (`@AL`)
   centers are accepted and drawn with correct connectivity, but without
   stereo wedges.
-- Bridged bicyclics may overlap; template matching is not implemented.
+- A trans double bond (`/` and `\` markers) inside a ring needs a ring of at
+  least nine atoms; smaller rings raise an error.
+- Some three-dimensional skeletons, such as triptycene, cannot be drawn flat
+  without one ring overlapping another.
 
 ## Chemical verification
 

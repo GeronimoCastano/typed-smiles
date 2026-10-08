@@ -1,8 +1,16 @@
 mod error;
+mod geometry;
 mod graph;
 mod kekulize;
 mod layout;
+#[cfg(test)]
+mod layout_quality;
+mod layout_relaxation;
+mod macrocycles;
 mod render;
+mod ring_system_layout;
+mod ring_templates;
+mod rings;
 mod substructure;
 
 pub use render::LayoutOutput;

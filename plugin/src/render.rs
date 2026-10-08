@@ -117,6 +117,71 @@ impl Vec2 {
         let vertical_distance = self.y - other.y;
         (horizontal_distance * horizontal_distance + vertical_distance * vertical_distance).sqrt()
     }
+
+    pub(crate) fn from_angle(angle: f64) -> Self {
+        Self::new(angle.cos(), angle.sin())
+    }
+
+    pub(crate) fn length(self) -> f64 {
+        self.x.hypot(self.y)
+    }
+
+    pub(crate) fn angle(self) -> f64 {
+        self.y.atan2(self.x)
+    }
+
+    /// Z component of the 3D cross product; positive when `other` lies
+    /// counterclockwise from `self`.
+    pub(crate) fn cross(self, other: Self) -> f64 {
+        self.x * other.y - self.y * other.x
+    }
+
+    pub(crate) fn rotated(self, angle: f64) -> Self {
+        let (sine, cosine) = angle.sin_cos();
+        Self::new(
+            self.x * cosine - self.y * sine,
+            self.x * sine + self.y * cosine,
+        )
+    }
+
+    /// Unit vector in the same direction, or the zero vector unchanged.
+    pub(crate) fn normalized(self) -> Self {
+        let length = self.length();
+        if length > 1e-12 {
+            self * (1.0 / length)
+        } else {
+            self
+        }
+    }
+
+    /// The vector turned a quarter turn counterclockwise.
+    pub(crate) fn perpendicular(self) -> Self {
+        Self::new(-self.y, self.x)
+    }
+}
+
+impl std::ops::Add for Vec2 {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self::new(self.x + other.x, self.y + other.y)
+    }
+}
+
+impl std::ops::Sub for Vec2 {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self::new(self.x - other.x, self.y - other.y)
+    }
+}
+
+impl std::ops::Mul<f64> for Vec2 {
+    type Output = Self;
+
+    fn mul(self, factor: f64) -> Self {
+        Self::new(self.x * factor, self.y * factor)
+    }
 }
 
 /// Top-level output passed back to Typst as JSON.

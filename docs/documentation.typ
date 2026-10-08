@@ -830,7 +830,7 @@ extensions for bond styles and local acyclic-chain layout.
 ]
 
 #note[R/S descriptors are not available. Ring stereochemistry between adjacent
-centers and bridged bicyclics may need a manual adjustment (see @sec-limits).]
+centers may need a manual adjustment (see @sec-limits).]
 
 == Double bonds: #raw("/") and #raw("\\")
 
@@ -844,6 +844,19 @@ centers and bridged bicyclics may need a manual adjustment (see @sec-limits).]
   trans: #smiles("F/C=C/F")
   #h(2em)
   cis: #smiles("F/C=C\F")
+  ```)
+]
+
+#demo[
+  Markers on a ring double bond set the geometry of the ring itself. A trans
+  double bond needs a ring of at least nine atoms; a smaller ring cannot show
+  it in a flat drawing, so the markers raise an error. Remove them to draw such
+  a ring without cis/trans geometry.
+
+  #example(```typ
+  trans: #smiles("C1CCCCC/C=C/CCCC1", scale: 0.5)
+  #h(2em)
+  cis: #smiles("C1CCCCC/C=C\CCCC1", scale: 0.5)
   ```)
 ]
 
@@ -2080,9 +2093,11 @@ parameter.
   bonds control the depiction only.
 - Trigonal-bipyramidal (#c("@TB")), octahedral (#c("@OH")), and allenal
   (#c("@AL")) centers are accepted but drawn without stereo wedges.
-- Ring stereochemistry between adjacent centers and bridged bicyclics can overlap
-  or need a manual adjustment (try #c("rotation"), or the manual #c("!w") and
-  #c("!h") wedges).
+- Ring stereochemistry between adjacent centers can need a manual adjustment
+  (try #c("rotation"), or the manual #c("!w") and #c("!h") wedges).
+- A trans double bond inside a ring of fewer than nine atoms cannot be drawn.
+- Some three-dimensional skeletons, such as triptycene, cannot be drawn flat
+  without one ring overlapping another.
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Molecule library <sec-library>

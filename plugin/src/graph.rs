@@ -94,6 +94,16 @@ pub struct BondSpec {
 }
 
 impl BondSpec {
+    /// The same bond read from its other end, where `/` and `\` swap.
+    fn read_in_reverse(self) -> Self {
+        let direction = match self.direction {
+            BondDirection::Up => BondDirection::Down,
+            BondDirection::Down => BondDirection::Up,
+            BondDirection::None => BondDirection::None,
+        };
+        Self { direction, ..self }
+    }
+
     fn single() -> Self {
         Self {
             order: BondOrder::Single,
@@ -250,6 +260,13 @@ impl MoleculeGraph {
 
     pub fn n_atoms(&self) -> usize {
         self.atoms.len()
+    }
+
+    /// Index of the bond joining two atoms, if they are bonded.
+    pub(crate) fn bond_between(&self, first_atom: usize, second_atom: usize) -> Option<usize> {
+        self.adj[first_atom]
+            .iter()
+            .find_map(|&(neighbor, bond_index)| (neighbor == second_atom).then_some(bond_index))
     }
 }
 
@@ -413,7 +430,10 @@ impl GraphBuilder {
         closing_specification: Option<BondSpec>,
     ) {
         let implicit = closing_specification.is_none() && open_ring.bond_specification.is_none();
+        // The bond is stored from the opening atom to the closing atom, while
+        // a symbol written at the closing digit reads from the closing atom.
         let bond_specification = closing_specification
+            .map(BondSpec::read_in_reverse)
             .or(open_ring.bond_specification)
             .unwrap_or_else(BondSpec::single);
         let bond_index = self.bonds.len();

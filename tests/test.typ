@@ -4380,3 +4380,93 @@ end on the charged atom.
   mol("CC=[N+](C)C", rotation: 30deg),
   arrow(from: lp(0, 3), to: atom(1, 2)),
 )
+
+#pagebreak()
+
+= Complex ring layout
+
+Each ring system is laid out as one unit. Bridges are drawn as arcs between
+the atoms they connect, so every bond keeps a uniform length. Plain bicyclics
+stay flat with the shortest bridge inside the ring. When that inner bridge
+carries substituents, as in camphor and cocaine, the molecule is drawn in
+perspective so the substituents point outward.
+
+#let ring-cell(title, smiles-str, ..options) = [
+  #text(size: 8pt, title) \ #smiles(smiles-str, ..options)
+]
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+
+  ring-cell([Norbornane], "C1CC2CCC1C2", scale: 0.8),
+  ring-cell([Norbornene], "C1C2CCC1C=C2", scale: 0.8),
+  ring-cell([Camphor (perspective)], "CC1(C)C2CCC1(C)C(=O)C2", scale: 0.8),
+  ring-cell([Bicyclo\[3.3.1\]nonane], "C1CC2CCCC(C1)C2", scale: 0.8),
+
+  ring-cell([Tropanol (perspective)], "CN1C2CCC1CC(O)C2", scale: 0.8),
+  ring-cell([Cocaine], "CN1[C@H]2CC[C@@H]1[C@H]([C@H](C2)OC(=O)c1ccccc1)C(=O)OC", scale: 0.6),
+  ring-cell([α-Pinene], "CC1=CCC2CC1C2(C)C", scale: 0.8),
+  ring-cell([1,4-Cineole], "CC12CCC(CC1)C(C)(C)O2", scale: 0.8),
+)
+
+Cage skeletons without a flat drawing use fixed perspective templates. These
+templates match the skeleton's shape, so heteroatoms and fused rings reuse
+the same view.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+
+  ring-cell([Adamantane], "C1C2CC3CC1CC(C2)C3", scale: 0.8),
+  ring-cell([Cubane], "C12C3C4C1C5C2C3C45", scale: 0.8),
+  ring-cell([DABCO], "C1CN2CCN1CC2", scale: 0.8),
+  ring-cell([Bicyclo\[1.1.1\]pentane], "C1C2CC1C2", scale: 0.8),
+
+  ring-cell([Quinine], "COc1ccc2nccc([C@@H](O)[C@@H]3C[C@@H]4CCN3C[C@@H]4C=C)c2c1", scale: 0.6),
+  ring-cell([Twistane], "C1CC2CC3CCC2CC13", scale: 0.8),
+  ring-cell([Triptycene], "c1ccc2c(c1)C1c3ccccc3C2c2ccccc12", scale: 0.6),
+  ring-cell([Porphine], "c1cc2cc3ccc(cc4ccc(cc5ccc(cc1n2)[nH]5)n4)[nH]3", scale: 0.55),
+)
+
+Rings of twelve or more atoms follow the 120° zigzag of the hexagon lattice
+instead of becoming wide circles. Substituents sit on outward corners, and
+`/` and `\` markers on ring double bonds draw them cis or trans.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+
+  ring-cell([Cyclododecane], "C1CCCCCCCCCCC1", scale: 0.6),
+  ring-cell([18-Crown-6], "C1COCCOCCOCCOCCOCCO1", scale: 0.6),
+  ring-cell([(_E_)-Cyclododecene], "C1CCCCC/C=C/CCCC1", scale: 0.6),
+  ring-cell([(_Z_)-Cyclododecene], "C1CCCCC/C=C\\CCCC1", scale: 0.6),
+
+  ring-cell([(_E_)-Cyclononene], "C1CCC/C=C/CCC1", scale: 0.6),
+  ring-cell([Erythronolide], "CC[C@@H]1[C@@H]([C@@H]([C@H](C(=O)[C@@H](C[C@@]([C@@H]([C@H]([C@@H]([C@H](C(=O)O1)C)O)C)O)(C)O)C)C)O)C", scale: 0.45),
+  ring-cell([Benzo-15-crown-5], "c1ccc2c(c1)OCCOCCOCCOCCO2", scale: 0.6),
+  ring-cell([\[2.2\]Paracyclophane], "c1cc2ccc1CCc1ccc(cc1)CC2", scale: 0.6),
+)
+
+Strained and crowded systems are relaxed until no atoms overlap. Helicene
+ends spread apart, corannulene closes without a stretched bond, and
+crowded macrocycle side chains turn away from each other.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+
+  ring-cell([Hexahelicene], "c1ccc2c(c1)ccc1ccc3ccc4ccc5ccccc5c4c3c21", scale: 0.55),
+  ring-cell([Corannulene], "c1cc2ccc3ccc4ccc5ccc1c1c2c3c4c51", scale: 0.55),
+  ring-cell([Strychnine], "O=C1C[C@H]2OCC=C3CN4CC[C@]56[C@@H]4C[C@H]3[C@H]2[C@H]6N1c1ccccc15", scale: 0.55),
+  ring-cell([Morphine], "CN1CC[C@]23c4c5ccc(O)c4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5", scale: 0.55),
+
+  ring-cell([Artemisinin], "C[C@@H]1CC[C@H]2[C@@H](C)C(=O)O[C@@H]3O[C@@]4(C)CC[C@@H]1[C@]32OO4", scale: 0.55),
+  ring-cell([Testosterone (C19 outside the rings)], "C[C@]12CC[C@H]3[C@@H](CCC4=CC(=O)CC[C@]34C)[C@@H]1CC[C@@H]2O", scale: 0.55),
+  ring-cell([Cyclic peptide], "CCC1NC(=O)C(C)N(C)C(=O)C(CC(C)C)N(C)C(=O)C(CC(C)C)N(C)C(=O)C(C)NC(=O)C(C)NC(=O)C(CC(C)C)N(C)C(=O)C(C(C)C)NC(=O)C(CC(C)C)N(C)C(=O)CN(C)C1=O", scale: 0.28),
+  ring-cell([Sucrose], "OC[C@H]1O[C@H](O[C@]2(CO)O[C@H](CO)[C@@H](O)[C@@H]2O)[C@H](O)[C@@H](O)[C@@H]1O", scale: 0.55),
+)

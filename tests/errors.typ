@@ -110,6 +110,8 @@
   smiles(molecules.cafeine)
 } else if selected-case == "one-sided-directional-bond" {
   smiles("F/C=CF")
+} else if selected-case == "trans-double-bond-in-small-ring" {
+  smiles("C1CCC/C=C/CC1")
 } else {
   panic("unknown validation test case: " + selected-case)
 }
