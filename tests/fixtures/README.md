@@ -55,3 +55,50 @@ Sources: [PubChem PUG REST](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest),
 [RDKit substructure matching](https://www.rdkit.org/docs/GettingStartedInPython.html#substructure-searching),
 and [RDKit functional-group definitions](https://github.com/rdkit/rdkit/blob/master/Data/Functional_Group_Hierarchy.txt).
 Individual PubChem compound URLs are recorded in the JSON fixture.
+
+# SMILES conformance corpus
+
+`smiles-conformance.json` holds categorized SMILES: aromatic systems, salts,
+charges, isotopes, atom maps, ring closures, syntax errors, tetrahedral,
+double-bond, and extended stereochemistry, long chains, deep branches, cages,
+crowded fused rings, macrocycles, and typed-smiles extensions. Each case records a reviewed
+expectation:
+
+- `expect`: whether typed-smiles accepts the input, with an `error` fragment
+  that every rejection's diagnostic must contain;
+- `undepicted`: whether the accepted input has stereochemistry the drawing
+  reports as not shown;
+- `note`: why typed-smiles deliberately differs from RDKit, required for every
+  such difference.
+
+Two fields are generated: `rdkit` (`accept`, `reject`, or `syntax-only` when
+RDKit parses the syntax but rejects the chemistry) and `layout`, the geometric
+quality of the drawing (`clean`, or any of `distorted-bonds`,
+`overlapping-atoms`, `crossing-bonds`). Parsing and drawing are judged
+separately: a cage can parse correctly and still draw with crossing bonds.
+
+## Independent checks
+
+`python3 tests/verify-conformance.py` rebuilds every accepted molecule in RDKit
+from the drawing alone (coordinates, bond orders, wedge tips, charges,
+isotopes, hydrogens, atom maps, and square-planar geometry) and requires the
+canonical isomeric SMILES of the input. `--random N` repeats this for N random
+atom orders of each molecule; each must round-trip or report its
+stereochemistry as undepicted. `--write` regenerates `rdkit` and `layout` after
+the reviewed expectations pass. RDKit is a verification tool only.
+
+`cargo test --manifest-path plugin/Cargo.toml` checks every reviewed
+expectation and that `clean` layouts stay clean, without RDKit.
+
+Where the OpenSMILES specification is silent, typed-smiles follows RDKit: a
+three-coordinate stereocenter's lone pair counts as its last neighbor. Atom
+class 0 means "no class", as the specification defines; RDKit keeps `:0` as a
+label, so the comparison ignores it.
+
+## Performance
+
+`cargo test --release --manifest-path plugin/Cargo.toml --lib
+measure_pipeline_stages -- --ignored --nocapture` times parsing,
+kekulization, layout, and JSON serialization natively. `python3
+tests/measure-typst-performance.py` times the shipped WASM plugin (first and
+later calls) and Typst rendering.

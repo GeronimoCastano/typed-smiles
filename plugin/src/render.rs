@@ -40,7 +40,13 @@ pub struct AtomOutput {
     pub abbrev_offset_x: f64,
     #[serde(default)]
     pub abbrev_offset_y: f64,
-    /// Parsed bracket chirality, e.g. "tetra_anti" or "tetra_clockwise".
+    /// OpenSMILES atom class from `[CH3:7]`, commonly an atom map. Zero means
+    /// unmapped. Map numbers are labels chosen by the author, unrelated to
+    /// the atom's index in `LayoutOutput::atoms`.
+    #[serde(default)]
+    pub atom_map: u32,
+    /// Parsed bracket chirality: "none", "tetra_anti", "tetra_clockwise",
+    /// "square_planar", "allenal", "trigonal_bipyramidal", or "octahedral".
     #[serde(default)]
     pub chirality: String,
     /// Stereochemical implicit/explicit hydrogen: "none" | "wedge_up" | "wedge_down".
@@ -63,8 +69,12 @@ pub struct BondOutput {
     pub to: usize,
     /// 1 = single, 2 = double, 3 = triple, 4 = quadruple.
     pub order: u8,
-    /// Rendered stereochemistry: "none" | "wedge_up" | "wedge_down".
+    /// Rendered stereochemistry: "none" | "wedge_up" | "wedge_down" | "wavy" | "dashed".
     pub stereo: String,
+    /// For wedges and hashes: the atom at the narrow end, which is the
+    /// stereocenter the wedge describes.
+    #[serde(default)]
+    pub stereo_tip: Option<usize>,
     /// True when stereo came from a typed-smiles drawing extension (`!w`/`!h`).
     #[serde(default)]
     pub forced_stereo: bool,
@@ -128,7 +138,18 @@ pub struct LayoutOutput {
     /// circle depiction.
     #[serde(default)]
     pub aromatic_rings: Vec<AromaticRing>,
+    /// Written stereo configurations that the drawing does not show. Typst
+    /// reports them unless the document opts out with `undepicted-stereo`.
+    #[serde(default)]
+    pub undepicted_stereo: Vec<UndepictedStereoOutput>,
     /// Bounding box dimensions in bond-length units (for auto-scaling in Typst).
     pub bbox_width: f64,
     pub bbox_height: f64,
+}
+
+/// A written stereo configuration missing from the drawing, with the reason.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UndepictedStereoOutput {
+    pub atom: usize,
+    pub reason: String,
 }

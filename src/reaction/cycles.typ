@@ -633,6 +633,11 @@
                 "bond-customizations",
                 default: (),
               ),
+              show-maps: placed-item.m.opts.at("show-maps", default: false),
+              undepicted-stereo: placed-item.m.opts.at(
+                "undepicted-stereo",
+                default: "error",
+              ),
             )
           })
         } else {

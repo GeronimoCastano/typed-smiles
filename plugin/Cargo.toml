@@ -4,14 +4,11 @@ version = "0.4.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# SMILES lexer/parser (nom-based, OpenSMILES spec). We walk the Chain AST
-# ourselves — we do NOT use the `graph` feature because its MoleculeGraph
-# ignores ring closure bonds and panics on N, S, halogens, etc.
-smiles-parser = "0.4"
-# smiles-parser re-exports ptable::Element in its public types; we need it directly
+# Element symbols and standard atomic weights. SMILES is read by our own
+# parser in src/parser.rs.
 ptable = { package = "periodic-table-on-an-enum", version = "0.3" }
 
 # Typst WASM plugin protocol macros

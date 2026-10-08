@@ -12,7 +12,10 @@ use std::collections::{HashSet, VecDeque};
 use std::f64::consts::PI;
 
 use crate::graph::{AtomChirality, Bond, BondDirection, BondOrder, BondStereo, MoleculeGraph};
-use crate::render::{AromaticRing, AtomOutput, BondOutput, LayoutOutput, Vec2};
+use crate::render::{
+    AromaticRing, AtomOutput, BondOutput, LayoutOutput, UndepictedStereoOutput, Vec2,
+};
+use crate::stereo::{depict_stereo, StereoDepiction};
 
 /// Gap between the bounding boxes of dot-separated fragments, in bond lengths.
 const FRAGMENT_GAP: f64 = 1.5;
@@ -25,24 +28,15 @@ pub fn compute_layout(molecule: &MoleculeGraph) -> Result<LayoutOutput, String> 
     let coordinates = layout_coordinates(molecule)?;
     let rings = find_rings(molecule);
     let ring_bonds = ring_bond_set(molecule, &rings);
-    let mut rendered_stereo: Vec<BondStereo> =
-        molecule.bonds.iter().map(|bond| bond.stereo).collect();
-    let mut hydrogen_stereo = vec![None; molecule.n_atoms()];
-    apply_tetrahedral_stereo(
-        molecule,
-        &coordinates,
-        &ring_bonds,
-        &mut rendered_stereo,
-        &mut hydrogen_stereo,
-    )?;
+    let stereo = depict_stereo(molecule, &coordinates, &ring_bonds);
 
-    let mut atoms = build_atom_outputs(molecule, &coordinates, &hydrogen_stereo);
+    let mut atoms = build_atom_outputs(molecule, &coordinates, &stereo.hydrogen_stereo);
     let inner_directions = ring_inner_directions(molecule, &rings, &coordinates);
-    let mut bonds = build_bond_outputs(molecule, &rendered_stereo, &inner_directions);
+    let mut bonds = build_bond_outputs(molecule, &stereo, &inner_directions);
     append_virtual_hydrogen_outputs(
         molecule,
         &coordinates,
-        &hydrogen_stereo,
+        &stereo.hydrogen_stereo,
         &mut atoms,
         &mut bonds,
     );
@@ -54,6 +48,14 @@ pub fn compute_layout(molecule: &MoleculeGraph) -> Result<LayoutOutput, String> 
         atoms,
         bonds,
         aromatic_rings: aromatic_ring_circles(molecule, &rings, &coordinates),
+        undepicted_stereo: stereo
+            .undepicted
+            .into_iter()
+            .map(|undepicted| UndepictedStereoOutput {
+                atom: undepicted.atom,
+                reason: undepicted.reason,
+            })
+            .collect(),
         bbox_width,
         bbox_height,
     })
@@ -64,6 +66,7 @@ fn empty_layout_output() -> LayoutOutput {
         atoms: Vec::new(),
         bonds: Vec::new(),
         aromatic_rings: Vec::new(),
+        undepicted_stereo: Vec::new(),
         bbox_width: 0.0,
         bbox_height: 0.0,
     }
@@ -100,6 +103,7 @@ fn build_atom_outputs(
                 abbrev_anchor_len: atom.abbrev_anchor_len,
                 abbrev_offset_x: atom.abbrev_offset_x,
                 abbrev_offset_y: atom.abbrev_offset_y,
+                atom_map: atom.atom_map,
                 chirality: atom.chirality.as_str().to_string(),
                 stereo_h: hydrogen_stereo[atom_index]
                     .map(|(stereo, _)| stereo.as_str().to_string())
@@ -115,7 +119,7 @@ fn build_atom_outputs(
 
 fn build_bond_outputs(
     molecule: &MoleculeGraph,
-    rendered_stereo: &[BondStereo],
+    stereo: &StereoDepiction,
     inner_directions: &[(f64, f64)],
 ) -> Vec<BondOutput> {
     molecule
@@ -126,7 +130,8 @@ fn build_bond_outputs(
             from: bond.from,
             to: bond.to,
             order: bond.order.as_u8(),
-            stereo: rendered_stereo[bond_index].as_str().to_string(),
+            stereo: stereo.bond_stereo[bond_index].as_str().to_string(),
+            stereo_tip: stereo.wedge_tips[bond_index],
             forced_stereo: bond.forced_stereo,
             direction: direction_as_str(bond.direction).to_string(),
             inner_x: inner_directions[bond_index].0,
@@ -205,6 +210,7 @@ fn append_virtual_hydrogen(
         abbrev_anchor_len: 0,
         abbrev_offset_x: 0.0,
         abbrev_offset_y: 0.0,
+        atom_map: 0,
         chirality: "none".to_string(),
         stereo_h: "none".to_string(),
         stereo_h_dir: Vec2::default(),
@@ -215,6 +221,7 @@ fn append_virtual_hydrogen(
         to: hydrogen_index,
         order: 1,
         stereo: "none".to_string(),
+        stereo_tip: None,
         forced_stereo: false,
         direction: "none".to_string(),
         inner_x: 0.0,
@@ -611,7 +618,7 @@ fn valence_electrons(symbol: &str) -> Option<i16> {
     }
 }
 
-fn lone_pair_count(molecule: &MoleculeGraph, atom_index: usize) -> u8 {
+pub(crate) fn lone_pair_count(molecule: &MoleculeGraph, atom_index: usize) -> u8 {
     let atom = &molecule.atoms[atom_index];
     // Abbreviations hide their internal bonds, so lone pairs are never inferred
     // from the label text; they come only from an explicit `lp=N` modifier.
@@ -910,274 +917,6 @@ fn collect_subtree(
         }
     }
     atoms
-}
-
-/// Assigns wedge/hash bonds for tetrahedral stereocenters.
-///
-/// Chooses wedge vs. hash from the signed volume of the four neighbor directions
-/// (in OpenSMILES order) so the depicted 3D structure reproduces the requested
-/// chirality on our 2D layout. `@` requires a negative signed volume, `@@` a
-/// positive one.
-fn apply_tetrahedral_stereo(
-    molecule: &MoleculeGraph,
-    coordinates: &[Vec2],
-    ring_bonds: &HashSet<usize>,
-    rendered_stereo: &mut [BondStereo],
-    stereo_h: &mut [Option<(BondStereo, Vec2)>],
-) -> Result<(), String> {
-    for (center, atom) in molecule.atoms.iter().enumerate() {
-        let parity = match atom.chirality {
-            // Square-planar centers are depicted exactly by the flat layout;
-            // TB/OH/AL centers are accepted without stereo decoration.
-            AtomChirality::None | AtomChirality::SquarePlanar(_) | AtomChirality::Undepicted => {
-                continue
-            }
-            AtomChirality::Unsupported => {
-                return Err("Unsupported chirality class".into());
-            }
-            AtomChirality::TetraAnti => -1.0, // @  ⇒ negative signed volume
-            AtomChirality::TetraClockwise => 1.0, // @@ ⇒ positive signed volume
-        };
-
-        let neighbor_bonds = &molecule.neighbor_bonds[center];
-        let hydrogen_count = (atom.hcount + implicit_h_count(molecule, center)) as usize;
-
-        // Only clean tetrahedral centers (4 substituents, at most one of them H)
-        // can be depicted unambiguously.
-        if neighbor_bonds.len() + hydrogen_count != 4 || hydrogen_count > 1 {
-            continue;
-        }
-
-        // Neighbors in OpenSMILES order, with the implicit/bracket hydrogen placed
-        // after the "from" atom (or first if there is none).
-        let mut neighbor_order: Vec<TetrahedralNeighbor> = neighbor_bonds
-            .iter()
-            .map(|&bond_index| {
-                let bond = &molecule.bonds[bond_index];
-                let atom_index = if bond.from == center {
-                    bond.to
-                } else {
-                    bond.from
-                };
-                TetrahedralNeighbor::Bond {
-                    bond_index,
-                    atom_index,
-                }
-            })
-            .collect();
-        if hydrogen_count == 1 {
-            let hydrogen_position = if molecule.has_preceding[center] { 1 } else { 0 };
-            neighbor_order.insert(
-                hydrogen_position.min(neighbor_order.len()),
-                TetrahedralNeighbor::Hydrogen,
-            );
-        }
-
-        let hydrogen_direction =
-            stereochemical_hydrogen_direction(molecule, center, coordinates, None);
-
-        let selected_bond =
-            preferred_tetrahedral_bond(molecule, center, ring_bonds, rendered_stereo);
-        let out_of_plane_index = if let Some(bond_index) = selected_bond {
-            neighbor_order
-                .iter()
-                .position(|neighbor| {
-                    matches!(
-                        neighbor,
-                        TetrahedralNeighbor::Bond {
-                            bond_index: candidate,
-                            ..
-                        } if *candidate == bond_index
-                    )
-                })
-                .expect("selected tetrahedral bond belongs to the center")
-        } else if let Some(hydrogen_position) = neighbor_order
-            .iter()
-            .position(|neighbor| matches!(neighbor, TetrahedralNeighbor::Hydrogen))
-        {
-            hydrogen_position
-        } else {
-            continue;
-        };
-
-        let mut directions = [[0.0_f64; 3]; 4];
-        for (neighbor_index, neighbor) in neighbor_order.iter().enumerate() {
-            directions[neighbor_index] = if neighbor_index == out_of_plane_index {
-                let direction = match neighbor {
-                    TetrahedralNeighbor::Bond { atom_index, .. } => {
-                        normalize_vector(vector_from(coordinates[center], coordinates[*atom_index]))
-                    }
-                    TetrahedralNeighbor::Hydrogen => hydrogen_direction,
-                };
-                [direction.x, direction.y, 1.0]
-            } else {
-                match neighbor {
-                    TetrahedralNeighbor::Bond { atom_index, .. } => {
-                        let direction = normalize_vector(vector_from(
-                            coordinates[center],
-                            coordinates[*atom_index],
-                        ));
-                        [direction.x, direction.y, 0.0]
-                    }
-                    TetrahedralNeighbor::Hydrogen => {
-                        [hydrogen_direction.x, hydrogen_direction.y, -1.0]
-                    }
-                }
-            };
-        }
-
-        let volume = signed_volume(&directions);
-        if volume.abs() < 1e-9 {
-            continue;
-        }
-        let stereo = if volume.signum() == parity {
-            BondStereo::WedgeUp
-        } else {
-            BondStereo::WedgeDown
-        };
-
-        if let Some(bond_index) = selected_bond {
-            rendered_stereo[bond_index] = stereo;
-        } else {
-            stereo_h[center] = Some((stereo, hydrogen_direction));
-        }
-    }
-    Ok(())
-}
-
-/// One neighbor of a tetrahedral center in OpenSMILES ordering.
-#[derive(Clone, Copy)]
-enum TetrahedralNeighbor {
-    Bond {
-        bond_index: usize,
-        atom_index: usize,
-    },
-    Hydrogen,
-}
-
-fn vector_from(origin: Vec2, destination: Vec2) -> Vec2 {
-    Vec2::new(destination.x - origin.x, destination.y - origin.y)
-}
-
-fn normalize_vector(vector: Vec2) -> Vec2 {
-    let length = (vector.x * vector.x + vector.y * vector.y).sqrt();
-    if length > 1e-12 {
-        Vec2::new(vector.x / length, vector.y / length)
-    } else {
-        vector
-    }
-}
-
-/// Signed volume `(d1-d0)·((d2-d0)×(d3-d0))` of four 3D points.
-pub(crate) fn signed_volume(points: &[[f64; 3]; 4]) -> f64 {
-    let first_offset = [
-        points[1][0] - points[0][0],
-        points[1][1] - points[0][1],
-        points[1][2] - points[0][2],
-    ];
-    let second_offset = [
-        points[2][0] - points[0][0],
-        points[2][1] - points[0][1],
-        points[2][2] - points[0][2],
-    ];
-    let third_offset = [
-        points[3][0] - points[0][0],
-        points[3][1] - points[0][1],
-        points[3][2] - points[0][2],
-    ];
-    first_offset[0] * (second_offset[1] * third_offset[2] - second_offset[2] * third_offset[1])
-        - first_offset[1]
-            * (second_offset[0] * third_offset[2] - second_offset[2] * third_offset[0])
-        + first_offset[2]
-            * (second_offset[0] * third_offset[1] - second_offset[1] * third_offset[0])
-}
-
-pub(crate) fn stereochemical_hydrogen_direction(
-    molecule: &MoleculeGraph,
-    atom_index: usize,
-    coordinates: &[Vec2],
-    preferred_direction: Option<f64>,
-) -> Vec2 {
-    let occupied_angles: Vec<f64> = molecule.adj[atom_index]
-        .iter()
-        .map(|&(neighbor, _)| {
-            (coordinates[neighbor].y - coordinates[atom_index].y)
-                .atan2(coordinates[neighbor].x - coordinates[atom_index].x)
-        })
-        .collect();
-
-    if occupied_angles.is_empty() {
-        return Vec2::new(0.0, -1.0);
-    }
-
-    if let Some(direction) = preferred_direction {
-        if occupied_angles
-            .iter()
-            .all(|&angle| angle_delta(direction, angle).abs() > PI / 5.0)
-        {
-            return Vec2::new(direction.cos(), direction.sin());
-        }
-    }
-
-    let (best_start, best_gap) =
-        largest_angular_gap(&occupied_angles).expect("occupied angles are nonempty");
-    let direction = normalize_angle(best_start + best_gap / 2.0);
-    Vec2::new(direction.cos(), direction.sin())
-}
-
-fn preferred_tetrahedral_bond(
-    molecule: &MoleculeGraph,
-    atom_index: usize,
-    ring_bonds: &HashSet<usize>,
-    rendered_stereo: &[BondStereo],
-) -> Option<usize> {
-    let mut best: Option<(usize, i32)> = None;
-    for &(neighbor, bond_index) in &molecule.adj[atom_index] {
-        let bond = &molecule.bonds[bond_index];
-        if bond.order != BondOrder::Single || rendered_stereo[bond_index] != BondStereo::None {
-            continue;
-        }
-
-        let score = tetrahedral_bond_score(molecule, neighbor, bond_index, ring_bonds);
-        if best
-            .map(|(_, best_score)| score > best_score)
-            .unwrap_or(true)
-        {
-            best = Some((bond_index, score));
-        }
-    }
-    best.and_then(|(bond_index, score)| if score > 0 { Some(bond_index) } else { None })
-}
-
-fn tetrahedral_bond_score(
-    molecule: &MoleculeGraph,
-    neighbor: usize,
-    bond_index: usize,
-    ring_bonds: &HashSet<usize>,
-) -> i32 {
-    let neighbor_atom = &molecule.atoms[neighbor];
-    let in_ring = ring_bonds.contains(&bond_index);
-    let is_carbon = neighbor_atom.symbol == "C" || neighbor_atom.symbol == "c";
-    let is_visible = !is_carbon || !neighbor_atom.abbrev.is_empty() || neighbor_atom.charge != 0;
-    let is_terminal = molecule.adj[neighbor].len() == 1;
-
-    let mut score = 0;
-    if !in_ring {
-        score += 100;
-    }
-    if is_visible {
-        score += 50;
-    }
-    if is_terminal {
-        score += 10;
-    }
-    if neighbor_atom.chirality != AtomChirality::None {
-        score -= 20;
-    }
-    if in_ring {
-        score -= 100;
-    }
-    score
 }
 
 fn ring_bond_set(molecule: &MoleculeGraph, rings: &[Vec<usize>]) -> HashSet<usize> {
@@ -1665,7 +1404,7 @@ fn place_fused_ring(ring: &[usize], coordinates: &mut [Vec2], placed: &mut [bool
     }
 }
 
-fn angle_delta(first_angle: f64, second_angle: f64) -> f64 {
+pub(crate) fn angle_delta(first_angle: f64, second_angle: f64) -> f64 {
     let mut delta = first_angle - second_angle;
     while delta > PI {
         delta -= 2.0 * PI;
@@ -1914,7 +1653,7 @@ fn spread_around_direction(center: f64, count: usize, spread: f64) -> Vec<f64> {
         .collect()
 }
 
-fn normalize_angle(angle: f64) -> f64 {
+pub(crate) fn normalize_angle(angle: f64) -> f64 {
     let mut angle = angle;
     while angle > PI {
         angle -= 2.0 * PI;
@@ -2598,7 +2337,7 @@ fn hydrogen_label_angle(occupied_angles: &[f64]) -> f64 {
     normalize_angle(best_start + best_gap / 2.0)
 }
 
-fn largest_angular_gap(angles: &[f64]) -> Option<(f64, f64)> {
+pub(crate) fn largest_angular_gap(angles: &[f64]) -> Option<(f64, f64)> {
     if angles.is_empty() {
         return None;
     }
@@ -2748,40 +2487,24 @@ fn bounding_box(coordinates: &[Vec2]) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::MoleculeGraph;
 
     #[test]
     fn steroid_ring_system_detects_four_rings() {
-        let molecule = MoleculeGraph::from_smiles(
-            "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O",
-            Vec::new(),
-            Vec::new(),
-        )
-        .expect("steroid-like molecule should parse");
+        let molecule =
+            crate::parse_molecule("C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O")
+                .expect("steroid-like molecule should parse");
         let rings = find_rings(&molecule);
         assert_eq!(rings.len(), 4, "rings: {rings:?}");
     }
 
     #[test]
     fn ring_closure_after_branch_stays_on_branch_point() {
-        let pre = crate::preprocess_smiles("C1=CCCC(=O)1").expect("preprocess failed");
-        let molecule = MoleculeGraph::from_smiles(
-            &pre.smiles,
-            pre.forced_direction_markers,
-            pre.aromatic_atom_markers,
-        )
-        .expect("cyclopentenone should parse");
+        let molecule = crate::parse_molecule("C1=CCCC(=O)1").expect("cyclopentenone should parse");
         let rings = find_rings(&molecule);
         assert!(rings.iter().any(|ring| ring.len() == 5), "rings: {rings:?}");
 
         let complex = "O1C=C[C@H]([C@H]1O2)c3c2cc(OC)c4c3OC(=O)C5=C4CCC(=O)5";
-        let pre = crate::preprocess_smiles(complex).expect("preprocess failed");
-        let molecule = MoleculeGraph::from_smiles(
-            &pre.smiles,
-            pre.forced_direction_markers,
-            pre.aromatic_atom_markers,
-        )
-        .expect("complex fused system should parse");
+        let molecule = crate::parse_molecule(complex).expect("complex fused system should parse");
         let rings = find_rings(&molecule);
         assert!(
             rings
@@ -2793,12 +2516,9 @@ mod tests {
 
     #[test]
     fn fused_double_bond_prefers_unsaturated_ring_side() {
-        let molecule = MoleculeGraph::from_smiles(
-            "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O",
-            Vec::new(),
-            Vec::new(),
-        )
-        .expect("steroid-like molecule should parse");
+        let molecule =
+            crate::parse_molecule("C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O")
+                .expect("steroid-like molecule should parse");
         let rings = find_rings(&molecule);
         let mut checked_shared_double = false;
 

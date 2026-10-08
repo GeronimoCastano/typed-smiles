@@ -2114,11 +2114,11 @@ without stereo wedges. `$` renders a quadruple bond.
    #smiles("N[Pt@SP3](N)(Cl)Cl")],
 
   [*Trigonal bipyramidal* \ #text(size: 8pt, `S[As@TB1](F)(Cl)(Br)N`) \
-   #smiles("S[As@TB1](F)(Cl)(Br)N")],
+   #smiles("S[As@TB1](F)(Cl)(Br)N", undepicted-stereo: "omit")],
   [*Octahedral* \ #text(size: 8pt, `C[Co@OH1](F)(Cl)(Br)(I)N`) \
-   #smiles("C[Co@OH1](F)(Cl)(Br)(I)N")],
+   #smiles("C[Co@OH1](F)(Cl)(Br)(I)N", undepicted-stereo: "omit")],
   [*Allene (`@AL1`)* \ #text(size: 8pt, `NC(Br)=[C@AL1]=C(O)C`) \
-   #smiles("NC(Br)=[C@AL1]=C(O)C")],
+   #smiles("NC(Br)=[C@AL1]=C(O)C", undepicted-stereo: "omit")],
 
   [*Re–Re quadruple bond* \ #text(size: 8pt, `[Re]$[Re]`) \
    #smiles("[Re]$[Re]")],
@@ -2141,7 +2141,7 @@ double bond, so cumulene centers always show an explicit `C`.
   [*Carbon dioxide* \ #text(size: 8pt, `O=C=O`) \ #smiles("O=C=O")],
   [*Ketene* \ #text(size: 8pt, `C=C=O`) \ #smiles("C=C=O")],
   [*Allene* \ #text(size: 8pt, `NC(Br)=[C@AL1]=C(O)C`) \
-   #smiles("NC(Br)=[C@AL1]=C(O)C", scale: 0.85)],
+   #smiles("NC(Br)=[C@AL1]=C(O)C", scale: 0.85, undepicted-stereo: "omit")],
   [*Butatriene* \ #text(size: 8pt, `C=C=C=C`) \ #smiles("C=C=C=C")],
 )
 
@@ -4380,3 +4380,116 @@ end on the charged atom.
   mol("CC=[N+](C)C", rotation: 30deg),
   arrow(from: lp(0, 3), to: atom(1, 2)),
 )
+
+#pagebreak()
+
+= SMILES robustness: atom maps
+
+Bracket atom classes are atom maps. They never change the structure or the
+atom indices; `show-maps: true` labels mapped atoms with `:n`. Map 0 is
+unmapped, and an `atom-annotations` entry replaces the map label of its atom.
+
+#let robustness-cell(title, smiles-str, ..options) = [
+  *#title* \ #text(size: 7pt, raw(smiles-str)) \
+  #smiles(smiles-str, ..options)
+]
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  robustness-cell([Maps hidden], "[CH3:1][C:2](=[O:3])[OH:4]"),
+  robustness-cell([Maps shown], "[CH3:1][C:2](=[O:3])[OH:4]", show-maps: true),
+  robustness-cell([Map 0 is unmapped], "[CH3:0][CH2:5]O", show-maps: true),
+  robustness-cell([Annotation wins], "[CH3:1][NH2:2]", show-maps: true,
+    atom-annotations: ((1, text(fill: red)[amine]),)),
+  robustness-cell([Mapped ring], "c1cc[nH:5]c1[NH2:6]", show-maps: true),
+  robustness-cell([Mapped stereocenter], "[C@@H:3](F)(Cl)Br", show-maps: true),
+  robustness-cell([Mapped hydrogen stays], "C[H:3]", show-maps: true),
+  robustness-cell([Mapped salt], "[Na+:1].[Cl-:2]", show-maps: true),
+)
+
+#reaction(
+  mol("[CH3:1][C:2](=[O:3])[OH:4]", show-maps: true),
+  [+],
+  mol("[CH3:5][OH:6]", show-maps: true),
+  rxn-arrow(),
+  mol("[CH3:1][C:2](=[O:3])[O:6][CH3:5]", show-maps: true),
+)
+
+= SMILES robustness: stereochemistry
+
+Each wedge starts at the stereocenter it describes, including heteroatom
+centers and centers whose neighbors are all carbon.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  robustness-cell([Chiral ammonium], "C[N@+](CC)(CCC)Cc1ccccc1", scale: 0.7),
+  robustness-cell([Phosphine oxide], "C[P@](=O)(CC)c1ccccc1", scale: 0.7),
+  robustness-cell([Proline], "OC(=O)[C@@H]1CCCN1", scale: 0.8),
+  robustness-cell([Menthol], "CC(C)[C@@H]1CC[C@@H](C)C[C@H]1O", scale: 0.7),
+)
+
+A lone pair completes a three-coordinate stereocenter. Each pair shows
+enantiomers; the last cell writes the first sulfoxide starting from sulfur.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  robustness-cell([Sulfoxide `@`], "C[S@](=O)c1ccccc1", scale: 0.7),
+  robustness-cell([Sulfoxide `@@`], "C[S@@](=O)c1ccccc1", scale: 0.7),
+  robustness-cell([Phosphine], "C[P@](CC)c1ccccc1", scale: 0.7),
+  robustness-cell([Leading sulfur], "[S@@](=O)(C)c1ccccc1", scale: 0.7),
+)
+
+#robustness-cell([Esomeprazole], "COc1ccc2[nH]c(nc2c1)[S@](=O)Cc1ncc(C)c(OC)c1C", scale: 0.7)
+
+A spiro center without substituents wedges a ring bond; ring-fusion hydrogens
+carry their own wedges. Written
+hydrogens keep their configuration wherever they appear, so each pair matches.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  robustness-cell([Spiro center], "CC[C@H](O1)CC[C@@]12CCCO2", scale: 0.7),
+  robustness-cell([trans-Decalin], "[C@@H]12CCCC[C@H]1CCCC2", scale: 0.7),
+  robustness-cell([Implicit H], "F[C@@H](Cl)Br"),
+  robustness-cell([Written `[H]` between], "F[C@](Cl)([H])Br"),
+)
+
+A `/` or `\` at a ring-closure digit is read from the atom that carries it.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  robustness-cell([trans, opening end], "F/C=C/1.Cl1"),
+  robustness-cell([cis, closing end], "F/C=C1.Cl/1"),
+  robustness-cell([trans, closing end], "F/C=C1.Cl\\1"),
+  robustness-cell([Tropylium], "[cH+]1cccccc1"),
+)
+
+Stereochemistry the drawing cannot show is drawn as connectivity only when the
+document passes `undepicted-stereo: "omit"`.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1em,
+  align: center + horizon,
+  robustness-cell([trans-Cyclooctene], "C1CCC/C=C/CC1", undepicted-stereo: "omit"),
+  robustness-cell([Octahedral], "C[Co@OH28](F)(Cl)(Br)(I)N", undepicted-stereo: "omit"),
+  robustness-cell([Allene `@`], "NC(Br)=[C@]=C(O)C", undepicted-stereo: "omit", scale: 0.8),
+  robustness-cell([Trans chelate], "N1CC[NH2][Pt@SP2]1(Cl)Br", undepicted-stereo: "omit"),
+)
+
+= SMILES robustness: large inputs
+
+Long chains and deep nesting are read without recursion limits.
+
+#robustness-cell([C60 chain], "C" * 60, scale: 0.25)
+#robustness-cell([Nested branches], "C(" * 12 + "C" + ")" * 12, scale: 0.5)
+#robustness-cell([Fullerene (cage layout is not yet supported)], "c12c3c4c5c1c1c6c7c2c2c8c3c3c9c4c4c%10c5c5c1c1c6c6c%11c7c2c2c7c8c3c3c8c9c4c4c9c%10c5c5c1c1c6c6c%11c2c2c7c3c3c8c4c4c9c5c1c1c6c2c3c41", scale: 0.6)

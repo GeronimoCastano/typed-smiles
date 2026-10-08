@@ -303,6 +303,8 @@ call site. See @sec-library for every entry.]
   [#c("bond-customizations")], [`array`], [`()`], [Per-bond style overrides as #c("(bond(i, j), (..options..))") pairs; options are #c("color"), #c("stroke"), and #c("opacity").],
   [#c("lone-pairs")], [`none` / `"dots"` / `"lines"`], [`none`], [Draw optional non-bonding electron pairs on skeletal atom labels.],
   [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
+  [#c("show-maps")], [`bool`], [`false`], [Label atoms carrying an atom map such as #c("[CH3:7]") with #c(":7"). See @sec-atom-maps.],
+  [#c("undepicted-stereo")], [`"error"` / `"omit"`], [`"error"`], [Report written stereochemistry the drawing cannot show, or draw the structure without it. See @sec-undepicted-stereo.],
 )
 
 #note[#c("scale") sizes everything together. Use #c("bond-length"),
@@ -318,6 +320,14 @@ each defaults to #c("none"), meaning it follows #c("scale").]
   #smiles("CC(=O)O")
   ```)
 ]
+
+#note[Invalid SMILES produce an editor-visible error that names the character
+position and the correction, for example `ring closure 1 at character 3 closes
+on the atom that opened it` for #c("C11"). Besides syntax errors, the
+following are rejected: a ring closure that bonds an atom to itself or repeats
+an existing bond (#c("C12C12")), different bond symbols on the two ends of one
+ring closure (#c("C=1CCCCC-1")), a bond or #c(".") with no atom after it
+(#c("CC=")), charges outside -15 to +15, and spaces anywhere in the string.]
 
 == #raw("style")
 
@@ -741,6 +751,27 @@ writing order, so #c("show-indices"), #c("highlight(...)"), and
 #c("smiles()") call. A ring closure written across a dot (as in the
 OpenSMILES example #c("C1.C1"), ethane) still forms its bond.]
 
+== Atom maps <sec-atom-maps>
+
+#demo[
+  A number after a colon at the end of a bracket atom is an OpenSMILES atom
+  class, commonly used as an atom map in reaction schemes: #c("[CH3:7]").
+  Maps never change the structure or the atom indices used by #c("atom()")
+  references. Pass #c("show-maps: true") to label each mapped atom; map 0
+  means "unmapped", as in OpenSMILES.
+
+  #example(```typ
+  #reaction(
+    mol("[CH3:1][C:2](=[O:3])[OH:4]", show-maps: true),
+    rxn-arrow(),
+    mol("[CH3:1][C:2](=[O:3])Cl", show-maps: true),
+  )
+  ```)
+]
+
+#note[An #c("atom-annotations") entry for a mapped atom replaces its map label,
+so you can restyle individual maps.]
+
 // ═════════════════════════════════════════════════════════════════════════════
 = Hydrogens <sec-hydrogens>
 // ═════════════════════════════════════════════════════════════════════════════
@@ -808,11 +839,23 @@ extensions for bond styles and local acyclic-chain layout.
 
 #demo[
   A bracket atom carrying #c("@") or #c("@@") becomes a wedge (toward the viewer)
-  or hashed bond (away) in the conventional SMILES orientation.
+  or hashed bond (away) in the conventional SMILES orientation. The narrow end
+  of every wedge sits on the stereocenter it describes.
 
   #example(```typ
   #smiles("N[C@@H](C)C(=O)O") \
   #smiles("N[C@H](C)C(=O)O")
+  ```)
+]
+
+#demo[
+  A center with three neighbors and a lone pair, such as the sulfur of a
+  sulfoxide or a phosphine phosphorus, is drawn the same way; the lone pair
+  takes the place of the fourth neighbor.
+
+  #example(```typ
+  #smiles("C[S@](=O)c1ccccc1") \
+  #smiles("C[S@@](=O)c1ccccc1")
   ```)
 ]
 
@@ -862,10 +905,30 @@ centers and bridged bicyclics may need a manual adjustment (see @sec-limits).]
   ```)
 ]
 
-#note[Trigonal-bipyramidal (#c("@TB1")–#c("@TB20")), octahedral
-(#c("@OH1")–#c("@OH30")), and allenal (#c("@AL1"), #c("@AL2")) centers are
-accepted and drawn with correct connectivity, but without stereo decoration —
-their 3D arrangement is not translated into wedges.]
+== Stereochemistry the drawing cannot show <sec-undepicted-stereo>
+
+#demo[
+  Some written stereochemistry has no faithful 2D depiction here:
+  trigonal-bipyramidal (#c("@TB1")–#c("@TB20")), octahedral
+  (#c("@OH1")–#c("@OH30")), and allene (#c("@AL1"), #c("@AL2")) centers, a
+  #c("@") on an atom that cannot be a stereocenter (such as #c("[C@H2]")), and
+  configurations the layout cannot place, such as a trans double bond in an
+  eight-membered ring. By default these are errors, so a figure never drops
+  stereochemistry silently. Pass #c("undepicted-stereo: \"omit\"") to draw the
+  structure without it.
+
+  #example(```typ
+  #smiles(
+    "C[Co@OH1](F)(Cl)(Br)(I)N",
+    undepicted-stereo: "omit",
+  )
+  ```)
+]
+
+#note[To accept undrawn stereochemistry throughout a document, set the option
+once with #c("smiles.with(undepicted-stereo: \"omit\")") (see the section on
+project-wide defaults). It applies to #c("smiles()"), #c("mol()"), and
+#c("smiles-cetz()").]
 
 == Manual wedges: #raw("!w") and #raw("!h")
 
@@ -2078,8 +2141,14 @@ parameter.
 
 - R/S and E/Z descriptors are not available; #c("@")/#c("@@") and directional
   bonds control the depiction only.
-- Trigonal-bipyramidal (#c("@TB")), octahedral (#c("@OH")), and allenal
-  (#c("@AL")) centers are accepted but drawn without stereo wedges.
+- Trigonal-bipyramidal (#c("@TB")), octahedral (#c("@OH")), and allene
+  (#c("@AL")) stereochemistry is not drawn; by default it is reported as an
+  error (see @sec-undepicted-stereo).
+- Trans double bonds in rings of fewer than about twelve atoms, and some
+  chelate rings around square-planar centers, cannot be laid out with the
+  written geometry and are reported the same way.
+- Reaction SMILES (#c("A>>B")), dative-bond arrows (#c("->")), and
+  #c("%(nnn)") ring numbers are not read; draw reactions with #c("reaction()").
 - Ring stereochemistry between adjacent centers and bridged bicyclics can overlap
   or need a manual adjustment (try #c("rotation"), or the manual #c("!w") and
   #c("!h") wedges).
@@ -2131,9 +2200,10 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("c") #c("n") #c("o") …], [Lowercase aromatic atom notation.],
   [#c(".")], [Disconnected fragment (no bond): salts, hydrates.],
   [#c("[...]")], [Bracket atom (any element, charges, explicit H).],
+  [#c("[CH3:7]")], [Atom map 7 on a bracket atom; shown with #c("show-maps: true").],
   [#c("@") / #c("@@")], [Tetrahedral anticlockwise / clockwise.],
   [#c("@SP1")–#c("@SP3")], [Square planar (U / 4 / Z shape), depicted exactly.],
-  [#c("@TB") #c("@OH") #c("@AL")], [Extended stereo: accepted, drawn without wedges.],
+  [#c("@TB") #c("@OH") #c("@AL")], [Extended stereo: not drawn; an error unless #c("undepicted-stereo: \"omit\"").],
   [#c("$")], [Quadruple bond (four parallel lines).],
   [#c("/") #c("\\")], [Double-bond cis/trans geometry.],
   [#c("!c")], [Repeat the preceding acyclic-chain turn instead of alternating the zigzag.],
@@ -2172,6 +2242,8 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("lone-pairs")], [`none`], [Draw lone pairs as #c("\"dots\"") or #c("\"lines\"").],
   [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
   [#c("show-indices")], [`false`], [Stamp atom indices for writing references.],
+  [#c("show-maps")], [`false`], [Label mapped atoms such as #c("[CH3:7]") with #c(":7").],
+  [#c("undepicted-stereo")], [`"error"`], [Stereochemistry the drawing cannot show: report it, or #c("\"omit\"") it.],
   [#c("highlight-smarts")], [`()`], [SMARTS string, #c("(pattern:, include-atoms:)") dictionary, or tuple mixing both.],
   [#c("highlight-groups")], [`()`], [Group name, #c("(group:, include-atoms:)") dictionary, or tuple mixing both.],
   [#c("highlight-colors")], [`auto`], [Non-empty color tuple; cycle across matches.],
