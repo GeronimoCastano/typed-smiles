@@ -13,8 +13,12 @@
   _validate-bool,
   _validate-offset,
 )
-#import "../chemistry.typ": _compute-layout
 #import "../substructure.typ": _substructure-highlights
+#import "../molecule/abbreviations.typ": (
+  _abbreviation-request,
+  _abbreviated-layout,
+  _orient-abbreviation-labels,
+)
 #import "../styles.typ": _resolve-foreground-theme
 #import "../molecule/rendering.typ": (
   _mirror-layout,
@@ -148,7 +152,7 @@
     "style", "scale", "bond-length", "font-size", "font", "bond-stroke",
     "color", "fg", "theme", "rotation", "mirror", "show-h", "aromatic",
     "atom-annotations", "opacity", "bond-customizations", "lone-pairs",
-    "atom-colors", "show-indices",
+    "atom-colors", "show-indices", "abbreviate",
     "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
   )
   for option-name in options.keys() {
@@ -162,6 +166,9 @@
   }
   if "scale" in options {
     _validate-positive-number(options.scale, "mol scale")
+  }
+  if "abbreviate" in options {
+    let _ = _abbreviation-request(options.abbreviate, "mol abbreviate")
   }
   if "bond-length" in options and options.at("bond-length") != none {
     _validate-positive-number(options.at("bond-length"), "mol bond-length")
@@ -783,10 +790,18 @@
             molecule-item.opts.at("scale", default: 1.0),
           )
           if molecule-scale <= 0 { panic("mol scale must be positive") }
-          let molecule-layout = _mirror-layout(
-            _compute-layout(molecule-item.spec),
-            molecule-item.opts.at("mirror", default: none),
-            rotation: molecule-item.opts.at("rotation", default: 0deg),
+          let molecule-rotation = molecule-item.opts.at("rotation", default: 0deg)
+          let molecule-layout = _orient-abbreviation-labels(
+            _mirror-layout(
+              _abbreviated-layout(
+                molecule-item.spec,
+                molecule-item.opts.at("abbreviate", default: none),
+                "mol abbreviate",
+              ),
+              molecule-item.opts.at("mirror", default: none),
+              rotation: molecule-rotation,
+            ),
+            molecule-rotation,
           )
           let molecule-font-size = molecule-item.opts.at(
             "font-size",

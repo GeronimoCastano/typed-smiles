@@ -251,6 +251,71 @@ impl MoleculeGraph {
     pub fn n_atoms(&self) -> usize {
         self.atoms.len()
     }
+
+    /// Copy of the subgraph induced by `kept_atoms` (sorted, distinct), with
+    /// atom and bond indices renumbered to 0..k so placement can run on it
+    /// unchanged. Bonds to atoms outside the set are dropped, and a preceding
+    /// atom outside the set is forgotten.
+    pub fn induced_subgraph(&self, kept_atoms: &[usize]) -> MoleculeGraph {
+        let mut local_atom = vec![None; self.n_atoms()];
+        for (local_index, &global_index) in kept_atoms.iter().enumerate() {
+            local_atom[global_index] = Some(local_index);
+        }
+
+        let mut local_bond = vec![None; self.bonds.len()];
+        let mut bonds = Vec::new();
+        for (bond_index, bond) in self.bonds.iter().enumerate() {
+            let (Some(local_from), Some(local_to)) = (local_atom[bond.from], local_atom[bond.to])
+            else {
+                continue;
+            };
+            local_bond[bond_index] = Some(bonds.len());
+            bonds.push(Bond {
+                from: local_from,
+                to: local_to,
+                ..bond.clone()
+            });
+        }
+
+        MoleculeGraph {
+            atoms: kept_atoms
+                .iter()
+                .map(|&global_index| self.atoms[global_index].clone())
+                .collect(),
+            bonds,
+            adj: kept_atoms
+                .iter()
+                .map(|&global_index| {
+                    self.adj[global_index]
+                        .iter()
+                        .filter_map(|&(neighbor, bond_index)| {
+                            Some((local_atom[neighbor]?, local_bond[bond_index]?))
+                        })
+                        .collect()
+                })
+                .collect(),
+            neighbor_bonds: kept_atoms
+                .iter()
+                .map(|&global_index| {
+                    self.neighbor_bonds[global_index]
+                        .iter()
+                        .filter_map(|&bond_index| local_bond[bond_index])
+                        .collect()
+                })
+                .collect(),
+            has_preceding: kept_atoms
+                .iter()
+                .map(|&global_index| self.has_preceding[global_index])
+                .collect(),
+            preceding_atom: kept_atoms
+                .iter()
+                .map(|&global_index| {
+                    self.preceding_atom[global_index]
+                        .and_then(|preceding_atom| local_atom[preceding_atom])
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Default)]

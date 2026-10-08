@@ -74,5 +74,25 @@ expect_error "highlight-group-invalid-bool" "highlight-groups include-atoms is i
 expect_error "highlight-request-unknown-option" "unknown request option"
 expect_error "unknown-library-molecule" 'dictionary does not contain key "cafeine"'
 expect_error "one-sided-directional-bond" "must mark both ends of a double bond"
+# Typst escapes quotation marks in panic messages, so quoted values appear as \".
+expect_error "abbreviate-wrong-type" 'smiles abbreviate is invalid: expected none, \"all\", a group name, or an array of group names, got true'
+expect_error "abbreviate-unknown-group" 'smiles abbreviate is invalid: unknown group \"Boc\". Available groups are \"tBu\", \"CF3\", \"NO2\", \"CN\", \"OEt\", \"OMe\", \"Ac\".'
+expect_error "abbreviate-wrong-case" "Group names are case-sensitive"
+expect_error "abbreviate-duplicate-group" 'group \"OMe\" is listed more than once'
+expect_error "abbreviate-all-in-list" '\"all\" appears inside a list of group names'
+expect_error "abbreviate-absent-group" 'smiles abbreviate group \"CF3\" is invalid: no terminal CF3 group in \"CCO\" can be drawn as a label'
+expect_error "abbreviate-expanded-group" "Groups with isotopes, stereo marks, unexpected charges, or bracket hydrogens stay expanded"
+expect_error "abbreviate-lower-priority-group" 'smiles abbreviate group \"Ac\" is invalid'
+expect_error "abbreviate-hidden-arrow-atom" "atom 0 is hidden inside the automatic abbreviation OMe (atoms 0, 1)"
+expect_error "abbreviate-hidden-highlight-bond" 'Reference the labeled attachment atom 1 instead, or remove \"OMe\" from abbreviate'
+expect_error "abbreviate-hidden-smarts-match" "is hidden inside the automatic abbreviation NO2"
+expect_error "abbreviate-hidden-annotation" "atom-annotations atom index is invalid: atom 0 is hidden inside the automatic abbreviation CF3"
+expect_error "abbreviate-hidden-bond-customization" "bond-customizations first atom index is invalid: atom 0 is hidden"
+expect_error "abbreviate-hidden-show-h" "show-h atom index is invalid: atom 0 is hidden inside the automatic abbreviation OEt"
+expect_error "abbreviate-label-show-h" "1 is drawn as the automatic abbreviation tBu, which shows no hydrogens"
+expect_error "abbreviate-label-lone-pair" "is drawn as the automatic abbreviation OMe, which has no addressable lone pairs"
+expect_error "mol-abbreviate-unknown-group" 'mol abbreviate is invalid: unknown group \"Me\"'
+expect_error "mol-abbreviate-hidden-atom" "in species 0 is invalid: atom 0 is hidden inside the automatic abbreviation OMe"
+expect_error "cetz-abbreviate-unknown-group" 'smiles-cetz abbreviate is invalid: unknown group \"Et\"'
 
 echo "All editor-visible validation cases passed."

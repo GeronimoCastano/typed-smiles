@@ -28,8 +28,13 @@
   }
 }
 
-// Parse a SMILES string into layout JSON via the WASM plugin.
-#let _compute-layout(smiles-str) = {
+// Catalogue names accepted by automatic abbreviation, in priority order.
+#let _abbreviation-names() = json(_smiles-plugin.abbreviation_names())
+
+// Parse a SMILES string into layout JSON via the WASM plugin. A non-none
+// `abbreviation-request` ("all" or comma-separated catalogue names) draws the
+// matching terminal groups as labels while keeping original atom indices.
+#let _compute-layout(smiles-str, abbreviation-request: none) = {
   if type(smiles-str) != str {
     _invalid-input(
       "SMILES expression",
@@ -44,7 +49,14 @@
       "Pass at least one atom, such as \"C\".",
     )
   }
-  json(_smiles-plugin.layout(bytes(smiles-str)))
+  if abbreviation-request == none {
+    json(_smiles-plugin.layout(bytes(smiles-str)))
+  } else {
+    json(_smiles-plugin.layout_abbreviated(
+      bytes(smiles-str),
+      bytes(abbreviation-request),
+    ))
+  }
 }
 
 /// Finds distinct SMARTS substructures in depiction writing-order indices.

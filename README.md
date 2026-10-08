@@ -212,6 +212,38 @@ pairs, and displacement, write
 `offset=` may be placed in either order after it. Large offsets can
 intentionally create overlaps.
 
+## Automatic abbreviations
+
+Write the full structure and let `abbreviate` draw common terminal groups as
+labels. Pass catalogue names, or `"all"` for every catalogue group that occurs:
+`"tBu"`, `"CF3"`, `"NO2"`, `"CN"`, `"OEt"`, `"OMe"`, `"Ac"`. Groups are matched
+on the molecular structure, so every atom order of the same molecule gives the
+same drawing. A label reads away from the molecule, and toward its bond when
+that bond leaves to the right (MeO, F₃C).
+
+```typst
+#smiles("COc1ccc(C(F)(F)F)cc1", abbreviate: ("OMe", "CF3"))
+#smiles("CC(=O)Nc1ccc(cc1)[N+](=O)[O-]", abbreviate: "all")
+```
+
+![Automatic abbreviation examples](assets/readme/abbreviations.png)
+
+- Atom indices do not change. A label carries its attachment atom's index, so
+  `atom(i)` on that atom highlights or targets the label. Referencing an atom
+  hidden inside a label — through arrows, highlights, `atom-annotations`,
+  `bond-customizations`, `show-h`, or a `highlight-smarts`/`highlight-groups`
+  match — is an error; remove the group from `abbreviate` to address it.
+- Groups carrying an isotope, a stereo mark, an unexpected charge, a bracket
+  hydrogen count, or a `{label}` stay expanded. Stereocenters next to a label
+  keep their configuration.
+- Overlapping candidates follow the catalogue order above, whatever order you
+  list them in, and a group never attaches to another automatic label. A group
+  named explicitly must be drawn at least once, or the call fails.
+- `mol-formula()` and `mol-weight()` always use the full structure.
+  `atom-colors: ("{OMe}": purple)` colors an automatic label in both reading
+  directions. `mol()`, `smiles-inline()`, and `smiles-cetz()` accept
+  `abbreviate` too.
+
 ## Atom annotations and per-atom hydrogens
 
 `atom-annotations` places small gray side labels on the emptiest side of an
@@ -789,6 +821,7 @@ style extensions and bond orders, for example `!c!w` or `!c=`.
 | `lone-pairs` | `none` | Draw lone pairs as `"dots"` or `"lines"` |
 | `atom-colors` | `(:)` | Color overrides: element key `O: red` or label key `"{PPh3}": blue` |
 | `show-indices` | `false` | Stamp atom indices for writing arrow references |
+| `abbreviate` | `none` | Catalogue group names (`"OMe"`, `"CF3"`, …) or `"all"` to draw as labels |
 | `highlight-smarts` | `()` | SMARTS string, `(pattern:, include-atoms:)` dictionary, or tuple mixing both |
 | `highlight-groups` | `()` | Group name, `(group:, include-atoms:)` dictionary, or tuple mixing both |
 | `highlight-colors` | `auto` | Non-empty color tuple; cycle through matches |
@@ -859,7 +892,7 @@ nudges it in page coordinates, in bond-length units: positive x moves right and
 positive y moves up regardless of `reaction(flow:)`. String molecules accept
 common drawing options such as `scale`, `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-h`,
 `lone-pairs`, `opacity`, `bond-customizations`, `atom-colors`, and
-`show-indices`, and the four `highlight-*` options above; `reaction(scale: ...)` uniformly resizes the complete reaction,
+`show-indices`, `abbreviate`, and the four `highlight-*` options above; `reaction(scale: ...)` uniformly resizes the complete reaction,
 and each `mol(scale: ...)` additionally resizes that molecule. Positional
 `arrow()` and `highlight()` items inside `mol()` use local references, so
 `mol("C=O", arrow(from: bond(0, 1), to: atom(0)))` does not require a species

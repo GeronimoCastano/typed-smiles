@@ -12,8 +12,8 @@
   _validate-offset,
   _validate-molecule-options,
 )
-#import "../chemistry.typ": _compute-layout
 #import "../substructure.typ": _substructure-highlights
+#import "abbreviations.typ": _abbreviated-layout, _orient-abbreviation-labels
 #import "../styles.typ": _resolve-foreground-theme, _canvas-scale, _style-preset
 #import "rendering.typ": (
   _rendered-atom-position,
@@ -82,6 +82,11 @@
 ///   and inline `{label|style}` styles. See documentation for the two key forms.
 /// - show-indices (bool): Stamp each atom's writing-order index on the diagram, as a
 ///   development aid for writing atom()/bond()/lp() references. Default: false.
+/// - abbreviate (none / "all" / str / array): Draw terminal groups from the
+///   automatic catalogue ("tBu", "CF3", "NO2", "CN", "OEt", "OMe", "Ac") as
+///   labels. Atom indices keep their meaning; atoms hidden inside a label
+///   cannot be referenced. A named group must occur in the molecule.
+///   Default: none.
 /// - highlight-smarts (str / dictionary / array): Patterns or requests with
 ///   pattern and include-atoms (default: true); shade every match.
 /// - highlight-groups (str / dictionary / array): Group names or requests with
@@ -112,6 +117,7 @@
   lone-pairs: none,
   atom-colors: (:),
   show-indices: false,
+  abbreviate: none,
   highlight-smarts: (),
   highlight-groups: (),
   highlight-colors: auto,
@@ -157,15 +163,18 @@
   let font = if font == auto { "New Computer Modern" } else { font }
 
   let (fg, theme) = _resolve-foreground-theme(fg, theme)
-  let raw-layout = _compute-layout(smiles-str)
-  let layout = _mirror-layout(
-    if _normalize-show-h(show-h).skeleton {
-      _linearize-skeleton-layout(raw-layout)
-    } else {
-      raw-layout
-    },
-    mirror,
-    rotation: rotation,
+  let raw-layout = _abbreviated-layout(smiles-str, abbreviate, "smiles abbreviate")
+  let layout = _orient-abbreviation-labels(
+    _mirror-layout(
+      if _normalize-show-h(show-h).skeleton {
+        _linearize-skeleton-layout(raw-layout)
+      } else {
+        raw-layout
+      },
+      mirror,
+      rotation: rotation,
+    ),
+    rotation,
   )
   let canvas-scale = _canvas-scale(scale, bond-length)
   let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
@@ -324,8 +333,9 @@
 /// - theme ("light" / "dark"): CPK palette variant. Default: "light".
 /// - ..opts: #smiles() drawing options — scale, font-size, font, bond-stroke,
 ///   color, rotation, mirror, show-h, aromatic, atom-annotations, opacity,
-///   bond-customizations, lone-pairs, atom-colors, show-indices, highlight-smarts,
-///   highlight-groups, highlight-colors, highlight-unmatched.
+///   bond-customizations, lone-pairs, atom-colors, show-indices, abbreviate,
+///   highlight-smarts, highlight-groups, highlight-colors, highlight-unmatched.
+///   Hidden abbreviation atoms get no "atom-<i>" anchor.
 /// -> none  (emits CeTZ draw elements)
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
@@ -364,15 +374,22 @@
     )
   }
   let show-h = options.at("show-h", default: ())
-  let raw-layout = _compute-layout(smiles-str)
-  let layout = _mirror-layout(
-    if _normalize-show-h(show-h).skeleton {
-      _linearize-skeleton-layout(raw-layout)
-    } else {
-      raw-layout
-    },
-    mirror,
-    rotation: rotation,
+  let raw-layout = _abbreviated-layout(
+    smiles-str,
+    options.at("abbreviate", default: none),
+    "smiles-cetz abbreviate",
+  )
+  let layout = _orient-abbreviation-labels(
+    _mirror-layout(
+      if _normalize-show-h(show-h).skeleton {
+        _linearize-skeleton-layout(raw-layout)
+      } else {
+        raw-layout
+      },
+      mirror,
+      rotation: rotation,
+    ),
+    rotation,
   )
   let allowed = (
     "scale", "font-size", "font", "bond-stroke", "color", "rotation",
@@ -389,7 +406,7 @@
       drawing-options.insert(option-name, option-value)
     } else if option-name in highlight-options {
       matching-options.insert(option-name, option-value)
-    } else if option-name != "mirror" {
+    } else if option-name not in ("mirror", "abbreviate") {
       panic("smiles-cetz does not accept option \"" + option-name + "\"")
     }
   }
@@ -419,6 +436,9 @@
     _draw-molecule(layout, fg: fg, theme: theme, ..drawing-options)
     for atom-index in range(layout.atoms.len()) {
       let atom = layout.atoms.at(atom-index)
+      // Hidden abbreviation atoms get no anchor, so drawing that targets
+      // them fails instead of landing on the label.
+      if atom.at("contracted", default: false) { continue }
       let atom-position = _rendered-atom-position(atom, rotation)
       anchor(
         "atom-" + str(atom-index),

@@ -54,6 +54,7 @@ pub fn compute_layout(molecule: &MoleculeGraph) -> Result<LayoutOutput, String> 
         atoms,
         bonds,
         aromatic_rings: aromatic_ring_circles(molecule, &rings, &coordinates),
+        abbreviation_groups: Vec::new(),
         bbox_width,
         bbox_height,
     })
@@ -64,6 +65,7 @@ fn empty_layout_output() -> LayoutOutput {
         atoms: Vec::new(),
         bonds: Vec::new(),
         aromatic_rings: Vec::new(),
+        abbreviation_groups: Vec::new(),
         bbox_width: 0.0,
         bbox_height: 0.0,
     }
@@ -108,6 +110,8 @@ fn build_atom_outputs(
                     .map(|(_, direction)| direction)
                     .unwrap_or_default(),
                 virtual_h: false,
+                contracted: false,
+                abbreviation_group: None,
             }
         })
         .collect()
@@ -209,6 +213,8 @@ fn append_virtual_hydrogen(
         stereo_h: "none".to_string(),
         stereo_h_dir: Vec2::default(),
         virtual_h: true,
+        contracted: false,
+        abbreviation_group: None,
     });
     bonds.push(BondOutput {
         from: parent_atom,
@@ -287,7 +293,7 @@ fn layout_coordinates(molecule: &MoleculeGraph) -> Result<Vec<Vec2>, String> {
     let mut coordinates = vec![Vec2::new(0.0, 0.0); molecule.n_atoms()];
     let mut cursor = 0.0;
     for (component_index, component) in components.iter().enumerate() {
-        let component_molecule = component_subgraph(molecule, component);
+        let component_molecule = molecule.induced_subgraph(component);
         let component_coordinates = place_connected_molecule(&component_molecule)?;
 
         let min_x = component_coordinates
@@ -420,67 +426,6 @@ fn connected_components(molecule: &MoleculeGraph) -> Vec<Vec<usize>> {
         components.push(component);
     }
     components
-}
-
-/// Copy of one connected component with atom and bond indices renumbered to
-/// 0..k, so the single-molecule placement can run on it unchanged.
-fn component_subgraph(molecule: &MoleculeGraph, component: &[usize]) -> MoleculeGraph {
-    let mut local_atom = vec![usize::MAX; molecule.n_atoms()];
-    for (local_index, &global_index) in component.iter().enumerate() {
-        local_atom[global_index] = local_index;
-    }
-
-    let mut local_bond_indices = vec![usize::MAX; molecule.bonds.len()];
-    let mut bonds = Vec::new();
-    for (bond_index, bond) in molecule.bonds.iter().enumerate() {
-        // Bonds never cross components, so checking one endpoint suffices.
-        if local_atom[bond.from] != usize::MAX {
-            local_bond_indices[bond_index] = bonds.len();
-            let mut local_bond = bond.clone();
-            local_bond.from = local_atom[bond.from];
-            local_bond.to = local_atom[bond.to];
-            bonds.push(local_bond);
-        }
-    }
-
-    MoleculeGraph {
-        atoms: component
-            .iter()
-            .map(|&global_index| molecule.atoms[global_index].clone())
-            .collect(),
-        bonds,
-        adj: component
-            .iter()
-            .map(|&global_index| {
-                molecule.adj[global_index]
-                    .iter()
-                    .map(|&(neighbor, bond_index)| {
-                        (local_atom[neighbor], local_bond_indices[bond_index])
-                    })
-                    .collect()
-            })
-            .collect(),
-        neighbor_bonds: component
-            .iter()
-            .map(|&global_index| {
-                molecule.neighbor_bonds[global_index]
-                    .iter()
-                    .map(|&bond_index| local_bond_indices[bond_index])
-                    .collect()
-            })
-            .collect(),
-        has_preceding: component
-            .iter()
-            .map(|&global_index| molecule.has_preceding[global_index])
-            .collect(),
-        preceding_atom: component
-            .iter()
-            .map(|&global_index| {
-                molecule.preceding_atom[global_index]
-                    .map(|preceding_atom| local_atom[preceding_atom])
-            })
-            .collect(),
-    }
 }
 
 /// Applies `!c` constraints after the automatic acyclic layout. For a written

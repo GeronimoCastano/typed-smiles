@@ -4380,3 +4380,165 @@ end on the charged atom.
   mol("CC=[N+](C)C", rotation: 30deg),
   arrow(from: lp(0, 3), to: atom(1, 2)),
 )
+
+#pagebreak()
+= Automatic abbreviations
+
+`abbreviate` draws catalogue terminal groups as labels. Each pair shows the
+expanded structure and the abbreviated drawing of the same SMILES.
+
+#let abbreviation-cell(title, smiles-str, ..options) = [
+  #text(size: 8pt, title) \ #smiles(smiles-str, ..options)
+]
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+
+  abbreviation-cell([tBu expanded], "CC(C)(C)c1ccccc1", scale: 0.8),
+  abbreviation-cell([tBu], "CC(C)(C)c1ccccc1", abbreviate: "tBu", scale: 0.8),
+  abbreviation-cell([CF3 expanded], "FC(F)(F)c1ccccc1", scale: 0.8),
+  abbreviation-cell([CF3], "FC(F)(F)c1ccccc1", abbreviate: "CF3", scale: 0.8),
+
+  abbreviation-cell([NO2 charge-separated], "[O-][N+](=O)c1ccccc1", abbreviate: "NO2", scale: 0.8),
+  abbreviation-cell([NO2 pentavalent], "O=N(=O)c1ccccc1", abbreviate: "NO2", scale: 0.8),
+  abbreviation-cell([CN expanded], "N#Cc1ccccc1", scale: 0.8),
+  abbreviation-cell([CN], "N#Cc1ccccc1", abbreviate: "CN", scale: 0.8),
+
+  abbreviation-cell([OEt expanded], "CCOc1ccccc1", scale: 0.8),
+  abbreviation-cell([OEt], "CCOc1ccccc1", abbreviate: "OEt", scale: 0.8),
+  abbreviation-cell([OMe expanded], "COc1ccccc1", scale: 0.8),
+  abbreviation-cell([OMe], "COc1ccccc1", abbreviate: "OMe", scale: 0.8),
+
+  abbreviation-cell([Ac expanded], "CC(=O)Nc1ccccc1", scale: 0.8),
+  abbreviation-cell([Ac], "CC(=O)Nc1ccccc1", abbreviate: "Ac", scale: 0.8),
+  abbreviation-cell([All groups], "COc1ccc(C(F)(F)F)cc1", abbreviate: "all", scale: 0.8),
+  abbreviation-cell([Requested subset], "COc1cc(C(F)(F)F)cc([N+](=O)[O-])c1", abbreviate: ("OMe", "NO2"), scale: 0.8),
+)
+
+Labels read away from the molecule. A label whose attachment bond leaves
+toward the right reads toward it (MeO, F#sub[3]C, O#sub[2]N, NC, EtO), at
+every rotation and under mirroring.
+
+#grid(
+  columns: (1fr,) * 6,
+  gutter: 0.8em,
+  align: center + horizon,
+  ..range(0, 360, step: 30).map(angle => abbreviation-cell(
+    [#angle°], "COc1ccc(C(F)(F)F)cc1", abbreviate: "all", rotation: angle * 1deg, scale: 0.6)),
+  ..range(0, 360, step: 30).map(angle => abbreviation-cell(
+    [#angle°], "CCOc1ccc(cc1)[N+](=O)[O-]", abbreviate: "all", rotation: angle * 1deg, scale: 0.6)),
+)
+
+#grid(
+  columns: (1fr,) * 3,
+  gutter: 1.2em,
+  align: center + horizon,
+  abbreviation-cell([Nitrile 90°], "N#Cc1ccccc1", abbreviate: "CN", rotation: 90deg, scale: 0.6),
+  abbreviation-cell([Nitrile 270°], "N#Cc1ccccc1", abbreviate: "CN", rotation: 270deg, scale: 0.6),
+  abbreviation-cell([Ac on both sides], "CC(=O)Nc1ccc(NC(C)=O)cc1", abbreviate: "Ac", rotation: 90deg, scale: 0.6),
+  abbreviation-cell([Mirror none], "COc1ccc(C(F)(F)F)cc1", abbreviate: "all", rotation: 60deg, scale: 0.6),
+  abbreviation-cell([Mirror horizontal], "COc1ccc(C(F)(F)F)cc1", abbreviate: "all", rotation: 60deg, mirror: "horizontal", scale: 0.6),
+  abbreviation-cell([Mirror vertical], "COc1ccc(C(F)(F)F)cc1", abbreviate: "all", rotation: 60deg, mirror: "vertical", scale: 0.6),
+)
+
+Groups are matched on the molecular graph, so every writing order of the same
+structure contracts the same atoms.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+  abbreviation-cell(`FC(F)(F)c1ccccc1`, "FC(F)(F)c1ccccc1", abbreviate: "CF3", scale: 0.7),
+  abbreviation-cell(`c1ccccc1C(F)(F)F`, "c1ccccc1C(F)(F)F", abbreviate: "CF3", scale: 0.7),
+  abbreviation-cell(`C(F)(c1ccccc1)(F)F`, "C(F)(c1ccccc1)(F)F", abbreviate: "CF3", scale: 0.7),
+  abbreviation-cell(`O(C)c1ccccc1`, "O(C)c1ccccc1", abbreviate: "OMe", scale: 0.7),
+)
+
+Overlapping candidates follow catalogue priority (tBu, CF3, NO2, CN, OEt, OMe,
+Ac) whatever the request order, and a group never attaches to another
+automatic label. Groups whose isotope, charge, stereo mark, or bracket
+hydrogen a label would hide stay expanded under `"all"`.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+  abbreviation-cell([OEt beats OMe], "CCOC", abbreviate: "all", scale: 0.7),
+  abbreviation-cell([Methyl acetate], "COC(C)=O", abbreviate: "all", scale: 0.7),
+  abbreviation-cell([Aryl acetate], "CC(=O)Oc1ccccc1", abbreviate: "all", scale: 0.7),
+  abbreviation-cell([Hexafluoroethane], "FC(F)(F)C(F)(F)F", abbreviate: "all", scale: 0.7),
+
+  abbreviation-cell([#super[13]C methoxy], "[13CH3]Oc1ccc(OC)cc1", abbreviate: "all", scale: 0.7),
+  abbreviation-cell([Bracket methyl], "[CH3]Oc1ccc(OC)cc1", abbreviate: "all", scale: 0.7),
+  abbreviation-cell([Forced wedge], "C!wOc1ccc(OC)cc1", abbreviate: "all", scale: 0.7),
+  abbreviation-cell([Manual label kept], "{OMe}c1ccc(OC)cc1", abbreviate: "all", scale: 0.7),
+)
+
+Stereo next to a label is preserved: the wedge on the stereocenter and the
+alkene geometry match the expanded drawings.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+  abbreviation-cell([`@` expanded], "F[C@](Cl)(Br)C(F)(F)F", scale: 0.7),
+  abbreviation-cell([`@` with CF3], "F[C@](Cl)(Br)C(F)(F)F", abbreviate: "CF3", scale: 0.7),
+  abbreviation-cell([`@@` with CF3], "F[C@@](Cl)(Br)C(F)(F)F", abbreviate: "CF3", scale: 0.7),
+  abbreviation-cell([_E_ alkene with CF3], "F/C=C/C(F)(F)F", abbreviate: "CF3", scale: 0.7),
+)
+
+Labels keep their attachment atom's index: references, index overlays, colors,
+lone pairs, and hydrogens work on every drawn atom. `"{OMe}"` in `atom-colors`
+colors both reading directions.
+
+#grid(
+  columns: (1fr,) * 3,
+  gutter: 1.2em,
+  align: center + horizon,
+  abbreviation-cell([Indices], "COc1ccc(cc1)C(F)(F)F", abbreviate: "all", show-indices: true, scale: 0.8),
+  abbreviation-cell(
+    [Arrow and highlight on labels],
+    "COc1ccc(cc1)[N+](=O)[O-]",
+    abbreviate: "all",
+    scale: 0.8,
+    highlight(atom(1)),
+    highlight(bond(5, 8)),
+    arrow(from: atom(1), to: atom(8), bend: "right"),
+  ),
+  abbreviation-cell(
+    [Colors and lone pairs],
+    "COc1ccc(O)cc1OC",
+    abbreviate: "OMe",
+    lone-pairs: "dots",
+    atom-colors: ("{OMe}": purple),
+    scale: 0.8,
+  ),
+  abbreviation-cell([`show-h: "all"`], "CC(C)(C)c1ccc(CC)cc1", abbreviate: "tBu", show-h: "all", scale: 0.8),
+  abbreviation-cell([`show-h: "skeleton"`], "CC(=O)Nc1ccc(O)cc1", abbreviate: "Ac", show-h: "skeleton", scale: 0.8),
+  abbreviation-cell([Aromatic circle], "COc1ccc(C#N)cc1", abbreviate: "all", aromatic: "circle", scale: 0.8),
+)
+
+Reaction schemes, inline molecules, and CeTZ drawings accept the same option.
+The formula and mass always use the full structure: anisole stays
+#mol-formula("COc1ccccc1") (#calc.round(mol-weight("COc1ccccc1"), digits: 2) g/mol).
+
+#reaction(
+  mol("COc1ccc(cc1)C(C)=O", abbreviate: "OMe", label: [*1*]),
+  rxn-arrow(above: [NaBH#sub[4]]),
+  mol("COc1ccc(cc1)C(C)O", abbreviate: "OMe", label: [*2*]),
+  highlight(atom(0, 1)),
+  highlight(atom(1, 1)),
+  arrow(from: atom(0, 1), to: atom(1, 1), bend: "left"),
+)
+
+Inline: #smiles-inline("FC(F)(F)c1ccccc1", abbreviate: "CF3") and
+#smiles-inline("COc1ccccc1", abbreviate: "OMe", height: 2em).
+
+#align(center, context cetz.canvas(length: 30pt, {
+  import cetz.draw: *
+  smiles-cetz("COc1ccc(cc1)C#N", name: "anisonitrile", abbreviate: "all")
+  circle("anisonitrile.atom-1", radius: 0.35, stroke: red + 0.6pt)
+  circle("anisonitrile.atom-8", radius: 0.35, stroke: blue + 0.6pt)
+}))

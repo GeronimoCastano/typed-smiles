@@ -14,6 +14,16 @@
 
 #let _is-carbon(atom) = atom.symbol == "C" or atom.symbol == "c"
 
+// Atoms hidden inside an automatic abbreviation share the label's position and
+// are never drawn on their own.
+#let _is-contracted(atom) = atom.at("contracted", default: false)
+
+// Atoms that receive their own drawing pass. Virtual hydrogens are drawn as
+// part of their parent's label instead.
+#let _is-drawn-atom(atom) = (
+  not atom.at("virtual_h", default: false) and not _is-contracted(atom)
+)
+
 // A carbon without bonds has no skeleton to imply it, so it is always drawn
 // with its hydrogens (CH4) instead of disappearing.
 #let _is-isolated-carbon(atom, degree) = _is-carbon(atom) and degree == 0
@@ -603,7 +613,7 @@
   let visited = ()
 
   for atom-index in range(layout.atoms.len()) {
-    if layout.atoms.at(atom-index).at("virtual_h", default: false) {
+    if not _is-drawn-atom(layout.atoms.at(atom-index)) {
       continue
     }
     if visited.contains(atom-index) {
@@ -1045,7 +1055,14 @@
     let abbrev = atom.at("abbrev", default: "")
     let abbrev-style = atom.at("abbrev_style", default: "")
     if abbrev != "" {
-      let label-key = "{" + abbrev + "}"
+      // Automatic labels are keyed by catalogue name, so one entry covers
+      // both reading directions (OMe and MeO).
+      let group-index = atom.at("abbreviation_group", default: none)
+      let label-key = if group-index == none {
+        "{" + abbrev + "}"
+      } else {
+        "{" + layout.abbreviation_groups.at(group-index).name + "}"
+      }
       if color and label-key in atom-colors { fade(atom-colors.at(label-key)) }
       else { label-color(abbrev-style) }
     } else {
@@ -1513,7 +1530,7 @@
       let hydrogen-fill = if color { label-color("gray") } else { fg }
       for atom-index in range(layout.atoms.len()) {
         let atom = layout.atoms.at(atom-index)
-        if atom.at("virtual_h", default: false) { continue }
+        if not _is-drawn-atom(atom) { continue }
         let count = visible-hydrogen-count(atom-index)
         if count <= 0 { continue }
         let parent-position = atom-screen-position(atom)
@@ -1724,7 +1741,7 @@
       if lone-pairs == none { return }
       for i in range(layout.atoms.len()) {
         let atom = layout.atoms.at(i)
-        if atom.at("virtual_h", default: false) { continue }
+        if not _is-drawn-atom(atom) { continue }
         let count = atom.at("lone_pairs", default: 0)
         if count <= 0 { continue }
 
@@ -1784,7 +1801,7 @@
     // carry wedge/hash information from a bracket stereocenter.
     for i in range(layout.atoms.len()) {
       let atom = layout.atoms.at(i)
-      if atom.at("virtual_h", default: false) { continue }
+      if not _is-drawn-atom(atom) { continue }
       let stereo = atom.at("stereo_h", default: "none")
       if stereo != "none" {
         let atom-position = atom-screen-position(atom)
@@ -1871,7 +1888,7 @@
     // Positions are rotated; text content stays upright.
     for i in range(layout.atoms.len()) {
       let atom = layout.atoms.at(i)
-      if atom.at("virtual_h", default: false) { continue }
+      if not _is-drawn-atom(atom) { continue }
       if has-label(i) {
         let abbrev = atom.at("abbrev", default: "")
         let fill = display-color(atom)
@@ -2198,6 +2215,7 @@
 
       for atom-index in range(layout.atoms.len()) {
         let atom = layout.atoms.at(atom-index)
+        if _is-contracted(atom) { continue }
         let atom-position = atom-screen-position(atom)
         let atom-x = atom-position.x
         let atom-y = atom-position.y
@@ -2261,9 +2279,7 @@
   options: (:),
   canvas-scale: 30pt,
 ) = {
-  let atoms = molecule-layout.atoms.filter(
-    atom => not atom.at("virtual_h", default: false),
-  )
+  let atoms = molecule-layout.atoms.filter(_is-drawn-atom)
   if atoms.len() == 0 {
     return (
       left: measured-width / 2,
@@ -2340,7 +2356,7 @@
 
   for atom-index in range(molecule-layout.atoms.len()) {
     let atom = molecule-layout.atoms.at(atom-index)
-    if atom.at("virtual_h", default: false) { continue }
+    if not _is-drawn-atom(atom) { continue }
     let position = _rendered-atom-position(
       atom,
       rotation,

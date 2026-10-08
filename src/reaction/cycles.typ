@@ -11,7 +11,7 @@
   _validate-bool,
   _validate-offset,
 )
-#import "../chemistry.typ": _compute-layout
+#import "../molecule/abbreviations.typ": _abbreviated-layout, _orient-abbreviation-labels
 #import "../styles.typ": _resolve-foreground-theme
 #import "../molecule/rendering.typ": _mirror-layout, _draw-molecule
 #import "../molecule/api.typ": smiles, _typst-rotate
@@ -268,10 +268,18 @@
         )
       }
       let (width, height, kind, payload) = if type(molecule-item.spec) == str {
-        let molecule-layout = _mirror-layout(
-          _compute-layout(molecule-item.spec),
-          molecule-item.opts.at("mirror", default: none),
-          rotation: molecule-item.opts.at("rotation", default: 0deg),
+        let molecule-rotation = molecule-item.opts.at("rotation", default: 0deg)
+        let molecule-layout = _orient-abbreviation-labels(
+          _mirror-layout(
+            _abbreviated-layout(
+              molecule-item.spec,
+              molecule-item.opts.at("abbreviate", default: none),
+              "mol abbreviate",
+            ),
+            molecule-item.opts.at("mirror", default: none),
+            rotation: molecule-rotation,
+          ),
+          molecule-rotation,
         )
         (molecule-layout.bbox_width, molecule-layout.bbox_height, "mol", molecule-layout)
       } else {
