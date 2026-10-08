@@ -1,3 +1,4 @@
+mod abbreviation;
 mod alignment;
 #[cfg(test)]
 mod conformance_tests;
@@ -184,6 +185,30 @@ mod wasm_entrypoint {
         serde_json::to_vec(&layout).map_err(|error| format!("JSON error: {error}"))
     }
 
+    /// Called from Typst as `smiles-plugin.layout_abbreviated(bytes(smiles-str),
+    /// bytes(request))`, where the request is `all` or comma-separated
+    /// catalogue names. Returns JSON-encoded `LayoutOutput` in original atom
+    /// indices, with matched terminal groups drawn as labels.
+    #[wasm_func]
+    pub fn layout_abbreviated(smiles: &[u8], request: &[u8]) -> Result<Vec<u8>, String> {
+        let smiles =
+            core::str::from_utf8(smiles).map_err(|error| format!("UTF-8 error: {error}"))?;
+        let request =
+            core::str::from_utf8(request).map_err(|error| format!("UTF-8 error: {error}"))?;
+        let definitions = abbreviation::requested_definitions(request)?;
+        let molecule = parse_molecule(smiles)?;
+        let layout = abbreviation::layout_with_abbreviations(&molecule, &definitions)?;
+        serde_json::to_vec(&layout).map_err(|error| format!("JSON error: {error}"))
+    }
+
+    /// Catalogue names accepted by `layout_abbreviated`, as a JSON array in
+    /// priority order.
+    #[wasm_func]
+    pub fn abbreviation_names() -> Result<Vec<u8>, String> {
+        serde_json::to_vec(&abbreviation::catalogue_names())
+            .map_err(|error| format!("JSON error: {error}"))
+    }
+
     #[wasm_func]
     pub fn substructure_matches(smiles: &[u8], pattern: &[u8]) -> Result<Vec<u8>, String> {
         let smiles =
@@ -242,6 +267,13 @@ pub fn align_molecules_native(
     request: &AlignmentRequest,
 ) -> Result<Vec<MoleculeAlignment>, String> {
     alignment::align_molecules(request)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn layout_abbreviated_native(smiles: &str, request: &str) -> Result<LayoutOutput, String> {
+    let definitions = abbreviation::requested_definitions(request)?;
+    let molecule = parse_molecule(smiles)?;
+    abbreviation::layout_with_abbreviations(&molecule, &definitions)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

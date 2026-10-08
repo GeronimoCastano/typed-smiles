@@ -229,6 +229,15 @@
       "Use show-h: \"all\" or atom indices for aligned molecules.",
     )
   }
+  let abbreviate = options.at("abbreviate", default: none)
+  if abbreviate != none {
+    _invalid-input(
+      input-context + " abbreviate",
+      "automatic abbreviations change the layout that the alignment was computed for, got "
+        + repr(abbreviate),
+      "Remove abbreviate from aligned molecules, or draw the series without align-molecules().",
+    )
+  }
   let drawing-options = options
   drawing-options.insert("rotation", aligned-molecule.rotation)
   drawing-options.insert("mirror", aligned-molecule.mirror)

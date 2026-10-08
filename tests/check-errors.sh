@@ -135,5 +135,29 @@ expect_error "grid-scaffold-single" "alignment needs at least two molecules"
 expect_error "grid-scaffold-content" "scaffold alignment needs a SMILES molecule"
 expect_error "grid-scaffold-rotation" "the grid scaffold sets each molecule's orientation"
 expect_error "grid-scaffold-absent" "does not occur in molecule 0"
+# Typst escapes quotation marks in panic messages, so quoted values appear as \".
+expect_error "abbreviate-wrong-type" 'smiles abbreviate is invalid: expected none, \"all\", a group name, or an array of group names, got true'
+expect_error "abbreviate-unknown-group" 'smiles abbreviate is invalid: unknown group \"Boc\". Available groups are \"tBu\", \"CF3\", \"NO2\", \"CN\", \"OEt\", \"OMe\", \"Ac\".'
+expect_error "abbreviate-wrong-case" "Group names are case-sensitive"
+expect_error "abbreviate-duplicate-group" 'group \"OMe\" is listed more than once'
+expect_error "abbreviate-all-in-list" '\"all\" appears inside a list of group names'
+expect_error "abbreviate-absent-group" 'smiles abbreviate group \"CF3\" is invalid: no terminal CF3 group in \"CCO\" can be drawn as a label'
+expect_error "abbreviate-expanded-group" "Groups with isotopes, atom maps, stereo marks, unexpected charges, or bracket hydrogens stay expanded"
+expect_error "abbreviate-mapped-group" 'smiles abbreviate group \"OMe\" is invalid: no terminal OMe group in \"[CH3:1]Oc1ccccc1\" can be drawn as a label'
+expect_error "abbreviate-lower-priority-group" 'smiles abbreviate group \"Ac\" is invalid'
+expect_error "abbreviate-hidden-arrow-atom" "atom 0 is hidden inside the automatic abbreviation OMe (atoms 0, 1)"
+expect_error "abbreviate-hidden-highlight-bond" 'Reference the labeled attachment atom 1 instead, or remove \"OMe\" from abbreviate'
+expect_error "abbreviate-hidden-smarts-match" "is hidden inside the automatic abbreviation NO2"
+expect_error "abbreviate-hidden-annotation" "atom-annotations atom index is invalid: atom 0 is hidden inside the automatic abbreviation CF3"
+expect_error "abbreviate-hidden-bond-customization" "bond-customizations first atom index is invalid: atom 0 is hidden"
+expect_error "abbreviate-hidden-show-h" "show-h atom index is invalid: atom 0 is hidden inside the automatic abbreviation OEt"
+expect_error "abbreviate-label-show-h" "1 is drawn as the automatic abbreviation tBu, which shows no hydrogens"
+expect_error "abbreviate-label-lone-pair" "is drawn as the automatic abbreviation OMe, which has no addressable lone pairs"
+expect_error "mol-abbreviate-unknown-group" 'mol abbreviate is invalid: unknown group \"Me\"'
+expect_error "mol-abbreviate-hidden-atom" "in species 0 is invalid: atom 0 is hidden inside the automatic abbreviation OMe"
+expect_error "cetz-abbreviate-unknown-group" 'smiles-cetz abbreviate is invalid: unknown group \"Et\"'
+expect_error "aligned-abbreviate" "smiles abbreviate is invalid: automatic abbreviations change the layout that the alignment was computed for"
+expect_error "aligned-mol-abbreviate" "mol abbreviate is invalid: automatic abbreviations change the layout"
+expect_error "grid-scaffold-abbreviate" "abbreviate is invalid: automatic abbreviations change the layout"
 
 echo "All editor-visible validation cases passed."

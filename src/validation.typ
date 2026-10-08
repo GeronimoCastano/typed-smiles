@@ -125,6 +125,37 @@
   }
 }
 
+// The automatic abbreviation a layout atom belongs to, or none.
+#let _abbreviation-group-of(layout, atom-index) = {
+  let group-index = layout.atoms.at(atom-index).at("abbreviation_group", default: none)
+  if group-index == none { none } else { layout.abbreviation_groups.at(group-index) }
+}
+
+// An atom hidden inside an automatic abbreviation has no drawn position of its
+// own, so a reference to it is rejected rather than moved onto the label.
+#let _reject-contracted-atom(layout, atom-index, input-context) = {
+  if not layout.atoms.at(atom-index).at("contracted", default: false) {
+    return
+  }
+  let group = _abbreviation-group-of(layout, atom-index)
+  _invalid-input(
+    input-context,
+    "atom "
+      + str(atom-index)
+      + " is hidden inside the automatic abbreviation "
+      + group.name
+      + " (atoms "
+      + group.atoms.map(str).join(", ")
+      + ")",
+    "Reference the labeled attachment atom "
+      + str(group.attachment_atom)
+      + " instead, or remove "
+      + repr(group.name)
+      + " from abbreviate to draw the group in full."
+      + " Matches from highlight-smarts and highlight-groups count as references.",
+  )
+}
+
 #let _validate-named-arguments(arguments, allowed, input-context) = {
   for argument-name in arguments.named().keys() {
     if argument-name not in allowed {
@@ -254,6 +285,8 @@
           _available-index-description(atom-count),
         )
       }
+      _reject-contracted-atom(layout, first-atom-index, "bond-customizations first atom index")
+      _reject-contracted-atom(layout, second-atom-index, "bond-customizations second atom index")
       let matching-bonds = layout.bonds.filter(bond-output => (
         not bond-output.at("virtual_bond", default: false)
           and (
@@ -438,6 +471,19 @@
         "Reference its parent atom instead.",
       )
     }
+    _reject-contracted-atom(layout, atom-index, "show-h atom index")
+    let group = _abbreviation-group-of(layout, atom-index)
+    if group != none {
+      _invalid-input(
+        "show-h atom index",
+        str(atom-index)
+          + " is drawn as the automatic abbreviation "
+          + group.name
+          + ", which shows no hydrogens",
+        "Remove " + str(atom-index) + " from show-h, or remove "
+          + repr(group.name) + " from abbreviate.",
+      )
+    }
   }
   if lone-pairs != none and lone-pairs not in ("dots", "lines") {
     _invalid-input(
@@ -485,6 +531,7 @@
         "Reference its parent atom instead.",
       )
     }
+    _reject-contracted-atom(layout, annotation.index, "atom-annotations atom index")
   }
   let _ = _opacity-ratio(opacity, "opacity")
   let _ = _normalize-bond-customizations(

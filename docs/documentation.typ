@@ -274,6 +274,7 @@ call site. See @sec-library for every entry.]
     lone-pairs: none,
     atom-colors: (:),
     show-indices: false,
+    abbreviate: none,
   )
   ```
 ]
@@ -304,6 +305,7 @@ call site. See @sec-library for every entry.]
   [#c("bond-customizations")], [`array`], [`()`], [Per-bond style overrides as #c("(bond(i, j), (..options..))") pairs; options are #c("color"), #c("stroke"), and #c("opacity").],
   [#c("lone-pairs")], [`none` / `"dots"` / `"lines"`], [`none`], [Draw optional non-bonding electron pairs on skeletal atom labels.],
   [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
+  [#c("abbreviate")], [`none` / `"all"` / `str` / `array`], [`none`], [Draw catalogue terminal groups (#c("\"tBu\""), #c("\"CF3\""), #c("\"NO2\""), #c("\"CN\""), #c("\"OEt\""), #c("\"OMe\""), #c("\"Ac\"")) as labels. See @sec-auto-abbrev.],
   [#c("show-maps")], [`bool`], [`false`], [Label atoms carrying an atom map such as #c("[CH3:7]") with #c(":7"). See @sec-atom-maps.],
   [#c("undepicted-stereo")], [`"error"` / `"omit"`], [`"error"`], [Report written stereochemistry the drawing cannot show, or draw the structure without it. See @sec-undepicted-stereo.],
 )
@@ -1267,6 +1269,93 @@ coincide.]
   plain style field must remain before both.
 ]
 
+== Automatic abbreviations <sec-auto-abbrev>
+
+#demo[
+  Write the full structure and let #c("abbreviate") draw common terminal groups
+  as labels. Pass catalogue names, or #c("\"all\"") for every catalogue group
+  that occurs. Groups are recognized from the molecular structure, not the
+  SMILES text, so any atom order that encodes the same molecule gives the same
+  drawing.
+
+  #example(```typ
+  #smiles(
+    "COc1ccc(C(F)(F)F)cc1",
+    abbreviate: ("OMe", "CF3"),
+  )
+  #smiles(
+    "CC(=O)Nc1ccc(cc1)[N+](=O)[O-]",
+    abbreviate: "all",
+  )
+  ```)
+]
+
+#table(
+  columns: (auto, 1fr, auto), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Name*], [*Matched terminal group*], [*Labels*],
+  [#c("\"tBu\"")], [Quaternary carbon carrying three methyl groups], [tBu],
+  [#c("\"CF3\"")], [Carbon carrying three fluorines], [CF#sub[3] / F#sub[3]C],
+  [#c("\"NO2\"")], [Nitro group, written #c("[N+](=O)[O-]") or #c("N(=O)=O")], [NO#sub[2] / O#sub[2]N],
+  [#c("\"CN\"")], [Nitrile carbon triple-bonded to nitrogen], [CN / NC],
+  [#c("\"OEt\"")], [Oxygen carrying an ethyl group], [OEt / EtO],
+  [#c("\"OMe\"")], [Oxygen carrying a methyl group], [OMe / MeO],
+  [#c("\"Ac\"")], [Carbonyl carbon carrying a methyl group], [Ac],
+)
+
+Each group attaches to the rest of the molecule through one single bond. The
+label reads away from the molecule; when its bond leaves toward the right after
+#c("rotation") and #c("mirror"), it reads toward the bond instead (MeO, F#sub[3]C).
+
+#demo[
+  *What stays expanded.* A label must not hide meaning it cannot show, so a
+  group stays drawn in full when any of its atoms carries an isotope, an atom
+  map, a stereo mark, an unexpected charge, a bracket hydrogen count, or a
+  #c("{label}"), or
+  when an internal bond carries a direction or drawing extension. The
+  attachment bond itself may carry stereo marks; stereocenters next to a label
+  keep their configuration.
+
+  *Overlaps.* When candidates share atoms, the catalogue order of the table
+  decides, whatever order the request lists: OEt wins over OMe in an ethyl
+  methyl ether, and OMe over Ac in a methyl ester. A group never attaches to
+  another automatic label. A group named explicitly must be drawn at least
+  once, or the call fails; #c("\"all\"") silently skips absent groups.
+
+  #example(```typ
+  #smiles("COC(C)=O", abbreviate: "all")
+  #smiles("[13CH3]Oc1ccc(OC)cc1", abbreviate: "all")
+  ```)
+]
+
+#demo[
+  *References.* Atom indices are unchanged by contraction, and a label carries
+  the index of its attachment atom: #c("atom(i)") highlights or targets the
+  whole label, and #c("show-indices") stamps it there. Atoms hidden inside a
+  label cannot be referenced — an #c("arrow()"), #c("highlight()"),
+  #c("atom-annotations"), #c("bond-customizations"), or #c("show-h") entry that
+  addresses one is an error, and so is a #c("highlight-smarts") or
+  #c("highlight-groups") match that covers one. Remove the group from
+  #c("abbreviate") to address its atoms. Labels show no hydrogens or lone pairs.
+
+  #example(```typ
+  #smiles(
+    "COc1ccc(cc1)[N+](=O)[O-]",
+    abbreviate: "all",
+    show-indices: true,
+    highlight(atom(8)),
+  )
+  ```)
+]
+
+#note[Formulas and masses always use the full structure:
+#c("mol-formula") and #c("mol-weight") take the same SMILES string and ignore
+the drawing. #c("atom-colors") keys such as #c("\"{OMe}\"") color an automatic
+label in both reading directions. #c("mol()"), #c("smiles-inline()"), and
+#c("smiles-cetz()") accept #c("abbreviate") too; #c("smiles-cetz()") registers
+no #c("atom-<i>") anchor for hidden atoms.]
+
 // ═════════════════════════════════════════════════════════════════════════════
 = Chemical formulas: #raw("ce()")
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1434,7 +1523,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   molecules accept common drawing options such as #c("scale"), #c("font-size"),
   #c("font"), #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-h"),
   #c("lone-pairs"), #c("opacity"), #c("bond-customizations"), #c("atom-colors"),
-  and #c("show-indices"). #c("offset") nudges the molecule in page coordinates, in
+  #c("show-indices"), and #c("abbreviate"). #c("offset") nudges the molecule in page coordinates, in
   bond-length units: positive x moves right and positive y moves up regardless
   of #c("reaction(flow:)"). Positional #c("arrow()") and #c("highlight()")
   annotations use local one-molecule references, so #c("atom(i)") and
@@ -2230,7 +2319,8 @@ stereochemistry is unchanged. Because an aligned molecule already carries its
 orientation, #c("rotation") and #c("mirror") cannot be passed again with it;
 turn the whole series through #c("align-molecules()") instead.
 #c("show-h: \"skeleton\"") redraws carbon chains and is not available for
-aligned molecules.
+aligned molecules, and neither is #c("abbreviate"), which lays out a contracted
+structure that the alignment was not computed for.
 
 == Compound grids: #raw("molecule-grid()")
 
@@ -2440,6 +2530,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("lone-pairs")], [`none`], [Draw lone pairs as #c("\"dots\"") or #c("\"lines\"").],
   [#c("atom-colors")], [`(:)`], [Color overrides: #c("O: red") for elements, #c("\"{PPh3}\": blue") for labels.],
   [#c("show-indices")], [`false`], [Stamp atom indices for writing references.],
+  [#c("abbreviate")], [`none`], [Catalogue group names, or #c("\"all\""), to draw as labels.],
   [#c("show-maps")], [`false`], [Label mapped atoms such as #c("[CH3:7]") with #c(":7").],
   [#c("undepicted-stereo")], [`"error"`], [Stereochemistry the drawing cannot show: report it, or #c("\"omit\"") it.],
   [#c("highlight-smarts")], [`()`], [SMARTS string, #c("(pattern:, include-atoms:)") dictionary, or tuple mixing both.],

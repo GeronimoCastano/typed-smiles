@@ -60,6 +60,14 @@ pub struct AtomOutput {
     /// bonds; they only appear in show-indices overlays and arrow endpoints.
     #[serde(default)]
     pub virtual_h: bool,
+    /// True for an atom hidden inside an automatic abbreviation label. Its
+    /// position is the label's position; the renderer never draws it.
+    #[serde(default)]
+    pub contracted: bool,
+    /// Index into `LayoutOutput::abbreviation_groups` for every atom an
+    /// automatic abbreviation stands for, including the atom carrying the label.
+    #[serde(default)]
+    pub abbreviation_group: Option<usize>,
 }
 
 /// A bond between two atoms by their index in `LayoutOutput::atoms`.
@@ -104,6 +112,36 @@ pub struct AromaticRing {
     pub center: Vec2,
     /// Circle radius in bond-length units.
     pub radius: f64,
+}
+
+/// A terminal group drawn as one automatic abbreviation label. Atom indices
+/// refer to the original SMILES atoms, so references keep their meaning
+/// whether or not the group is contracted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AbbreviationGroupOutput {
+    /// Catalogue name, e.g. "OMe".
+    pub name: String,
+    /// The group atom bonded to the rest of the molecule; it carries the label.
+    pub attachment_atom: usize,
+    /// The atom outside the group that the attachment atom is bonded to.
+    pub external_atom: usize,
+    /// Every atom the label stands for, including the attachment atom, ascending.
+    pub atoms: Vec<usize>,
+    /// Bonds hidden inside the label, as atom-index pairs.
+    pub bonds: Vec<[usize; 2]>,
+    /// Label read with the rest of the molecule on its left, e.g. "OMe".
+    pub label: AbbreviationLabelOutput,
+    /// Label read with the rest of the molecule on its right, e.g. "MeO".
+    pub reversed_label: AbbreviationLabelOutput,
+}
+
+/// Abbreviation label text in the `{label}` script notation, plus the glyph
+/// that sits on the attachment atom (`anchor_len` zero centers the label).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AbbreviationLabelOutput {
+    pub text: String,
+    pub anchor: usize,
+    pub anchor_len: usize,
 }
 
 /// 2D coordinate pair in layout-space units (1 unit = 1 bond length).
@@ -207,6 +245,9 @@ pub struct LayoutOutput {
     /// reports them unless the document opts out with `undepicted-stereo`.
     #[serde(default)]
     pub undepicted_stereo: Vec<UndepictedStereoOutput>,
+    /// Terminal groups drawn as automatic abbreviation labels.
+    #[serde(default)]
+    pub abbreviation_groups: Vec<AbbreviationGroupOutput>,
     /// Bounding box dimensions in bond-length units (for auto-scaling in Typst).
     pub bbox_width: f64,
     pub bbox_height: f64,

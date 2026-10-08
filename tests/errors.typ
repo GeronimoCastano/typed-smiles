@@ -1,4 +1,5 @@
 #import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, molecules, substructure-matches, align-molecules, molecule-grid, smiles-cetz
+#import "@preview/cetz:0.5.2"
 
 #let selected-case = sys.inputs.at("case", default: "")
 
@@ -236,6 +237,59 @@
   molecule-grid(scaffold: "CC", "CCO", mol("CCN", rotation: 30deg))
 } else if selected-case == "grid-scaffold-absent" {
   molecule-grid(scaffold: "c1ccccc1", "CCO", "CCN")
+} else if selected-case == "abbreviate-wrong-type" {
+  smiles("COc1ccccc1", abbreviate: true)
+} else if selected-case == "abbreviate-unknown-group" {
+  smiles("COc1ccccc1", abbreviate: ("OMe", "Boc"))
+} else if selected-case == "abbreviate-wrong-case" {
+  smiles("COc1ccccc1", abbreviate: "ome")
+} else if selected-case == "abbreviate-duplicate-group" {
+  smiles("COc1ccccc1", abbreviate: ("OMe", "OMe"))
+} else if selected-case == "abbreviate-all-in-list" {
+  smiles("COc1ccccc1", abbreviate: ("all", "OMe"))
+} else if selected-case == "abbreviate-absent-group" {
+  smiles("CCO", abbreviate: "CF3")
+} else if selected-case == "abbreviate-expanded-group" {
+  smiles("[13CH3]Oc1ccccc1", abbreviate: "OMe")
+} else if selected-case == "abbreviate-lower-priority-group" {
+  smiles("COC(C)=O", abbreviate: ("OMe", "Ac"))
+} else if selected-case == "abbreviate-hidden-arrow-atom" {
+  smiles("COc1ccccc1", abbreviate: "OMe", arrow(from: atom(0), to: atom(3)))
+} else if selected-case == "abbreviate-hidden-highlight-bond" {
+  smiles("COc1ccccc1", abbreviate: "OMe", highlight(bond(0, 1)))
+} else if selected-case == "abbreviate-hidden-smarts-match" {
+  smiles("[O-][N+](=O)c1ccccc1", abbreviate: "NO2", highlight-groups: "nitro")
+} else if selected-case == "abbreviate-hidden-annotation" {
+  smiles("FC(F)(F)c1ccccc1", abbreviate: "CF3", atom-annotations: ((0, [F]),))
+} else if selected-case == "abbreviate-hidden-bond-customization" {
+  smiles("FC(F)(F)c1ccccc1", abbreviate: "CF3", bond-customizations: ((bond(0, 1), (color: red)),))
+} else if selected-case == "abbreviate-hidden-show-h" {
+  smiles("CCOc1ccccc1", abbreviate: "OEt", show-h: 0)
+} else if selected-case == "abbreviate-label-show-h" {
+  smiles("CC(C)(C)c1ccccc1", abbreviate: "tBu", show-h: (1,))
+} else if selected-case == "abbreviate-label-lone-pair" {
+  smiles("COc1ccccc1", abbreviate: "OMe", arrow(from: lp(1), to: atom(2)))
+} else if selected-case == "mol-abbreviate-unknown-group" {
+  reaction(mol("COc1ccccc1", abbreviate: "Me"))
+} else if selected-case == "mol-abbreviate-hidden-atom" {
+  reaction(
+    mol("COc1ccccc1", abbreviate: "OMe"),
+    rxn-arrow(),
+    mol("Oc1ccccc1"),
+    arrow(from: atom(0, 0), to: atom(1, 0)),
+  )
+} else if selected-case == "cetz-abbreviate-unknown-group" {
+  cetz.canvas(smiles-cetz("COc1ccccc1", abbreviate: "Et"))
+} else if selected-case == "abbreviate-mapped-group" {
+  smiles("[CH3:1]Oc1ccccc1", abbreviate: "OMe")
+} else if selected-case == "aligned-abbreviate" {
+  let aligned = align-molecules(("COc1ccccc1", "COc1ccccc1C"), scaffold: "c1ccccc1")
+  smiles(aligned.at(0), abbreviate: "OMe")
+} else if selected-case == "aligned-mol-abbreviate" {
+  let aligned = align-molecules(("COc1ccccc1", "COc1ccccc1C"), scaffold: "c1ccccc1")
+  reaction(mol(aligned.at(1), abbreviate: "all"))
+} else if selected-case == "grid-scaffold-abbreviate" {
+  molecule-grid(scaffold: "c1ccccc1", "COc1ccccc1", mol("COc1ccccc1C", abbreviate: "OMe"))
 } else {
   panic("unknown validation test case: " + selected-case)
 }

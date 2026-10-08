@@ -12,6 +12,8 @@
   _validate-bool,
   _validate-offset,
   _validate-index,
+  _abbreviation-group-of,
+  _reject-contracted-atom,
   _available-index-description,
 )
 #import "../molecule/rendering.typ": _label-anchor-offset, _abbreviation-label
@@ -251,6 +253,11 @@
           + " Enable show-indices: true to inspect this molecule.",
       )
     }
+    _reject-contracted-atom(
+      layout,
+      atom-index,
+      input-context + " in species " + str(species-index),
+    )
   }
 
   if kind == "bond" {
@@ -289,6 +296,20 @@
       let pair-index = reference.at("pair", default: none)
       _validate-index(pair-index, input-context + " pair index")
       let pair-count = layout.atoms.at(atom-index).at("lone_pairs", default: 0)
+      let group = _abbreviation-group-of(layout, atom-index)
+      if pair-count == 0 and group != none {
+        _invalid-input(
+          input-context,
+          "atom "
+            + str(atom-index)
+            + " in species "
+            + str(species-index)
+            + " is drawn as the automatic abbreviation "
+            + group.name
+            + ", which has no addressable lone pairs",
+          "Remove " + repr(group.name) + " from abbreviate to address the expanded atom's lone pairs.",
+        )
+      }
       if pair-count == 0 {
         _invalid-input(
           input-context,

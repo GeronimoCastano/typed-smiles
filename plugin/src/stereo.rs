@@ -35,11 +35,15 @@ pub(crate) struct StereoDepiction {
     pub undepicted: Vec<UndepictedStereo>,
 }
 
+/// `document_atom_indices[i]` is the index the document uses for atom `i`;
+/// diagnostics name atoms by it, since a display graph may omit atoms of the
+/// molecule the document wrote.
 pub(crate) fn depict_stereo(
     molecule: &MoleculeGraph,
     coordinates: &[Vec2],
     rings: &[Vec<usize>],
     ring_bonds: &HashSet<usize>,
+    document_atom_indices: &[usize],
 ) -> StereoDepiction {
     let mut depiction = StereoDepiction {
         bond_stereo: molecule.bonds.iter().map(|bond| bond.stereo).collect(),
@@ -75,7 +79,10 @@ pub(crate) fn depict_stereo(
         if let Err(reason) = outcome {
             depiction.undepicted.push(UndepictedStereo {
                 atom: center,
-                reason: format!("{}: {reason}", describe_stereo_atom(molecule, center)),
+                reason: format!(
+                    "{}: {reason}",
+                    describe_stereo_atom(molecule, center, document_atom_indices)
+                ),
             });
         }
     }
@@ -84,18 +91,24 @@ pub(crate) fn depict_stereo(
         molecule,
         coordinates,
         rings,
+        document_atom_indices,
         &mut depiction.undepicted,
     );
     depiction
 }
 
-fn describe_stereo_atom(molecule: &MoleculeGraph, atom_index: usize) -> String {
+fn describe_stereo_atom(
+    molecule: &MoleculeGraph,
+    atom_index: usize,
+    document_atom_indices: &[usize],
+) -> String {
     let atom = &molecule.atoms[atom_index];
     format!(
-        "`{}` written {} at character {} (atom {atom_index})",
+        "`{}` written {} at character {} (atom {})",
         atom.written_symbol(),
         atom.chirality.notation(),
-        atom.source_position
+        atom.source_position,
+        document_atom_indices[atom_index]
     )
 }
 
@@ -489,6 +502,7 @@ fn report_undrawn_double_bond_configurations(
     molecule: &MoleculeGraph,
     coordinates: &[Vec2],
     rings: &[Vec<usize>],
+    document_atom_indices: &[usize],
     undepicted: &mut Vec<UndepictedStereo>,
 ) {
     for double_bond in molecule
@@ -529,8 +543,8 @@ fn report_undrawn_double_bond_configurations(
                 from_atom.source_position,
                 to_atom.written_symbol(),
                 to_atom.source_position,
-                double_bond.from,
-                double_bond.to,
+                document_atom_indices[double_bond.from],
+                document_atom_indices[double_bond.to],
                 small_ring_trans_advice(molecule, rings, double_bond.from, double_bond.to)
             ),
         });
