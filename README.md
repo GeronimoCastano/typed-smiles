@@ -1029,6 +1029,13 @@ match an independent RDKit search. The
 [fixture notes](https://github.com/GeronimoCastano/typed-smiles/blob/b031c16c2ae451d46fcd06114449066d91a9e39a/tests/fixtures/README.md)
 list the sources and scope.
 
+SMILES reading and stereochemistry are checked against a categorized
+[conformance corpus](https://github.com/GeronimoCastano/typed-smiles/blob/1912d865eb1f514c64a1e99f9ed8f8b7e0d698c6/tests/fixtures/smiles-conformance.json)
+of aromatic systems, salts, isotopes, atom maps, ring closures, stereochemistry,
+cages, and macrocycles. RDKit rebuilds each accepted molecule from the drawing
+alone (coordinates, bond orders, wedges, charges, and hydrogens) and must
+recover the input's stereochemistry, including for random atom orders.
+
 ## License
 
 MIT
