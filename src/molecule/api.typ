@@ -88,6 +88,12 @@
 ///   group and include-atoms (default: true).
 /// - highlight-colors (auto / array): Palette cycled over distinct matches.
 /// - highlight-unmatched ("error" / "ignore"): Policy for absent patterns/groups.
+/// - show-maps (bool): Label atoms that carry an OpenSMILES atom map, such as
+///   the 7 in `[CH3:7]`, with ":7". Default: false.
+/// - undepicted-stereo ("error" / "omit"): What to do with written
+///   stereochemistry the drawing cannot show, such as octahedral `@OH` centers.
+///   "error" reports it; "omit" draws the structure without it.
+///   Default: "error".
 /// - ..annotations: Any number of arrow() / highlight() items referencing atoms of
 ///   this molecule (single-index form, e.g. atom(2)).
 /// -> content
@@ -116,6 +122,8 @@
   highlight-groups: (),
   highlight-colors: auto,
   highlight-unmatched: "error",
+  show-maps: false,
+  undepicted-stereo: "error",
   ..annotations
 ) = context {
   _validate-positive-number(scale, "smiles scale")
@@ -211,6 +219,8 @@
     atom-annotations,
     opacity,
     bond-customizations,
+    show-maps: show-maps,
+    undepicted-stereo: undepicted-stereo,
   )
   _validate-annotations(annotation, placed-species-list, "smiles annotation")
 
@@ -240,6 +250,8 @@
       atom-annotations: atom-annotations,
       opacity: opacity,
       bond-customizations: bond-customizations,
+      show-maps: show-maps,
+      undepicted-stereo: undepicted-stereo,
     )
     for ar in annotation {
       if type(ar) == dictionary and ar.at("__arrow__", default: false) {
@@ -325,7 +337,8 @@
 /// - ..opts: #smiles() drawing options — scale, font-size, font, bond-stroke,
 ///   color, rotation, mirror, show-h, aromatic, atom-annotations, opacity,
 ///   bond-customizations, lone-pairs, atom-colors, show-indices, highlight-smarts,
-///   highlight-groups, highlight-colors, highlight-unmatched.
+///   highlight-groups, highlight-colors, highlight-unmatched, show-maps,
+///   undepicted-stereo.
 /// -> none  (emits CeTZ draw elements)
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
@@ -377,7 +390,8 @@
   let allowed = (
     "scale", "font-size", "font", "bond-stroke", "color", "rotation",
     "show-h", "lone-pairs", "atom-colors", "show-indices", "aromatic",
-    "atom-annotations", "opacity", "bond-customizations",
+    "atom-annotations", "opacity", "bond-customizations", "show-maps",
+    "undepicted-stereo",
   )
   let drawing-options = (:)
   let highlight-options = (

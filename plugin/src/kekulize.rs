@@ -80,7 +80,17 @@ fn mark_aromatic_bonds(
 
         match bond.order {
             BondOrder::Aromatic if !endpoints_are_aromatic => {
-                return Err("Aromatic bond ':' must connect two aromatic atoms".to_string());
+                let from_atom = &molecule.atoms[bond.from];
+                let to_atom = &molecule.atoms[bond.to];
+                return Err(format!(
+                    "aromatic bond `:` between `{}` at character {} and `{}` at character {} \
+                     must join two aromatic atoms; write aromatic atoms in lowercase, or use \
+                     `-` or `=` between aliphatic atoms",
+                    from_atom.written_symbol(),
+                    from_atom.source_position,
+                    to_atom.written_symbol(),
+                    to_atom.source_position
+                ));
             }
             BondOrder::Single
                 if implicit_bonds.get(bond_index).copied().unwrap_or(false)
@@ -134,22 +144,37 @@ fn validate_aromatic_atoms_are_in_rings(molecule: &MoleculeGraph) -> Result<(), 
                 .any(|&(_, bond_index)| molecule.bonds[bond_index].order == BondOrder::Aromatic)
         {
             return Err(format!(
-                "Aromatic atom '{}' (atom {atom_index}) must be part of an aromatic ring",
-                atom.symbol.to_lowercase()
+                "aromatic atom `{}` at character {} (atom {atom_index}) is not in an aromatic \
+                 ring; lowercase symbols mark ring atoms, so write atoms outside rings in \
+                 uppercase",
+                atom.written_symbol(),
+                atom.source_position
             ));
         }
     }
     Ok(())
 }
 
-/// Normal valences of the elements that can be written aromatic.
-fn aromatic_valence(symbol: &str) -> Option<i16> {
+/// Valence electrons of the elements that can be written aromatic.
+fn aromatic_valence_electrons(symbol: &str) -> Option<i16> {
     match symbol {
         "B" => Some(3),
         "C" => Some(4),
-        "N" | "P" | "As" => Some(3),
-        "O" | "S" | "Se" => Some(2),
+        "N" | "P" | "As" => Some(5),
+        "O" | "S" | "Se" => Some(6),
         _ => None,
+    }
+}
+
+/// Normal valence of a possibly charged atom, taken from the neutral atom with
+/// the same number of valence electrons: N+ behaves like carbon (4), a
+/// carbocation C+ like boron (3), and a carbanion C- like nitrogen (3).
+fn normal_valence(valence_electrons: i16, charge: i8) -> i16 {
+    let charged_valence_electrons = valence_electrons - i16::from(charge);
+    if charged_valence_electrons <= 4 {
+        charged_valence_electrons
+    } else {
+        8 - charged_valence_electrons
     }
 }
 
@@ -164,7 +189,7 @@ fn aromatic_atom_needs_double_bond(molecule: &MoleculeGraph, atom_index: usize) 
     if !atom.aromatic {
         return false;
     }
-    let Some(valence) = aromatic_valence(&atom.symbol) else {
+    let Some(valence_electrons) = aromatic_valence_electrons(&atom.symbol) else {
         return false;
     };
     let sigma_bond_order: i16 = molecule.adj[atom_index]
@@ -176,7 +201,7 @@ fn aromatic_atom_needs_double_bond(molecule: &MoleculeGraph, atom_index: usize) 
             BondOrder::Quadruple => 4,
         })
         .sum();
-    valence + atom.charge as i16 - atom.hcount as i16 - sigma_bond_order >= 1
+    normal_valence(valence_electrons, atom.charge) - atom.hcount as i16 - sigma_bond_order >= 1
 }
 
 fn assign_aromatic_double_bonds(molecule: &mut MoleculeGraph) -> Result<(), String> {
@@ -191,18 +216,26 @@ fn assign_aromatic_double_bonds(molecule: &mut MoleculeGraph) -> Result<(), Stri
         .collect();
     let mut matched_partner = vec![None; atom_count];
 
-    if !find_aromatic_matching(
-        molecule,
-        &requires_double_bond,
-        &can_accept_double_bond,
-        &mut matched_partner,
-        0,
-    ) {
-        return Err(
-            "Cannot kekulize aromatic system: no valid alternating double-bond assignment \
-             exists (check hydrogen counts, e.g. pyrrole is c1cc[nH]c1)"
-                .to_string(),
-        );
+    // Separate aromatic systems are matched independently, so a failure names
+    // the system that cannot alternate and the search never mixes systems.
+    for aromatic_system in aromatic_systems(molecule) {
+        if !find_aromatic_matching(
+            molecule,
+            &aromatic_system,
+            &requires_double_bond,
+            &can_accept_double_bond,
+            &mut matched_partner,
+            0,
+        ) {
+            let first_atom = &molecule.atoms[aromatic_system[0]];
+            return Err(format!(
+                "cannot assign alternating double bonds to the aromatic ring system starting \
+                 with `{}` at character {}; check the hydrogens on aromatic nitrogen and the \
+                 ring size, e.g. pyrrole is c1cc[nH]c1",
+                first_atom.written_symbol(),
+                first_atom.source_position
+            ));
+        }
     }
 
     for (atom_index, partner) in matched_partner.iter().copied().enumerate() {
@@ -226,22 +259,54 @@ fn assign_aromatic_double_bonds(molecule: &mut MoleculeGraph) -> Result<(), Stri
     Ok(())
 }
 
-/// Backtracking search for a matching that pairs every atom in `needs` with an
-/// aromatic-bonded partner. Aromatic systems are small, so exhaustive search
-/// with backtracking is fast enough.
+/// Atoms joined by aromatic bonds, one ascending list per connected system.
+fn aromatic_systems(molecule: &MoleculeGraph) -> Vec<Vec<usize>> {
+    let mut visited = vec![false; molecule.n_atoms()];
+    let mut systems = Vec::new();
+    for start in 0..molecule.n_atoms() {
+        let has_aromatic_bond = molecule.adj[start]
+            .iter()
+            .any(|&(_, bond_index)| molecule.bonds[bond_index].order == BondOrder::Aromatic);
+        if visited[start] || !has_aromatic_bond {
+            continue;
+        }
+        let mut system = Vec::new();
+        let mut pending_atoms = vec![start];
+        visited[start] = true;
+        while let Some(atom_index) = pending_atoms.pop() {
+            system.push(atom_index);
+            for &(neighbor, bond_index) in &molecule.adj[atom_index] {
+                if molecule.bonds[bond_index].order == BondOrder::Aromatic && !visited[neighbor] {
+                    visited[neighbor] = true;
+                    pending_atoms.push(neighbor);
+                }
+            }
+        }
+        system.sort_unstable();
+        systems.push(system);
+    }
+    systems
+}
+
+/// Backtracking search for a matching that pairs every atom of one aromatic
+/// system that needs a double bond with an aromatic-bonded partner. `next`
+/// indexes `system`, which lists the system's atoms in ascending order.
 fn find_aromatic_matching(
     molecule: &MoleculeGraph,
+    system: &[usize],
     requires_double_bond: &[bool],
     can_accept_double_bond: &[bool],
     matched_partner: &mut [Option<usize>],
-    start: usize,
+    next: usize,
 ) -> bool {
-    let unmatched_atom = (start..requires_double_bond.len()).find(|&atom_index| {
+    let unmatched_position = (next..system.len()).find(|&position| {
+        let atom_index = system[position];
         requires_double_bond[atom_index] && matched_partner[atom_index].is_none()
     });
-    let Some(atom_index) = unmatched_atom else {
+    let Some(position) = unmatched_position else {
         return true;
     };
+    let atom_index = system[position];
 
     for &(neighbor, bond_index) in &molecule.adj[atom_index] {
         if molecule.bonds[bond_index].order != BondOrder::Aromatic
@@ -255,10 +320,11 @@ fn find_aromatic_matching(
         matched_partner[neighbor] = Some(atom_index);
         if find_aromatic_matching(
             molecule,
+            system,
             requires_double_bond,
             can_accept_double_bond,
             matched_partner,
-            atom_index + 1,
+            position + 1,
         ) {
             return true;
         }

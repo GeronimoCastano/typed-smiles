@@ -256,14 +256,14 @@ impl Parser<'_> {
         // Consume a second letter only for a valid element (Cc means C then c).
         if let Some(second) = self.peek().filter(u8::is_ascii_lowercase) {
             let candidate = format!("{symbol}{}", second as char);
-            if Element::from_symbol(&candidate).is_some()
+            if crate::element_from_symbol(&candidate).is_some()
                 && (!aromatic || matches!(candidate.as_str(), "As" | "Se"))
             {
                 symbol = candidate;
                 self.pos += 1;
             }
         }
-        if Element::from_symbol(&symbol).is_none()
+        if crate::element_from_symbol(&symbol).is_none()
             || (aromatic
                 && !matches!(
                     symbol.as_str(),
@@ -310,7 +310,8 @@ impl Parser<'_> {
         if let (Some(first), Some(&second)) = (self.peek(), self.input.get(self.pos + 1)) {
             if first.is_ascii_uppercase()
                 && second.is_ascii_lowercase()
-                && Element::from_symbol(&format!("{}{}", first as char, second as char)).is_some()
+                && crate::element_from_symbol(&format!("{}{}", first as char, second as char))
+                    .is_some()
             {
                 return self.element();
             }
@@ -436,7 +437,7 @@ impl Matcher<'_> {
             AtomQuery::Element(symbol, aromatic) => {
                 atom.symbol == *symbol && atom.aromatic == *aromatic
             }
-            AtomQuery::AtomicNumber(number) => Element::from_symbol(&atom.symbol)
+            AtomQuery::AtomicNumber(number) => crate::element_from_symbol(&atom.symbol)
                 .is_some_and(|element| element.get_atomic_number() == *number),
             AtomQuery::Aromatic(aromatic) => atom.symbol != "*" && atom.aromatic == *aromatic,
             AtomQuery::Hydrogens(count) => {

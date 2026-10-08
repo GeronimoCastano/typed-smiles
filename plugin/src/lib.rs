@@ -1,603 +1,36 @@
+#[cfg(test)]
+mod conformance_tests;
 mod error;
 mod graph;
 mod kekulize;
+mod label;
 mod layout;
+mod parser;
+#[cfg(test)]
+mod performance_tests;
 mod render;
+mod stereo;
 mod substructure;
 
 pub use render::LayoutOutput;
 pub use substructure::SubstructureMatch;
 
-use graph::{BondMarker, BondMarkerStyle, BondOrder, MoleculeGraph};
+use graph::MoleculeGraph;
 use layout::compute_layout;
 use ptable::Element;
 use std::collections::BTreeMap;
-use std::iter::Peekable;
-use std::str::Chars;
-
-// ── SMILES preprocessing ─────────────────────────────────────────────────────
-//
-// Rewrites the input into the subset of SMILES that smiles-parser accepts and
-// collects side-channel data the parser cannot carry:
-//
-//   {label}  →  [*]   Abbreviated group (e.g. {PPh3}, {OEt}).
-//                     The Nth [*] atom in the output gets abbrev = the Nth label.
-//                     A `>` marker inside the label selects the attachment glyph.
-//   c, n, …  →  C, N  Unbracketed aromatic atoms are uppercased (the parser
-//                     only accepts aliphatic organic-subset symbols); a marker
-//                     records which atoms were aromatic so the graph stage can
-//                     kekulize. Bracket aromatics ([nH], [se]) parse natively.
-//
-// The cleaned string is valid parser input; extensions are stripped out.
-
-pub(crate) struct PreprocessedSmiles {
-    pub smiles: String,
-    /// Labels in the order they appeared, one per {label} token.
-    pub abbrev_labels: Vec<AbbreviationLabel>,
-    /// One entry for each `/` or `\` token in `smiles`, recording whether it
-    /// is plain SMILES or which typed-smiles bond/layout extension it carries.
-    pub forced_direction_markers: Vec<BondMarker>,
-    /// One flag per unbracketed organic-subset atom token in `smiles`, in
-    /// writing order. `true` means the atom was written lowercase (aromatic).
-    pub aromatic_atom_markers: Vec<bool>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct AbbreviationLabel {
-    pub text: String,
-    pub style: String,
-    pub anchor: usize,
-    pub anchor_len: usize,
-    /// Explicit non-bonding electron-pair count from an inline `lp=N` modifier.
-    /// `None` means the label declared no lone pairs.
-    pub lone_pairs: Option<u8>,
-    /// Optional page-space displacement in bond-length units. Layout coordinates
-    /// remain unchanged; the Typst renderer applies this after molecular rotation.
-    pub offset: Option<(f64, f64)>,
-}
-
-pub(crate) fn preprocess_smiles(input: &str) -> Result<PreprocessedSmiles, String> {
-    let mut parser_compatible_smiles = String::with_capacity(input.len());
-    let mut abbreviation_labels = Vec::new();
-    let mut bond_markers = Vec::new();
-    let mut aromatic_markers = Vec::new();
-    let mut in_bracket = false;
-
-    let mut characters = input.chars().peekable();
-    while let Some(character) = characters.next() {
-        // Bracket contents pass through as a unit because their letters do not
-        // represent independent organic-subset atom tokens.
-        if in_bracket {
-            if character == ']' {
-                in_bracket = false;
-            }
-            parser_compatible_smiles.push(character);
-            continue;
-        }
-
-        match character {
-            '{' => {
-                let raw_label = collect_abbreviation_body(&mut characters)?;
-                abbreviation_labels.push(parse_abbreviation_label(&raw_label)?);
-                parser_compatible_smiles.push_str("[*]");
-            }
-            '!' => {
-                bond_markers.push(parse_drawing_extension(&mut characters)?);
-                parser_compatible_smiles.push('/');
-            }
-            '>' => {
-                return Err(
-                    "`>` is only valid inside an abbreviation label like `{>PPh3}`".to_string(),
-                );
-            }
-            '[' => {
-                in_bracket = true;
-                parser_compatible_smiles.push(character);
-            }
-            ']' => {
-                return Err("unmatched `]`; bracket atoms must start with `[`".to_string());
-            }
-            '}' => {
-                return Err("unmatched `}`; custom labels must start with `{`".to_string());
-            }
-            '/' | '\\' => {
-                bond_markers.push(BondMarker {
-                    style: BondMarkerStyle::Directional,
-                    order: BondOrder::Single,
-                    curl: false,
-                });
-                parser_compatible_smiles.push(character);
-            }
-            'b' | 'c' | 'n' | 'o' | 'p' | 's' => {
-                parser_compatible_smiles.push(character.to_ascii_uppercase());
-                aromatic_markers.push(true);
-            }
-            'B' | 'C' | 'N' | 'O' | 'S' | 'P' | 'F' | 'I' => {
-                aromatic_markers.push(false);
-                parser_compatible_smiles.push(character);
-            }
-            _ => parser_compatible_smiles.push(character),
-        }
-    }
-    if in_bracket {
-        return Err("unclosed bracket atom; add `]` after the atom specification".to_string());
-    }
-
-    let smiles = normalize_post_branch_ring_bonds(&parser_compatible_smiles)?;
-
-    Ok(PreprocessedSmiles {
-        smiles,
-        abbrev_labels: abbreviation_labels,
-        forced_direction_markers: bond_markers,
-        aromatic_atom_markers: aromatic_markers,
-    })
-}
-
-fn collect_abbreviation_body(characters: &mut Peekable<Chars<'_>>) -> Result<String, String> {
-    let mut label = String::new();
-    for character in characters.by_ref() {
-        if character == '}' {
-            return Ok(label);
-        }
-        label.push(character);
-    }
-    Err("unclosed custom label; add `}` after the label".to_string())
-}
-
-fn parse_drawing_extension(characters: &mut Peekable<Chars<'_>>) -> Result<BondMarker, String> {
-    let extension = characters
-        .next()
-        .ok_or_else(|| "incomplete `!` drawing extension".to_string())?;
-    let (style, curl) = parse_drawing_style(extension, characters)?;
-    let order = consume_optional_bond_order(characters);
-
-    if style != BondMarkerStyle::Plain && order != BondOrder::Single {
-        return Err(
-            "wedge, hash, wavy, and dashed drawing extensions require a single bond".to_string(),
-        );
-    }
-
-    Ok(BondMarker { style, order, curl })
-}
-
-fn parse_drawing_style(
-    extension: char,
-    characters: &mut Peekable<Chars<'_>>,
-) -> Result<(BondMarkerStyle, bool), String> {
-    if extension == 'c' {
-        let style = consume_optional_curl_style(characters)?;
-        return Ok((style, true));
-    }
-
-    let style = bond_marker_style(extension)
-        .ok_or_else(|| format!("unknown drawing extension `!{extension}`"))?;
-    Ok((style, false))
-}
-
-fn consume_optional_curl_style(
-    characters: &mut Peekable<Chars<'_>>,
-) -> Result<BondMarkerStyle, String> {
-    if characters.peek() != Some(&'!') {
-        return Ok(BondMarkerStyle::Plain);
-    }
-
-    characters.next();
-    let extension = characters
-        .next()
-        .ok_or_else(|| "incomplete drawing extension after `!c`".to_string())?;
-    bond_marker_style(extension)
-        .ok_or_else(|| format!("unknown drawing extension `!{extension}` after `!c`"))
-}
-
-fn bond_marker_style(extension: char) -> Option<BondMarkerStyle> {
-    match extension {
-        'w' => Some(BondMarkerStyle::WedgeUp),
-        'h' => Some(BondMarkerStyle::WedgeDown),
-        's' => Some(BondMarkerStyle::Wavy),
-        'd' => Some(BondMarkerStyle::Dashed),
-        _ => None,
-    }
-}
-
-fn consume_optional_bond_order(characters: &mut Peekable<Chars<'_>>) -> BondOrder {
-    let order = match characters.peek() {
-        Some('-') => BondOrder::Single,
-        Some('=') => BondOrder::Double,
-        Some('#') => BondOrder::Triple,
-        Some('$') => BondOrder::Quadruple,
-        Some(':') => BondOrder::Aromatic,
-        _ => return BondOrder::Single,
-    };
-    characters.next();
-    order
-}
-
-fn normalize_post_branch_ring_bonds(input: &str) -> Result<String, String> {
-    // Ring closures are branch-like atom modifiers in SMILES, but the parser
-    // crate only accepts them before parenthesized branches on the same atom.
-    let bytes = input.as_bytes();
-    let mut normalized = String::with_capacity(input.len());
-    let mut cursor = 0;
-
-    while cursor < bytes.len() {
-        let Some(atom_end) = atom_token_end(input, cursor)? else {
-            normalized.push(bytes[cursor] as char);
-            cursor += 1;
-            continue;
-        };
-
-        let atom_token = &input[cursor..atom_end];
-        let mut suffix_cursor = atom_end;
-        let mut ring_bonds = String::new();
-        let mut branches = Vec::new();
-        let mut has_non_ring_branch = false;
-
-        loop {
-            if let Some(end) = ring_bond_token_end(input, suffix_cursor, !has_non_ring_branch) {
-                ring_bonds.push_str(&input[suffix_cursor..end]);
-                suffix_cursor = end;
-                continue;
-            }
-
-            if bytes.get(suffix_cursor) == Some(&b'(') {
-                let branch_end = matching_paren_end(input, suffix_cursor)?;
-                let branch_contents =
-                    normalize_post_branch_ring_bonds(&input[suffix_cursor + 1..branch_end - 1])?;
-                if ring_bond_sequence_end(&branch_contents, false) == Some(branch_contents.len()) {
-                    ring_bonds.push_str(&branch_contents);
-                } else {
-                    branches.push(format!("({branch_contents})"));
-                    has_non_ring_branch = true;
-                }
-                suffix_cursor = branch_end;
-                continue;
-            }
-
-            break;
-        }
-
-        normalized.push_str(atom_token);
-        normalized.push_str(&ring_bonds);
-        for branch in branches {
-            normalized.push_str(&branch);
-        }
-        cursor = suffix_cursor;
-    }
-
-    Ok(normalized)
-}
-
-fn atom_token_end(input: &str, start: usize) -> Result<Option<usize>, String> {
-    let bytes = input.as_bytes();
-    let Some(&first_byte) = bytes.get(start) else {
-        return Ok(None);
-    };
-
-    if first_byte == b'[' {
-        let mut cursor = start + 1;
-        while cursor < bytes.len() {
-            if bytes[cursor] == b']' {
-                return Ok(Some(cursor + 1));
-            }
-            cursor += 1;
-        }
-        return Err("unclosed bracket atom".to_string());
-    }
-
-    if start + 1 < bytes.len()
-        && ((bytes[start] == b'C' && bytes[start + 1] == b'l')
-            || (bytes[start] == b'B' && bytes[start + 1] == b'r'))
-    {
-        return Ok(Some(start + 2));
-    }
-
-    if matches!(
-        first_byte,
-        b'B' | b'C' | b'N' | b'O' | b'P' | b'S' | b'F' | b'I' | b'*'
-    ) {
-        return Ok(Some(start + 1));
-    }
-
-    Ok(None)
-}
-
-fn matching_paren_end(input: &str, start: usize) -> Result<usize, String> {
-    let bytes = input.as_bytes();
-    let mut depth = 0usize;
-    let mut cursor = start;
-
-    while cursor < bytes.len() {
-        match bytes[cursor] {
-            b'[' => {
-                cursor += 1;
-                while cursor < bytes.len() && bytes[cursor] != b']' {
-                    cursor += 1;
-                }
-                if cursor == bytes.len() {
-                    return Err("unclosed bracket atom".to_string());
-                }
-            }
-            b'(' => depth += 1,
-            b')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return Ok(cursor + 1);
-                }
-            }
-            _ => {}
-        }
-        cursor += 1;
-    }
-
-    Err("unclosed branch".to_string())
-}
-
-fn ring_bond_sequence_end(input: &str, allow_directional: bool) -> Option<usize> {
-    let mut cursor = 0;
-    let mut found_ring_bond = false;
-    while let Some(end) = ring_bond_token_end(input, cursor, allow_directional) {
-        found_ring_bond = true;
-        cursor = end;
-    }
-    found_ring_bond.then_some(cursor)
-}
-
-fn ring_bond_token_end(input: &str, start: usize, allow_directional: bool) -> Option<usize> {
-    let bytes = input.as_bytes();
-    if start >= bytes.len() {
-        return None;
-    }
-
-    let mut cursor = start;
-    if matches!(bytes[cursor], b'-' | b'=' | b'#' | b'$' | b':')
-        || (allow_directional && matches!(bytes[cursor], b'/' | b'\\'))
-    {
-        cursor += 1;
-        if cursor >= bytes.len() {
-            return None;
-        }
-    }
-
-    if bytes[cursor].is_ascii_digit() {
-        return Some(cursor + 1);
-    }
-
-    if bytes[cursor] == b'%'
-        && cursor + 2 < bytes.len()
-        && bytes[cursor + 1].is_ascii_digit()
-        && bytes[cursor + 2].is_ascii_digit()
-    {
-        return Some(cursor + 3);
-    }
-
-    None
-}
-
-/// Parses one `{...}` abbreviation body into its displayed text, optional
-/// attachment marker, optional style, and named rendering modifiers.
-///
-/// The body is split on `|` into fields:
-///   - the first field is the displayed label, optionally carrying one `>`
-///     attachment marker before the anchor glyph;
-///   - an optional plain style field (a color or element token);
-///   - named `lp=N` and `offset=(x,y)` modifiers.
-///
-/// The plain style field, when present, must precede any named modifier. A
-/// second field that begins with a named modifier therefore means the label has
-/// no style.
-fn parse_abbreviation_label(raw_label: &str) -> Result<AbbreviationLabel, String> {
-    let mut fields = raw_label.split('|');
-    let raw_text = fields.next().unwrap_or("").trim();
-
-    let mut style = String::new();
-    let mut style_set = false;
-    let mut lone_pairs: Option<u8> = None;
-    let mut offset: Option<(f64, f64)> = None;
-    let mut seen_named = false;
-    for field in fields {
-        let trimmed = field.trim();
-        if let Some((raw_modifier_name, raw_modifier_value)) = trimmed.split_once('=') {
-            let modifier_name = raw_modifier_name.trim();
-            let modifier_value = raw_modifier_value.trim();
-            match modifier_name {
-                "lp" => {
-                    if lone_pairs.is_some() {
-                        return Err(
-                            "abbreviation label has more than one `lp=` modifier".to_string()
-                        );
-                    }
-                    let count: u8 = modifier_value.parse().map_err(|_| {
-                        format!(
-                            "abbreviation `lp=` needs an integer from 1 to 4, got `{modifier_value}`"
-                        )
-                    })?;
-                    if !(1..=4).contains(&count) {
-                        return Err(format!(
-                            "abbreviation `lp=` must be from 1 to 4, got {count}"
-                        ));
-                    }
-                    lone_pairs = Some(count);
-                }
-                "offset" => {
-                    if offset.is_some() {
-                        return Err(
-                            "abbreviation label has more than one `offset=` modifier".to_string()
-                        );
-                    }
-                    offset = Some(parse_abbreviation_offset(modifier_value)?);
-                }
-                other => {
-                    return Err(format!("unknown abbreviation modifier `{other}=`"));
-                }
-            }
-            seen_named = true;
-        } else {
-            if seen_named {
-                return Err(
-                    "abbreviation style must come before named modifiers like `lp=`".to_string(),
-                );
-            }
-            if style_set {
-                return Err("abbreviation label has more than one style field".to_string());
-            }
-            style = trimmed.to_string();
-            style_set = true;
-        }
-    }
-    validate_abbreviation_style(&style)?;
-
-    let marker_count = raw_text.chars().filter(|&ch| ch == '>').count();
-    if marker_count > 1 {
-        return Err(
-            "abbreviation labels may contain at most one `>` attachment marker".to_string(),
-        );
-    }
-
-    let mut text = String::with_capacity(raw_text.len());
-    let mut attachment_marker = None;
-    for character in raw_text.chars() {
-        if character == '>' {
-            attachment_marker = Some(text.chars().count());
-        } else {
-            text.push(character);
-        }
-    }
-
-    let label_characters: Vec<char> = text.chars().collect();
-    let (anchor, anchor_len) = if let Some(marker_position) = attachment_marker {
-        if label_characters.is_empty() {
-            return Err("abbreviation attachment marker `>` needs a label glyph".to_string());
-        }
-        if marker_position >= label_characters.len() {
-            return Err(
-                "abbreviation attachment marker `>` must precede a label glyph".to_string(),
-            );
-        }
-        let anchor = marker_position;
-        let anchor_len = if label_characters
-            .get(anchor)
-            .is_some_and(|character| character.is_ascii_uppercase())
-            && label_characters
-                .get(anchor + 1)
-                .is_some_and(|character| character.is_ascii_lowercase())
-        {
-            2
-        } else {
-            1
-        };
-        (anchor, anchor_len)
-    } else {
-        (0, 0)
-    };
-
-    Ok(AbbreviationLabel {
-        text,
-        style,
-        anchor,
-        anchor_len,
-        lone_pairs,
-        offset,
-    })
-}
-
-fn validate_abbreviation_style(style: &str) -> Result<(), String> {
-    if style.is_empty() {
-        return Ok(());
-    }
-    const NAMED_COLORS: &[&str] = &[
-        "red", "blue", "green", "black", "gray", "grey", "silver", "white", "orange", "yellow",
-        "brown", "pink", "purple", "cyan", "lime", "teal", "maroon", "navy",
-    ];
-    let valid_hex = style.len() == 7
-        && style.starts_with('#')
-        && style[1..].bytes().all(|byte| byte.is_ascii_hexdigit());
-    if valid_hex || NAMED_COLORS.contains(&style) || Element::from_symbol(style).is_some() {
-        return Ok(());
-    }
-    Err(format!(
-        "unknown abbreviation style `{style}`; use an element symbol, a supported \
-         color name, or a #RRGGBB color"
-    ))
-}
-
-fn parse_abbreviation_offset(raw_offset: &str) -> Result<(f64, f64), String> {
-    let value = raw_offset.trim();
-    let Some(components) = value
-        .strip_prefix('(')
-        .and_then(|inner| inner.strip_suffix(')'))
-    else {
-        return Err(format!(
-            "abbreviation `offset=` needs `(x, y)`, got `{raw_offset}`"
-        ));
-    };
-
-    let mut coordinates = components.split(',').map(str::trim);
-    let Some(raw_x) = coordinates.next() else {
-        return Err(format!(
-            "abbreviation `offset=` needs two numbers, got `{raw_offset}`"
-        ));
-    };
-    let Some(raw_y) = coordinates.next() else {
-        return Err(format!(
-            "abbreviation `offset=` needs two numbers, got `{raw_offset}`"
-        ));
-    };
-    if coordinates.next().is_some() || raw_x.is_empty() || raw_y.is_empty() {
-        return Err(format!(
-            "abbreviation `offset=` needs exactly two numbers, got `{raw_offset}`"
-        ));
-    }
-
-    let parse_coordinate = |coordinate: &str| -> Result<f64, String> {
-        let parsed = coordinate.parse::<f64>().map_err(|_| {
-            format!("abbreviation `offset=` coordinates must be numbers, got `{coordinate}`")
-        })?;
-        if !parsed.is_finite() {
-            return Err(format!(
-                "abbreviation `offset=` coordinates must be finite, got `{coordinate}`"
-            ));
-        }
-        Ok(parsed)
-    };
-
-    Ok((parse_coordinate(raw_x)?, parse_coordinate(raw_y)?))
-}
-
-/// Apply collected abbreviation labels to the matching `*` atoms in the graph
-/// (N-th `*` atom ← N-th label, in atom-index order).
-fn assign_abbreviation_labels(molecule: &mut MoleculeGraph, labels: &[AbbreviationLabel]) {
-    let mut label_iter = labels.iter();
-    for atom in molecule.atoms.iter_mut().filter(|atom| atom.symbol == "*") {
-        let Some(label) = label_iter.next() else {
-            break;
-        };
-        atom.abbrev = label.text.clone();
-        atom.abbrev_style = label.style.clone();
-        atom.abbrev_anchor = label.anchor;
-        atom.abbrev_anchor_len = label.anchor_len;
-        atom.abbrev_lone_pairs = label.lone_pairs.unwrap_or(0);
-        let (offset_x, offset_y) = label.offset.unwrap_or((0.0, 0.0));
-        atom.abbrev_offset_x = offset_x;
-        atom.abbrev_offset_y = offset_y;
-    }
-}
 
 fn parse_molecule(smiles: &str) -> Result<MoleculeGraph, String> {
-    if smiles.trim().is_empty() {
-        return Err(
-            "invalid SMILES: the expression is empty; provide at least one atom".to_string(),
-        );
-    }
-    let preprocessed =
-        preprocess_smiles(smiles).map_err(|error| format!("invalid SMILES {smiles:?}: {error}"))?;
-    let mut molecule = MoleculeGraph::from_smiles(
-        &preprocessed.smiles,
-        preprocessed.forced_direction_markers,
-        preprocessed.aromatic_atom_markers,
-    )
-    .map_err(|error| format!("invalid SMILES {smiles:?}: {error}"))?;
-    assign_abbreviation_labels(&mut molecule, &preprocessed.abbrev_labels);
-    Ok(molecule)
+    parser::parse_smiles(smiles).map_err(|error| format!("invalid SMILES {smiles:?}: {error}"))
+}
+
+/// Looks up an element by its exact symbol, such as "Cl". The table search in
+/// `ptable` assumes well-formed symbols, so arbitrary user text is compared
+/// against every element instead.
+pub(crate) fn element_from_symbol(symbol: &str) -> Option<Element> {
+    (1..=118)
+        .filter_map(Element::from_atomic_number)
+        .find(|element| element.get_symbol() == symbol)
 }
 
 fn atomic_mass(atom: &graph::Atom) -> Result<f64, String> {
@@ -618,7 +51,7 @@ fn atomic_mass(atom: &graph::Atom) -> Result<f64, String> {
         ));
     }
 
-    Element::from_symbol(&atom.symbol)
+    element_from_symbol(&atom.symbol)
         .map(|element| element.get_atomic_mass() as f64)
         .ok_or_else(|| {
             format!(
@@ -666,7 +99,7 @@ fn compute_molecular_formula(molecule: &MoleculeGraph) -> Result<String, String>
                 atom.symbol
             ));
         }
-        if Element::from_symbol(&atom.symbol).is_none() {
+        if element_from_symbol(&atom.symbol).is_none() {
             return Err(format!(
                 "cannot compute molecular formula: unknown element {}",
                 atom.symbol
@@ -1351,7 +784,12 @@ mod tests {
         // Pyrrole written without its hydrogen has five atoms all demanding a
         // double bond; no perfect matching exists.
         let err = layout_native("c1ccnc1").expect_err("H-less pyrrole should fail");
-        assert!(err.contains("kekulize"));
+        assert!(err.contains("cannot assign alternating double bonds"));
+        assert!(err.contains("starting with `c` at character 1"));
+        assert!(err.contains("c1cc[nH]c1"));
+
+        let err = layout_native("c1ccccc1.c1ccnc1").expect_err("second system should fail");
+        assert!(err.contains("starting with `c` at character 10"));
     }
 
     // ── Standards-first stereochemistry and drawing extensions ───────────────
@@ -1494,22 +932,40 @@ mod tests {
     #[test]
     fn conjugated_diene_shares_directional_bond_between_double_bonds() {
         let trans_trans = layout_native("C/C=C/C=C/C").expect("trans,trans-diene failed");
-        assert_eq!(double_bond_substituent_side_product(&trans_trans, 0, (1, 2), 3), -1);
-        assert_eq!(double_bond_substituent_side_product(&trans_trans, 2, (3, 4), 5), -1);
+        assert_eq!(
+            double_bond_substituent_side_product(&trans_trans, 0, (1, 2), 3),
+            -1
+        );
+        assert_eq!(
+            double_bond_substituent_side_product(&trans_trans, 2, (3, 4), 5),
+            -1
+        );
 
         let trans_cis = layout_native("C/C=C/C=C\\C").expect("trans,cis-diene failed");
-        assert_eq!(double_bond_substituent_side_product(&trans_cis, 0, (1, 2), 3), -1);
-        assert_eq!(double_bond_substituent_side_product(&trans_cis, 2, (3, 4), 5), 1);
+        assert_eq!(
+            double_bond_substituent_side_product(&trans_cis, 0, (1, 2), 3),
+            -1
+        );
+        assert_eq!(
+            double_bond_substituent_side_product(&trans_cis, 2, (3, 4), 5),
+            1
+        );
     }
 
     #[test]
     fn directional_bond_next_to_carbonyl_marks_only_the_alkene() {
         // Atoms: O0 C1 O2 C3 C4 C5 O6 O7; the alkene is C3=C4.
         let fumaric = layout_native("OC(=O)/C=C/C(=O)O").expect("fumaric acid failed");
-        assert_eq!(double_bond_substituent_side_product(&fumaric, 1, (3, 4), 5), -1);
+        assert_eq!(
+            double_bond_substituent_side_product(&fumaric, 1, (3, 4), 5),
+            -1
+        );
 
         let maleic = layout_native("OC(=O)/C=C\\C(=O)O").expect("maleic acid failed");
-        assert_eq!(double_bond_substituent_side_product(&maleic, 1, (3, 4), 5), 1);
+        assert_eq!(
+            double_bond_substituent_side_product(&maleic, 1, (3, 4), 5),
+            1
+        );
 
         layout_native("CC(=O)/C=C/C").expect("trans enone failed");
         layout_native("C=C/C=C/C").expect("terminal diene failed");
@@ -1699,20 +1155,24 @@ mod tests {
     }
 
     #[test]
-    fn tb_oh_al_accepted_without_stereo_marks() {
-        for smiles in [
-            "S[As@TB1](F)(Cl)(Br)N",
-            "C[Co@OH1](F)(Cl)(Br)(I)N",
-            "NC(Br)=[C@AL1]=C(O)C",
+    fn extended_stereo_classes_are_reported_as_undepicted() {
+        for (smiles, chirality) in [
+            ("S[As@TB1](F)(Cl)(Br)N", "trigonal_bipyramidal"),
+            ("C[Co@OH1](F)(Cl)(Br)(I)N", "octahedral"),
+            ("C[Co@OH28](F)(Cl)(Br)(I)N", "octahedral"),
+            ("NC(Br)=[C@AL1]=C(O)C", "allenal"),
         ] {
             let layout_output = layout_native(smiles).expect("extended chirality should parse");
-            assert!(
-                layout_output
-                    .atoms
-                    .iter()
-                    .any(|atom| atom.chirality == "undepicted"),
-                "missing undepicted center for {smiles}"
-            );
+            let center = layout_output
+                .atoms
+                .iter()
+                .position(|atom| atom.chirality == chirality)
+                .unwrap_or_else(|| panic!("missing {chirality} center for {smiles}"));
+            assert_eq!(layout_output.undepicted_stereo.len(), 1, "{smiles}");
+            assert_eq!(layout_output.undepicted_stereo[0].atom, center);
+            assert!(layout_output.undepicted_stereo[0]
+                .reason
+                .contains("not drawn"));
             assert!(layout_output.bonds.iter().all(|bond| bond.stereo == "none"));
             assert!(layout_output
                 .atoms
@@ -1738,51 +1198,46 @@ mod tests {
     // ── Abbreviation tests ────────────────────────────────────────────────────
 
     #[test]
-    fn preprocess_single_abbrev() {
-        let preprocessed = preprocess_smiles("C({PPh3})=O").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "C([*])=O");
-        assert_eq!(preprocessed.abbrev_labels[0].text, "PPh3");
-        assert_eq!(preprocessed.abbrev_labels[0].style, "");
-        assert_eq!(preprocessed.abbrev_labels[0].anchor_len, 0);
+    fn abbreviation_label_becomes_wildcard_atom() {
+        let molecule = parse_molecule("C({PPh3})=O").expect("abbreviation failed");
+        assert_eq!(molecule.atoms.len(), 3);
+        assert_eq!(molecule.atoms[1].symbol, "*");
+        assert!(molecule.atoms[1].has_explicit_h);
+        assert_eq!(molecule.atoms[1].abbrev, "PPh3");
+        assert_eq!(molecule.atoms[1].abbrev_style, "");
+        assert_eq!(molecule.atoms[1].abbrev_anchor_len, 0);
     }
 
     #[test]
-    fn preprocess_multiple_abbrevs() {
-        let preprocessed = preprocess_smiles("{OEt}C(=O){NHR}").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "[*]C(=O)[*]");
-        assert_eq!(preprocessed.abbrev_labels[0].text, "OEt");
-        assert_eq!(preprocessed.abbrev_labels[1].text, "NHR");
+    fn abbreviation_labels_keep_writing_order() {
+        let molecule = parse_molecule("{OEt}C(=O){NHR}").expect("abbreviations failed");
+        assert_eq!(molecule.atoms[0].abbrev, "OEt");
+        assert_eq!(molecule.atoms[3].abbrev, "NHR");
     }
 
     #[test]
-    fn preprocess_abbrev_style() {
-        let preprocessed = preprocess_smiles("{PPh3|P}C({LG|red})=O").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "[*]C([*])=O");
-        assert_eq!(preprocessed.abbrev_labels[0].text, "PPh3");
-        assert_eq!(preprocessed.abbrev_labels[0].style, "P");
-        assert_eq!(preprocessed.abbrev_labels[1].text, "LG");
-        assert_eq!(preprocessed.abbrev_labels[1].style, "red");
+    fn abbreviation_styles_reach_their_atoms() {
+        let molecule = parse_molecule("{PPh3|P}C({LG|red})=O").expect("styled labels failed");
+        assert_eq!(molecule.atoms[0].abbrev, "PPh3");
+        assert_eq!(molecule.atoms[0].abbrev_style, "P");
+        assert_eq!(molecule.atoms[2].abbrev, "LG");
+        assert_eq!(molecule.atoms[2].abbrev_style, "red");
     }
 
     #[test]
-    fn preprocess_abbrev_anchor_positions() {
-        let preprocessed = preprocess_smiles("{>CAT}C({C>AT}){CA>T}").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "[*]C([*])[*]");
-        assert_eq!(preprocessed.abbrev_labels[0].text, "CAT");
-        assert_eq!(preprocessed.abbrev_labels[0].anchor, 0);
-        assert_eq!(preprocessed.abbrev_labels[0].anchor_len, 1);
-        assert_eq!(preprocessed.abbrev_labels[1].text, "CAT");
-        assert_eq!(preprocessed.abbrev_labels[1].anchor, 1);
-        assert_eq!(preprocessed.abbrev_labels[1].anchor_len, 1);
-        assert_eq!(preprocessed.abbrev_labels[2].text, "CAT");
-        assert_eq!(preprocessed.abbrev_labels[2].anchor, 2);
-        assert_eq!(preprocessed.abbrev_labels[2].anchor_len, 1);
+    fn abbreviation_anchor_positions() {
+        let molecule = parse_molecule("{>CAT}C({C>AT}){CA>T}").expect("anchors failed");
+        for (atom_index, anchor) in [(0, 0), (2, 1), (3, 2)] {
+            assert_eq!(molecule.atoms[atom_index].abbrev, "CAT");
+            assert_eq!(molecule.atoms[atom_index].abbrev_anchor, anchor);
+            assert_eq!(molecule.atoms[atom_index].abbrev_anchor_len, 1);
+        }
     }
 
     #[test]
-    fn preprocess_rejects_arrow_marker_outside_abbrev() {
-        assert!(preprocess_smiles("C>C").is_err());
-        assert!(preprocess_smiles("{CAT>}C").is_err());
+    fn arrow_marker_outside_abbreviation_is_rejected() {
+        assert!(parse_molecule("C>C").is_err());
+        assert!(parse_molecule("{CAT>}C").is_err());
     }
 
     #[test]
@@ -1796,7 +1251,7 @@ mod tests {
         assert!(unclosed_bracket.contains("add `]`"));
 
         let unmatched_label_end =
-            layout_native("COH}").expect_err("unmatched label end should fail");
+            layout_native("CO}").expect_err("unmatched label end should fail");
         assert!(unmatched_label_end.contains("unmatched `}`"));
     }
 
@@ -1810,9 +1265,9 @@ mod tests {
     #[test]
     fn unclosed_ring_reports_ring_number_and_correction() {
         let error = layout_native("C1CC").expect_err("unclosed ring should fail");
-        assert!(error.contains("ring closure 1"));
+        assert!(error.contains("ring closure 1 opened at character 2"));
         assert!(error.contains("never closed"));
-        assert!(error.contains("repeat each ring number"));
+        assert!(error.contains("repeat the ring number"));
     }
 
     #[test]
@@ -1824,98 +1279,70 @@ mod tests {
     }
 
     #[test]
-    fn preprocess_forced_wedge_markers() {
-        let preprocessed = preprocess_smiles("C!wN!hO").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "C/N/O");
-        assert_eq!(
-            preprocessed.forced_direction_markers,
-            vec![
-                BondMarker {
-                    style: BondMarkerStyle::WedgeUp,
-                    order: BondOrder::Single,
-                    curl: false,
-                },
-                BondMarker {
-                    style: BondMarkerStyle::WedgeDown,
-                    order: BondOrder::Single,
-                    curl: false,
-                },
-            ]
-        );
+    fn forced_wedge_extensions_mark_their_bonds() {
+        let molecule = parse_molecule("C!wN!hO").expect("forced wedges failed");
+        assert_eq!(molecule.bonds[0].stereo, graph::BondStereo::WedgeUp);
+        assert_eq!(molecule.bonds[1].stereo, graph::BondStereo::WedgeDown);
+        assert!(molecule.bonds.iter().all(|bond| bond.forced_stereo));
+        assert!(molecule
+            .bonds
+            .iter()
+            .all(|bond| bond.direction == graph::BondDirection::None));
     }
 
     #[test]
-    fn preprocess_curl_markers_and_combinations() {
-        let preprocessed = preprocess_smiles("CCC!cC").expect("plain curl failed");
-        assert_eq!(preprocessed.smiles, "CCC/C");
-        assert_eq!(
-            preprocessed.forced_direction_markers,
-            vec![BondMarker {
-                style: BondMarkerStyle::Plain,
-                order: BondOrder::Single,
-                curl: true,
-            }]
-        );
+    fn curl_extensions_combine_with_styles_and_orders() {
+        let molecule = parse_molecule("CCC!cC").expect("plain curl failed");
+        assert!(molecule.bonds[2].curl);
+        assert_eq!(molecule.bonds[2].stereo, graph::BondStereo::None);
+        assert_eq!(molecule.bonds[2].order, graph::BondOrder::Single);
 
-        let preprocessed = preprocess_smiles("CCC!c!wC").expect("curl wedge failed");
-        assert_eq!(preprocessed.smiles, "CCC/C");
-        assert_eq!(
-            preprocessed.forced_direction_markers[0].style,
-            BondMarkerStyle::WedgeUp
-        );
-        assert!(preprocessed.forced_direction_markers[0].curl);
+        let molecule = parse_molecule("CCC!c!wC").expect("curl wedge failed");
+        assert!(molecule.bonds[2].curl);
+        assert_eq!(molecule.bonds[2].stereo, graph::BondStereo::WedgeUp);
 
-        let preprocessed = preprocess_smiles("CCC!c=C").expect("curl double failed");
-        assert_eq!(preprocessed.smiles, "CCC/C");
-        assert_eq!(
-            preprocessed.forced_direction_markers[0].order,
-            BondOrder::Double
-        );
-        assert!(preprocessed.forced_direction_markers[0].curl);
+        let molecule = parse_molecule("CCC!c=C").expect("curl double failed");
+        assert!(molecule.bonds[2].curl);
+        assert_eq!(molecule.bonds[2].order, graph::BondOrder::Double);
     }
 
     #[test]
-    fn preprocess_moves_ring_closures_written_after_branches() {
-        let preprocessed = preprocess_smiles("C1=CCCC(=O)1").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "C1=CCCC1(=O)");
+    fn ring_closures_after_branches_keep_writing_order() {
+        let molecule = parse_molecule("C1=CCCC(=O)1").expect("cyclopentenone failed");
+        let carbonyl_carbon = 4;
+        let written_neighbors: Vec<usize> = molecule.neighbor_bonds[carbonyl_carbon]
+            .iter()
+            .map(|&bond_index| {
+                let bond = &molecule.bonds[bond_index];
+                bond.from + bond.to - carbonyl_carbon
+            })
+            .collect();
+        assert_eq!(written_neighbors, vec![3, 5, 0]);
 
-        let preprocessed = preprocess_smiles("C(=O)(O)1N").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "C1(=O)(O)N");
+        let molecule = parse_molecule("C(=O)(O)1N.C1").expect("trailing ring bond failed");
+        assert_eq!(molecule.bonds.len(), 4);
+        assert!(molecule.adj[0].iter().any(|&(neighbor, _)| neighbor == 4));
     }
 
     #[test]
-    fn preprocess_no_abbrev() {
-        let preprocessed = preprocess_smiles("CCO").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "CCO");
-        assert!(preprocessed.abbrev_labels.is_empty());
-        assert_eq!(
-            preprocessed.aromatic_atom_markers,
-            vec![false, false, false]
-        );
+    fn organic_atoms_record_aromaticity() {
+        let molecule = parse_molecule("CCO").expect("ethanol failed");
+        assert!(molecule.atoms.iter().all(|atom| !atom.aromatic));
+
+        let molecule = parse_molecule("Clc1ccccc1").expect("chlorobenzene failed");
+        let aromatic: Vec<bool> = molecule.atoms.iter().map(|atom| atom.aromatic).collect();
+        assert_eq!(aromatic, vec![false, true, true, true, true, true, true]);
+        assert_eq!(molecule.atoms[0].symbol, "Cl");
     }
 
     #[test]
-    fn preprocess_uppercases_aromatic_atoms() {
-        let preprocessed = preprocess_smiles("Clc1ccccc1").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "ClC1CCCCC1");
-        // One marker per unbracketed organic-subset atom, in writing order;
-        // the two-letter Cl counts once.
-        assert_eq!(
-            preprocessed.aromatic_atom_markers,
-            vec![false, true, true, true, true, true, true]
-        );
-    }
-
-    #[test]
-    fn preprocess_leaves_bracket_atoms_alone() {
-        // Bracket contents are the parser's business: [nH] parses natively as
-        // an aromatic atom, and the 'c' in [Sc] is not an aromatic carbon.
-        let preprocessed = preprocess_smiles("c1cc[nH]c1[Sc]").expect("preprocess failed");
-        assert_eq!(preprocessed.smiles, "C1CC[nH]C1[Sc]");
-        assert_eq!(
-            preprocessed.aromatic_atom_markers,
-            vec![true, true, true, true]
-        );
+    fn bracket_symbols_read_whole_elements() {
+        // [nH] is an aromatic nitrogen, and the `c` in [Sc] belongs to scandium.
+        let molecule = parse_molecule("c1cc[nH]c1[Sc]").expect("bracket atoms failed");
+        assert!(molecule.atoms[3].aromatic);
+        assert_eq!(molecule.atoms[3].hcount, 1);
+        assert_eq!(molecule.atoms[5].symbol, "Sc");
+        assert!(!molecule.atoms[5].aromatic);
     }
 
     #[test]
@@ -1955,7 +1382,7 @@ mod tests {
     fn abbrev_lp_parses_all_counts() {
         for n in 1u8..=4 {
             let raw = format!("Cl|Cl|lp={n}");
-            let label = parse_abbreviation_label(&raw).expect("lp parse failed");
+            let label = crate::label::parse_abbreviation_label(&raw).expect("lp parse failed");
             assert_eq!(label.text, "Cl");
             assert_eq!(label.style, "Cl");
             assert_eq!(label.lone_pairs, Some(n));
@@ -1964,7 +1391,8 @@ mod tests {
 
     #[test]
     fn abbrev_lp_without_style() {
-        let label = parse_abbreviation_label("OR|lp=2").expect("lp without style failed");
+        let label =
+            crate::label::parse_abbreviation_label("OR|lp=2").expect("lp without style failed");
         assert_eq!(label.text, "OR");
         assert_eq!(label.style, "");
         assert_eq!(label.lone_pairs, Some(2));
@@ -1972,7 +1400,8 @@ mod tests {
 
     #[test]
     fn abbrev_lp_with_anchor_marker() {
-        let label = parse_abbreviation_label(">PPh_3|P|lp=1").expect("anchored lp failed");
+        let label =
+            crate::label::parse_abbreviation_label(">PPh_3|P|lp=1").expect("anchored lp failed");
         assert_eq!(label.text, "PPh_3");
         assert_eq!(label.anchor, 0);
         assert_eq!(label.anchor_len, 1);
@@ -1982,7 +1411,8 @@ mod tests {
 
     #[test]
     fn abbrev_lp_with_anchor_no_style() {
-        let label = parse_abbreviation_label(">OR|lp=2").expect("anchored lp no style failed");
+        let label = crate::label::parse_abbreviation_label(">OR|lp=2")
+            .expect("anchored lp no style failed");
         assert_eq!(label.text, "OR");
         assert_eq!(label.anchor_len, 1);
         assert_eq!(label.style, "");
@@ -1991,31 +1421,46 @@ mod tests {
 
     #[test]
     fn abbrev_existing_syntax_preserved() {
-        assert_eq!(parse_abbreviation_label("PPh3").unwrap().lone_pairs, None);
-        assert_eq!(parse_abbreviation_label("PPh3|P").unwrap().style, "P");
-        assert_eq!(parse_abbreviation_label("PPh3|P").unwrap().lone_pairs, None);
-        let anchored = parse_abbreviation_label(">PPh3").unwrap();
+        assert_eq!(
+            crate::label::parse_abbreviation_label("PPh3")
+                .unwrap()
+                .lone_pairs,
+            None
+        );
+        assert_eq!(
+            crate::label::parse_abbreviation_label("PPh3|P")
+                .unwrap()
+                .style,
+            "P"
+        );
+        assert_eq!(
+            crate::label::parse_abbreviation_label("PPh3|P")
+                .unwrap()
+                .lone_pairs,
+            None
+        );
+        let anchored = crate::label::parse_abbreviation_label(">PPh3").unwrap();
         assert_eq!(anchored.anchor_len, 1);
         assert_eq!(anchored.lone_pairs, None);
-        let anchored_styled = parse_abbreviation_label(">PPh3|red").unwrap();
+        let anchored_styled = crate::label::parse_abbreviation_label(">PPh3|red").unwrap();
         assert_eq!(anchored_styled.style, "red");
         assert_eq!(anchored_styled.lone_pairs, None);
     }
 
     #[test]
     fn abbrev_lp_rejects_out_of_range_and_malformed() {
-        assert!(parse_abbreviation_label("Cl|Cl|lp=0").is_err());
-        assert!(parse_abbreviation_label("Cl|Cl|lp=5").is_err());
-        assert!(parse_abbreviation_label("Cl|Cl|lp=-1").is_err());
-        assert!(parse_abbreviation_label("Cl|Cl|lp=2.5").is_err());
-        assert!(parse_abbreviation_label("Cl|Cl|lp=two").is_err());
-        assert!(parse_abbreviation_label("Cl|Cl|lp=").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|lp=0").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|lp=5").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|lp=-1").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|lp=2.5").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|lp=two").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|lp=").is_err());
         // Duplicate lp modifiers.
-        assert!(parse_abbreviation_label("Cl|Cl|lp=1|lp=2").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|lp=1|lp=2").is_err());
         // Unknown named modifier.
-        assert!(parse_abbreviation_label("Cl|Cl|foo=1").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|Cl|foo=1").is_err());
         // Style after a named modifier.
-        assert!(parse_abbreviation_label("Cl|lp=1|Cl").is_err());
+        assert!(crate::label::parse_abbreviation_label("Cl|lp=1|Cl").is_err());
     }
 
     #[test]
@@ -2032,14 +1477,14 @@ mod tests {
 
     #[test]
     fn abbrev_offset_parses_with_style_and_lone_pairs() {
-        let label = parse_abbreviation_label("H|grey|lp=1|offset=(0.1, -0.2)")
+        let label = crate::label::parse_abbreviation_label("H|grey|lp=1|offset=(0.1, -0.2)")
             .expect("offset parse failed");
         assert_eq!(label.text, "H");
         assert_eq!(label.style, "grey");
         assert_eq!(label.lone_pairs, Some(1));
         assert_eq!(label.offset, Some((0.1, -0.2)));
 
-        let reversed = parse_abbreviation_label("H|offset=(-.25, .4)|lp=2")
+        let reversed = crate::label::parse_abbreviation_label("H|offset=(-.25, .4)|lp=2")
             .expect("reordered modifiers failed");
         assert_eq!(reversed.style, "");
         assert_eq!(reversed.lone_pairs, Some(2));
@@ -2048,12 +1493,14 @@ mod tests {
 
     #[test]
     fn abbrev_offset_rejects_malformed_values() {
-        assert!(parse_abbreviation_label("H|offset=0.1,0.2").is_err());
-        assert!(parse_abbreviation_label("H|offset=(0.1)").is_err());
-        assert!(parse_abbreviation_label("H|offset=(0.1,0.2,0.3)").is_err());
-        assert!(parse_abbreviation_label("H|offset=(left,0.2)").is_err());
-        assert!(parse_abbreviation_label("H|offset=(NaN,0.2)").is_err());
-        assert!(parse_abbreviation_label("H|offset=(0.1,0.2)|offset=(0.3,0.4)").is_err());
+        assert!(crate::label::parse_abbreviation_label("H|offset=0.1,0.2").is_err());
+        assert!(crate::label::parse_abbreviation_label("H|offset=(0.1)").is_err());
+        assert!(crate::label::parse_abbreviation_label("H|offset=(0.1,0.2,0.3)").is_err());
+        assert!(crate::label::parse_abbreviation_label("H|offset=(left,0.2)").is_err());
+        assert!(crate::label::parse_abbreviation_label("H|offset=(NaN,0.2)").is_err());
+        assert!(
+            crate::label::parse_abbreviation_label("H|offset=(0.1,0.2)|offset=(0.3,0.4)").is_err()
+        );
     }
 
     #[test]
@@ -2209,15 +1656,10 @@ mod tests {
     /// End-to-end check: reconstructs the depicted 3D geometry from the rendered
     /// output and verifies every stereocenter's signed volume matches `@`/`@@`.
     fn chirality_matches_smiles(smiles: &str) -> bool {
-        use crate::layout::{implicit_h_count, signed_volume, stereochemical_hydrogen_direction};
+        use crate::layout::implicit_h_count;
+        use crate::stereo::{signed_volume, stereochemical_hydrogen_direction};
 
-        let preprocessed = preprocess_smiles(smiles).expect("preprocess failed");
-        let molecule = MoleculeGraph::from_smiles(
-            &preprocessed.smiles,
-            preprocessed.forced_direction_markers,
-            preprocessed.aromatic_atom_markers,
-        )
-        .expect("graph build failed");
+        let molecule = parse_molecule(smiles).expect("graph build failed");
         let layout_output = compute_layout(&molecule).expect("layout failed");
         let coordinates: Vec<crate::render::Vec2> =
             layout_output.atoms.iter().map(|atom| atom.pos).collect();
@@ -2387,8 +1829,15 @@ mod tests {
     ) -> i8 {
         let line_start = layout_output.atoms[double_bond_atoms.0].pos;
         let line_end = layout_output.atoms[double_bond_atoms.1].pos;
-        side(line_start, line_end, layout_output.atoms[first_substituent].pos)
-            * side(line_start, line_end, layout_output.atoms[second_substituent].pos)
+        side(
+            line_start,
+            line_end,
+            layout_output.atoms[first_substituent].pos,
+        ) * side(
+            line_start,
+            line_end,
+            layout_output.atoms[second_substituent].pos,
+        )
     }
 
     fn side(

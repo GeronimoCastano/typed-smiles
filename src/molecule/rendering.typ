@@ -7,10 +7,48 @@
   _opacity-ratio,
   _normalize-bond-customizations,
   _validate-molecule-options,
+  _require-depicted-stereo,
 )
 #import "../styles.typ": _atom-color, _label-color, _canvas-scale
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+// Unit direction bisecting the widest angular gap between unit directions.
+#let _widest-gap-direction(directions) = {
+  let angles = directions.map(direction => calc.atan2(direction.x, direction.y).rad()).sorted()
+  let widest-start = angles.last()
+  let widest-gap = angles.first() + 2 * calc.pi - angles.last()
+  for position in range(angles.len() - 1) {
+    let gap = angles.at(position + 1) - angles.at(position)
+    if gap > widest-gap {
+      widest-gap = gap
+      widest-start = angles.at(position)
+    }
+  }
+  let middle = widest-start + widest-gap / 2
+  (x: calc.cos(middle), y: calc.sin(middle))
+}
+
+// Side labels showing OpenSMILES atom maps, such as ":7" for `[CH3:7]`. An
+// atom the document annotates itself keeps only that annotation. Map labels
+// avoid bonds and hydrogen labels; document annotations keep the placement
+// that their offsets are measured from.
+#let _atom-map-annotations(layout, atom-annotations) = {
+  let annotated-atoms = atom-annotations.map(annotation => annotation.index)
+  let map-annotations = ()
+  for (atom-index, atom) in layout.atoms.enumerate() {
+    let atom-map = atom.at("atom_map", default: 0)
+    if atom-map > 0 and atom-index not in annotated-atoms {
+      map-annotations.push((
+        index: atom-index,
+        body: ":" + str(atom-map),
+        offset: (0, 0),
+        avoids-bonds: true,
+      ))
+    }
+  }
+  map-annotations
+}
 
 #let _is-carbon(atom) = atom.symbol == "C" or atom.symbol == "c"
 
@@ -966,6 +1004,8 @@
   atom-annotations: (),
   opacity: 100%,
   bond-customizations: (),
+  show-maps: false,
+  undepicted-stereo: "error",
 ) = {
   _validate-molecule-options(
     layout,
@@ -986,12 +1026,18 @@
     atom-annotations,
     opacity,
     bond-customizations,
+    show-maps: show-maps,
+    undepicted-stereo: undepicted-stereo,
   )
+  _require-depicted-stereo(layout, undepicted-stereo)
   let show-h-state = _normalize-show-h(show-h)
   let show-all-h = show-h-state.all
   let show-skeleton-h = show-h-state.skeleton
   let show-h-list = show-h-state.indices
   let atom-annotations = _normalize-atom-annotations(atom-annotations)
+  if show-maps {
+    atom-annotations = _atom-map-annotations(layout, atom-annotations) + atom-annotations
+  }
   let opacity = _opacity-ratio(opacity, "opacity")
   let bond-custom = _normalize-bond-customizations(
     bond-customizations,
@@ -1313,22 +1359,10 @@
         side
       }
 
-      // Per IUPAC: narrow tip at stereocenter, wide base at substituent.
-      // Explicit drawing wedges/hashes use the written source as the tip.
-      // Inferred stereochemical bonds fall back to a local stereocenter
-      // heuristic.
-      let from-atom-abbr = from-atom.at("abbrev", default: "") != ""
-      let to-is-abbreviation = to-atom.at("abbrev", default: "") != ""
-      let from-atom-is-c = (from-atom.symbol == "C" or from-atom.symbol == "c") and not from-atom-abbr
-      let to-is-carbon = (to-atom.symbol == "C" or to-atom.symbol == "c") and not to-is-abbreviation
-      let tip-at-from = if bond.at("forced_stereo", default: false) { true }
-                        else if from-atom-is-c and not to-is-carbon { true }
-                        else if to-is-carbon and not from-atom-is-c { false }
-                        else {
-                          let df = atom-degree(bond.from)
-                          let dt = atom-degree(bond.to)
-                          df >= dt
-                        }
+      // Per IUPAC, the narrow tip sits on the stereocenter the wedge
+      // describes; the layout names that atom for every wedge and hash.
+      let wedge-tip = bond.at("stereo_tip", default: none)
+      let tip-at-from = wedge-tip == none or wedge-tip == bond.from
 
       if stereo == "wedge_up" {
         let half-w = 0.10
@@ -2168,9 +2202,27 @@
             x: -direction-sum.x / direction-length,
             y: -direction-sum.y / direction-length,
           )
+        } else if annotation.at("avoids-bonds", default: false) and neighbor-directions.len() >= 2 {
+          // Balanced surroundings, such as a trigonal center: use the middle
+          // of the widest gap between bonds.
+          _widest-gap-direction(neighbor-directions)
         } else {
-          // Symmetric surroundings or isolated atom: place diagonally.
+          // Isolated atom: place diagonally.
           (x: 0.7071, y: 0.7071)
+        }
+        // A label's hydrogens occupy the atom's free side, so a generated
+        // annotation turns toward the upper side of that direction to clear them.
+        let shows-hydrogens = annotation.at("avoids-bonds", default: false) and has-label(atom-index) and (
+          atom.at("hcount", default: 0) + atom.at("implicit_h", default: 0) > 0
+        )
+        let annotation-direction = if shows-hydrogens {
+          let turn = if annotation-direction.x >= 0 { 70deg } else { -70deg }
+          (
+            x: annotation-direction.x * calc.cos(turn) - annotation-direction.y * calc.sin(turn),
+            y: annotation-direction.x * calc.sin(turn) + annotation-direction.y * calc.cos(turn),
+          )
+        } else {
+          annotation-direction
         }
         let offset = if has-label(atom-index) { label-margin + 0.14 } else { 0.30 }
         let nudge = annotation.at("offset", default: (0, 0))

@@ -763,6 +763,42 @@ style extensions and bond orders, for example `!c!w` or `!c=`.
 
 ![Stereochemistry and drawing extension examples](assets/readme/stereo-h.png)
 
+The narrow end of each wedge sits on the stereocenter it describes. Centers
+with three neighbors and a lone pair, such as sulfoxides (`C[S@](=O)c1ccccc1`)
+and phosphines, are drawn with wedges too.
+
+Some written stereochemistry cannot be drawn faithfully: trigonal-bipyramidal
+(`@TB`), octahedral (`@OH`), and allene (`@AL`) centers, `@` on an atom that is
+not a stereocenter (`[C@H2]`), and geometry the layout cannot place, such as a
+trans double bond in an eight-membered ring. These are errors by default, so a
+figure never drops stereochemistry silently. Pass `undepicted-stereo: "omit"`
+to draw the structure without it, or set it document-wide:
+
+```typst
+#let smiles = smiles.with(undepicted-stereo: "omit")
+```
+
+## Atom maps
+
+A number after a colon in a bracket atom is an OpenSMILES atom class, used as an
+atom map in reactions: `[CH3:7]`. Maps never change the structure or atom
+indices. `show-maps: true` labels mapped atoms; an `atom-annotations` entry for
+a mapped atom replaces its label.
+
+```typst
+#reaction(
+  mol("[CH3:1][C:2](=[O:3])[OH:4]", show-maps: true),
+  [+],
+  mol("[CH3:5][OH:6]", show-maps: true),
+  rxn-arrow(above: [H#super[+]]),
+  mol("[CH3:1][C:2](=[O:3])[O:6][CH3:5]", show-maps: true),
+  [+],
+  mol("[OH2:4]", show-maps: true),
+)
+```
+
+![Atom maps in an esterification](assets/readme/atom-maps.png)
+
 ## API summary
 
 ### `#smiles(smiles-str, …)`
@@ -793,6 +829,8 @@ style extensions and bond orders, for example `!c!w` or `!c=`.
 | `highlight-groups` | `()` | Group name, `(group:, include-atoms:)` dictionary, or tuple mixing both |
 | `highlight-colors` | `auto` | Non-empty color tuple; cycle through matches |
 | `highlight-unmatched` | `"error"` | `"error"` for absent matches, or explicitly `"ignore"` |
+| `show-maps` | `false` | Label mapped atoms such as `[CH3:7]` with `:7` |
+| `undepicted-stereo` | `"error"` | Stereochemistry the drawing cannot show: report it, or `"omit"` it |
 | `…annotations` | — | `arrow()` / `highlight()` items on this molecule |
 
 SMILES string extensions:
@@ -858,8 +896,9 @@ A reaction item. `spec` is any content (`smiles(...)`, `ce(...)`, text) or a SMI
 nudges it in page coordinates, in bond-length units: positive x moves right and
 positive y moves up regardless of `reaction(flow:)`. String molecules accept
 common drawing options such as `scale`, `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-h`,
-`lone-pairs`, `opacity`, `bond-customizations`, `atom-colors`, and
-`show-indices`, and the four `highlight-*` options above; `reaction(scale: ...)` uniformly resizes the complete reaction,
+`lone-pairs`, `opacity`, `bond-customizations`, `atom-colors`,
+`show-indices`, `show-maps`, and `undepicted-stereo`, and the four
+`highlight-*` options above; `reaction(scale: ...)` uniformly resizes the complete reaction,
 and each `mol(scale: ...)` additionally resizes that molecule. Positional
 `arrow()` and `highlight()` items inside `mol()` use local references, so
 `mol("C=O", arrow(from: bond(0, 1), to: atom(0)))` does not require a species
@@ -950,8 +989,13 @@ options.
 
 ## SMILES support
 
-The package uses the [`smiles-parser`](https://crates.io/crates/smiles-parser)
-crate for parsing.
+typed-smiles reads OpenSMILES with its own parser. Invalid input produces an
+editor-visible error that names the character position and the correction,
+for example `ring closure 1 at character 3 closes on the atom that opened it`
+for `C11`. Besides syntax errors, it rejects ring closures that bond an atom to
+itself or repeat a bond (`C12C12`), different bond symbols on the two ends of
+one ring closure (`C=1CCCCC-1`), a bond or `.` with no atom after it (`CC=`),
+charges outside -15 to +15, and whitespace.
 
 Aromatic lowercase notation (`c1ccccc1`, `c1cc[nH]c1`, …) is kekulized on
 parse following OpenSMILES; rings that cannot be kekulized are reported as
@@ -969,10 +1013,12 @@ Current limitations:
 - `@`/`@@` and `/`/`\` stereochemistry is depicted but R/S and E/Z descriptors are not computed.
 - Square-planar `@SP1`–`@SP3` centers are depicted exactly (the geometry is
   planar); quadruple bonds (`$`) render as four parallel lines.
-- Trigonal-bipyramidal (`@TB`), octahedral (`@OH`), and allenal (`@AL`)
-  centers are accepted and drawn with correct connectivity, but without
-  stereo wedges.
-- Bridged bicyclics may overlap; template matching is not implemented.
+- Trigonal-bipyramidal (`@TB`), octahedral (`@OH`), and allene (`@AL`)
+  stereochemistry is not drawn and is reported unless
+  `undepicted-stereo: "omit"` is set.
+- Bridged bicyclics and cages may overlap; template matching is not implemented.
+- Reaction SMILES (`A>>B`), dative arrows (`->`), and `%(nnn)` ring numbers are
+  not read; draw reactions with `reaction()`.
 
 ## Chemical verification
 
@@ -982,6 +1028,13 @@ of 63 compounds covering all 16 groups. Each group's selected atoms and bonds
 match an independent RDKit search. The
 [fixture notes](https://github.com/GeronimoCastano/typed-smiles/blob/b031c16c2ae451d46fcd06114449066d91a9e39a/tests/fixtures/README.md)
 list the sources and scope.
+
+SMILES reading and stereochemistry are checked against a categorized
+[conformance corpus](https://github.com/GeronimoCastano/typed-smiles/blob/1912d865eb1f514c64a1e99f9ed8f8b7e0d698c6/tests/fixtures/smiles-conformance.json)
+of aromatic systems, salts, isotopes, atom maps, ring closures, stereochemistry,
+cages, and macrocycles. RDKit rebuilds each accepted molecule from the drawing
+alone (coordinates, bond orders, wedges, charges, and hydrogens) and must
+recover the input's stereochemistry, including for random atom orders.
 
 ## License
 

@@ -110,6 +110,34 @@
   smiles(molecules.cafeine)
 } else if selected-case == "one-sided-directional-bond" {
   smiles("F/C=CF")
+} else if selected-case == "ring-self-bond" {
+  smiles("C11")
+} else if selected-case == "ring-duplicate-bond" {
+  smiles("C12C12")
+} else if selected-case == "ring-conflicting-bonds" {
+  smiles("C=1CCCCC-1")
+} else if selected-case == "dangling-bond" {
+  smiles("CC=")
+} else if selected-case == "malformed-charge" {
+  smiles("[Fe+++]")
+} else if selected-case == "malformed-atom-map" {
+  smiles("[CH3:]O")
+} else if selected-case == "unbracketed-element" {
+  smiles("NaCl")
+} else if selected-case == "unclosed-branch" {
+  smiles("CC(C")
+} else if selected-case == "undepicted-octahedral" {
+  smiles("C[Co@OH1](F)(Cl)(Br)(I)N")
+} else if selected-case == "undepicted-in-reaction" {
+  reaction(mol("NC(Br)=[C@AL1]=C(O)C"), rxn-arrow(), mol("CC"))
+} else if selected-case == "undepicted-not-stereocenter" {
+  smiles("[C@H2](F)Cl")
+} else if selected-case == "undepicted-ring-trans" {
+  smiles("C1CCC/C=C/CC1")
+} else if selected-case == "undepicted-stereo-policy" {
+  smiles("CCO", undepicted-stereo: "ignore")
+} else if selected-case == "show-maps-type" {
+  smiles("[CH3:1]O", show-maps: "yes")
 } else {
   panic("unknown validation test case: " + selected-case)
 }

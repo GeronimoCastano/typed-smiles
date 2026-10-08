@@ -150,6 +150,7 @@
     "atom-annotations", "opacity", "bond-customizations", "lone-pairs",
     "atom-colors", "show-indices",
     "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
+    "show-maps", "undepicted-stereo",
   )
   for option-name in options.keys() {
     if option-name not in allowed-options {
@@ -1242,6 +1243,8 @@
                 atom-annotations: placed-species.opts.at("atom-annotations", default: ()),
                 opacity: placed-species.opts.at("opacity", default: 100%),
                 bond-customizations: placed-species.opts.at("bond-customizations", default: ()),
+                show-maps: placed-species.opts.at("show-maps", default: false),
+                undepicted-stereo: placed-species.opts.at("undepicted-stereo", default: "error"),
               )
             })
           } else {

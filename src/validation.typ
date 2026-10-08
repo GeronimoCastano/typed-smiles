@@ -361,6 +361,16 @@
   }
 }
 
+#let _validate-undepicted-stereo-policy(policy) = {
+  if policy not in ("error", "omit") {
+    _invalid-input(
+      "undepicted-stereo",
+      "expected \"error\" or \"omit\", got " + repr(policy),
+      "Use \"error\" to report stereochemistry the drawing cannot show, or \"omit\" to draw the structure without it.",
+    )
+  }
+}
+
 #let _validate-molecule-options(
   layout,
   scale,
@@ -380,6 +390,8 @@
   atom-annotations,
   opacity,
   bond-customizations,
+  show-maps: false,
+  undepicted-stereo: "error",
 ) = {
   _validate-positive-number(scale, "smiles scale")
   if bond-length != none {
@@ -478,5 +490,22 @@
   let _ = _normalize-bond-customizations(
     bond-customizations,
     layout: layout,
+  )
+  _validate-bool(show-maps, "show-maps")
+  _validate-undepicted-stereo-policy(undepicted-stereo)
+}
+
+// Written stereochemistry that the drawing cannot show would otherwise vanish
+// silently, so it is an error unless the document opts out explicitly.
+#let _require-depicted-stereo(layout, policy) = {
+  let undepicted = layout.at("undepicted_stereo", default: ())
+  if policy == "omit" or undepicted.len() == 0 {
+    return
+  }
+  _invalid-input(
+    "SMILES stereochemistry",
+    "the drawing cannot show "
+      + undepicted.map(entry => entry.reason).join("; "),
+    "Pass undepicted-stereo: \"omit\" to draw the structure without this stereochemistry, or remove the stereo mark from the SMILES.",
   )
 }
