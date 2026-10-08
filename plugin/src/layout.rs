@@ -457,6 +457,17 @@ fn connected_components(molecule: &MoleculeGraph) -> Vec<Vec<usize>> {
     components
 }
 
+/// Error for a `!c` with fewer than two chain bonds in front of it, which leaves
+/// no turn for it to repeat. The message points at the s-cis diene spelling,
+/// the most common place this rule is hit.
+fn missing_reference_turn_error(pivot_atom: usize, next_atom: usize) -> String {
+    format!(
+        "!c on bond {pivot_atom}-{next_atom} needs two preceding chain bonds to set the turn it repeats. \
+         To draw an s-cis 1,3-diene, curl its second double bond as in C=CC!c=C; \
+         the first bond supplies the reference turn"
+    )
+}
+
 /// Applies `!c` constraints after the automatic acyclic layout. For a written
 /// path A-B-C!cD, every arm forward of C is reflected across the B-C axis when
 /// needed so C-D repeats the A-B-C turn. Moving all forward arms together keeps
@@ -486,12 +497,10 @@ fn apply_curl_layout(molecule: &MoleculeGraph, coordinates: &mut [Vec2]) -> Resu
         let bond = &molecule.bonds[bond_index];
         let pivot_atom = bond.from;
         let next_atom = bond.to;
-        let preceding_atom = molecule.preceding_atom[pivot_atom].ok_or_else(|| {
-            format!("!c on bond {pivot_atom}-{next_atom} needs two preceding chain bonds")
-        })?;
-        let first_atom = molecule.preceding_atom[preceding_atom].ok_or_else(|| {
-            format!("!c on bond {pivot_atom}-{next_atom} needs two preceding chain bonds")
-        })?;
+        let preceding_atom = molecule.preceding_atom[pivot_atom]
+            .ok_or_else(|| missing_reference_turn_error(pivot_atom, next_atom))?;
+        let first_atom = molecule.preceding_atom[preceding_atom]
+            .ok_or_else(|| missing_reference_turn_error(pivot_atom, next_atom))?;
         let incoming_bond = molecule
             .bond_between(preceding_atom, pivot_atom)
             .ok_or_else(|| format!("missing incoming bond {preceding_atom}-{pivot_atom} for !c"))?;

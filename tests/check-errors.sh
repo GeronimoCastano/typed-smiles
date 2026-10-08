@@ -160,4 +160,11 @@ expect_error "aligned-abbreviate" "smiles abbreviate is invalid: automatic abbre
 expect_error "aligned-mol-abbreviate" "mol abbreviate is invalid: automatic abbreviations change the layout"
 expect_error "grid-scaffold-abbreviate" "abbreviate is invalid: automatic abbreviations change the layout"
 
+expect_error "reaction-fit-value" "reaction fit is invalid"
+expect_error "reaction-fit-type" "expected none or"
+expect_error "species-index-out-of-range-listing" 'Species by index: 0 = mol(\"CCO\"), 1 = content [+], 2 = mol(\"CCN\"), 3 = mol(\"CCBr\").'
+expect_error "opaque-species-listing" 'species 1 (content [+]) is opaque content and has no addressable atoms'
+expect_error "opaque-species-listing" 'Species with atoms: 0 = mol(\"CCO\"), 2 = mol(\"CCN\").'
+expect_error "curl-without-reference-turn" "as in C=CC!c=C"
+
 echo "All editor-visible validation cases passed."

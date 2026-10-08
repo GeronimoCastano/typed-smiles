@@ -2023,6 +2023,47 @@ mod tests {
         assert!(err.contains("two preceding chain bonds"));
     }
 
+    fn side_of_line(
+        start: crate::render::Vec2,
+        end: crate::render::Vec2,
+        point: crate::render::Vec2,
+    ) -> f64 {
+        (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x)
+    }
+
+    #[test]
+    fn curled_second_double_bond_gives_s_cis_butadiene() {
+        let s_cis = layout_native("C=CC!c=C").expect("s-cis butadiene failed");
+        assert_eq!(s_cis.bonds[0].order, 2);
+        assert_eq!(s_cis.bonds[2].order, 2);
+        let central_start = s_cis.atoms[1].pos;
+        let central_end = s_cis.atoms[2].pos;
+        let terminal_sides = side_of_line(central_start, central_end, s_cis.atoms[0].pos)
+            * side_of_line(central_start, central_end, s_cis.atoms[3].pos);
+        assert!(terminal_sides > 0.0, "termini should sit on the same side");
+        assert!(min_atom_distance(&s_cis) >= 0.5);
+    }
+
+    #[test]
+    fn uncurled_butadiene_stays_s_trans() {
+        let s_trans = layout_native("C=CC=C").expect("butadiene failed");
+        let central_start = s_trans.atoms[1].pos;
+        let central_end = s_trans.atoms[2].pos;
+        let terminal_sides = side_of_line(central_start, central_end, s_trans.atoms[0].pos)
+            * side_of_line(central_start, central_end, s_trans.atoms[3].pos);
+        assert!(terminal_sides < 0.0, "termini should sit on opposite sides");
+    }
+
+    #[test]
+    fn curl_without_reference_turn_names_the_s_cis_diene() {
+        let err = layout_native("C=C!cC=C").expect_err("curl without a reference turn should fail");
+        assert!(err.contains("two preceding chain bonds"));
+        assert!(
+            err.contains("C=CC!c=C"),
+            "error should show the s-cis spelling: {err}"
+        );
+    }
+
     // ── Molecular weight ──────────────────────────────────────────────────────
     //
     // Reference values are PubChem's computed molecular weights, which use the

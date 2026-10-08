@@ -4999,3 +4999,107 @@ does not express keeps the group expanded.
   catalogue-cell([Zwitterion], "[NH3+]CC(=O)[O-]", abbreviate: "CO2-", scale: 0.7),
   catalogue-cell([Manual leading script], "{^-O_2>C}c1ccccc1", scale: 0.7),
 )
+
+#pagebreak()
+
+= Scheme fitting (`reaction(fit: "width")`)
+
+Each scheme below sits in a 9 cm box. By default a scheme keeps its natural
+width and runs past the box edge. `fit: "width"` shrinks the whole scheme
+uniformly to the available width, after `scale:` has been applied, and it never
+enlarges a scheme.
+
+#let fit-scheme(..options) = reaction(
+  ..options,
+  mol(smiles("C1=CC=CC=C1"), label: [benzene]),
+  rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+  mol(smiles("BrC1=CC=CC=C1"), label: [bromobenzene]),
+  rxn-arrow(above: ce("HNO3"), below: ce("H2SO4")),
+  mol(smiles("[O-][N+](=O)C1=CC=CC=C1Br"), label: [nitro]),
+  rxn-arrow(above: ce("Fe"), below: ce("HCl")),
+  mol(smiles("NC1=CC=CC=C1Br"), label: [amine]),
+)
+
+#for (title, options) in (
+  ([Natural width, no fit: the scheme overruns the box], ()),
+  ([`fit: "width"`], (fit: "width")),
+  ([`scale: 0.6` with `fit: "width"`], (scale: 0.6, fit: "width")),
+  ([`scale: 0.6` alone], (scale: 0.6)),
+) [
+  #text(size: 8pt, title)
+  #block(width: 9cm, stroke: 0.5pt + luma(180), inset: 4pt, fit-scheme(..options))
+  #v(0.6em)
+]
+
+A mechanism on the shared canvas fits the same way.
+
+#block(width: 9cm, stroke: 0.5pt + luma(180), inset: 4pt, reaction(
+  fit: "width",
+  mol("N", lone-pairs: "dots"),
+  [+],
+  mol("CI"),
+  rxn-arrow(),
+  mol("C[NH3+]"),
+  [+],
+  mol("[I-]"),
+  arrow(from: lp(0, pair: 0), to: atom(2, 0)),
+  arrow(from: bond(2, 0, 1), to: atom(5, 0)),
+))
+
+#pagebreak()
+
+= s-cis 1,3-butadiene (`!c` on the second double bond)
+
+Butadiene is drawn s-trans by default. Writing `!c` on its second double bond
+repeats the turn at the first bond, which places both termini on the same side
+of the central bond. The indices show the atoms.
+
+#grid(
+  columns: (1fr,) * 3,
+  gutter: 1.5em,
+  align: center + horizon,
+  [s-trans, `C=CC=C` #linebreak() #smiles("C=CC=C", show-indices: true)],
+  [s-cis, `C=CC!c=C` #linebreak() #smiles("C=CC!c=C", show-indices: true)],
+  [s-cis, substituted, `C=C(C)C!c=C` #linebreak() #smiles("C=C(C)C!c=C", show-indices: true)],
+)
+
+#reaction(
+  mol(smiles("C=CC!c=C")),
+  [+],
+  mol(smiles("C=C")),
+  rxn-arrow(),
+  mol(smiles("C1CC=CCC1")),
+)
+
+#pagebreak()
+
+= Curly-arrow species with content items
+
+In a mechanism, species are counted in written order. Plain content such as
+`[+]` between two reagents is a species, while the arrow and its labels are
+not. Here ethanol is species 0, the content `[+]` is species 1, H#super[+] is
+species 2, and the protonated ethanol is species 3. The arrow and its label,
+`fast`, are not counted.
+
+#reaction(
+  mol("CCO", lone-pairs: "dots"),
+  [+],
+  mol("[H+]"),
+  rxn-arrow(above: [fast]),
+  mol("CC[OH2+]"),
+  arrow(from: lp(0, 2), to: atom(2, 0)),
+)
+
+#pagebreak()
+
+= Steroid hormones in `molecules`
+
+Progesterone and cortisol, both drawn from the bundled library.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 2em,
+  align: center + horizon,
+  [progesterone #linebreak() #smiles(molecules.progesterone)],
+  [cortisol #linebreak() #smiles(molecules.cortisol)],
+)

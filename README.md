@@ -10,6 +10,29 @@ source instead of copying diagrams from a separate editor.
 
 **Full documentation:** see `docs/documentation.pdf` in the typed-smiles repository for every argument, syntax extension, color option, and reaction-scheme feature with live examples.
 
+## Examples
+
+<table>
+<tr>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/ciprofloxacin.typ"><img src="assets/readme/examples/ciprofloxacin.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/sn2-inversion.typ"><img src="assets/readme/examples/sn2-inversion.png" width="400"></a></td>
+</tr>
+<tr>
+  <td>Ciprofloxacin, with each functional region shaded</td>
+  <td>SN2 Walden inversion of (R)-2-bromobutane to (S)-butan-2-ol</td>
+</tr>
+<tr>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/ibuprofen-synthesis.typ"><img src="assets/readme/examples/ibuprofen-synthesis.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/steroid-core.typ"><img src="assets/readme/examples/steroid-core.png" width="400"></a></td>
+</tr>
+<tr>
+  <td>Three-step ibuprofen synthesis, with each changed group shaded</td>
+  <td>Steroid hormones aligned on their shared four-ring core</td>
+</tr>
+</table>
+
+*Click an example to see its source.*
+
 ---
 
 ## Quick start
@@ -649,6 +672,18 @@ if it does not fit.
 )
 ```
 
+`fit: "width"` shrinks a scheme that is wider than the page or container it sits
+in, uniformly and without enlarging it. It applies after `scale:`. The default,
+`fit: none`, keeps the natural size and can run past the edge.
+
+```typst
+#reaction(fit: "width",
+  mol(smiles("C1=CC=CC=C1")),
+  rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+  mol(smiles("BrC1=CC=CC=C1")),
+)
+```
+
 ## Multi-step mechanisms
 
 Reaction arrows can point right, left, up, or down for compact wrap-around
@@ -677,6 +712,9 @@ schemes.
 `reaction()` also draws curly-arrow mechanisms. Atoms are referenced by their
 writing-order index (0-based), so the SMILES string is never modified — pass
 `show-indices: true` to read the numbers off the diagram while you write arrows.
+Species indices count every `mol()` and every content item in written order,
+including a plain `[+]` between reagents; arrows and their labels are not
+counted.
 On large mechanisms, `reaction(show-indices: true)` applies that overlay to all
 string `mol("...")` molecules in the reaction, with per-molecule opt-out via
 `mol("...", show-indices: false)`.
@@ -851,7 +889,9 @@ geometry. `!w` forces a solid wedge, `!h` a hashed wedge, `!s` a wavy
 a dashed bond for hydrogen bonds, partial bonds, and coordination. `!c` repeats
 the preceding skeletal turn instead of alternating the zigzag, curling an
 acyclic chain while preserving its ideal 120° bond angle. It combines with the
-style extensions and bond orders, for example `!c!w` or `!c=`.
+style extensions and bond orders, for example `!c!w` or `!c=`. For an s-cis
+1,3-diene, put the curl on the second double bond: `C=CC!c=C` draws both termini
+on the same side of the central bond, while `C=CC=C` is drawn s-trans.
 
 ![Automatic zigzag and an inward chain curl using !c](assets/readme/curl.png)
 
@@ -965,7 +1005,7 @@ SMILES string extensions:
 | `!c!w`, `!c!h`, `!c!s`, `!c!d` | Curl while applying a single-bond drawing style |
 | `!c=`, `!c#` | Curl into a double or triple bond |
 
-### `#reaction(gap-h, gap-v, scale, breakable, show-indices, flow, …items)`
+### `#reaction(gap-h, gap-v, scale, breakable, show-indices, flow, fit, …items)`
 
 Lays out a scheme (grid) or, when any curly `arrow()`/`highlight()` is present,
 an electron-pushing mechanism (shared canvas).
@@ -978,6 +1018,7 @@ an electron-pushing mechanism (shared canvas).
 | `breakable` | `false` | Allow splitting across pages |
 | `flow` | `"right"` | Writing direction: `"right"`, `"left"`, `"up"`, `"down"`; `"left"`/`"up"` reflect the scheme so branches emerging left/bottom read naturally |
 | `show-indices` | `false` | Default atom-index overlay for string SMILES molecules in this reaction |
+| `fit` | `none` | `"width"` shrinks the scheme uniformly to the available width after `scale`; never enlarges |
 
 For vertical flows, ordinary non-arrow items stack vertically too, so
 `reaction(flow: "down", mol("A"), [+], mol("B"))` reads top-to-bottom.

@@ -1009,9 +1009,23 @@ directional bonds.]
   ```, side: false)
 ]
 
-#note[#c("!c") needs two preceding chain bonds so there is an established turn
-to repeat. It is not supported on a ring bond or directly after one. Only one
-#c("!c") constraint may leave a given atom.]
+#demo[
+  A conjugated diene is drawn s-trans by default, with its termini on opposite
+  sides of the central bond. Put #c("!c") on the second double bond to draw the
+  s-cis conformer: the first bond supplies the turn that the curl repeats, so both
+  termini sit on the same side.
+
+  #example(```typ
+  #smiles("C=CC=C", show-indices: true) \
+  #smiles("C=CC!c=C", show-indices: true)
+  ```, side: false)
+]
+
+#note[#c("!c") needs two chain bonds in front of it, so there is an established
+turn to repeat: the first and second bonds of a chain cannot be curled. For an
+s-cis 1,3-diene, write the curl on the second double bond as #c("C=CC!c=C"); the
+spelling #c("C=C!cC=C") fails. It is not supported on a ring bond or directly
+after one. Only one #c("!c") constraint may leave a given atom.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Colors <sec-colors>
@@ -1746,6 +1760,35 @@ mechanism mode (curly arrows) is unaffected.]
   `smiles()` call use its default.
 ]
 
+=== Fitting to the available width
+
+#demo[
+  #c("fit: \"width\"") shrinks a scheme that is wider than the space it is placed
+  in, so it reads at one uniform size instead of running past a page or card
+  edge. The available width is the width that the surrounding page, block, or
+  grid cell offers. The shrink keeps molecules, arrows, and labels in proportion. A scheme that already fits keeps its natural
+  size. The default, #c("fit: none"), never resizes a scheme.
+
+  #example(```typ
+  #box(width: 9cm, stroke: 0.5pt + luma(180), inset: 4pt,
+    reaction(fit: "width",
+      mol(smiles("C1=CC=CC=C1"), label: [benzene]),
+      rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
+      mol(smiles("BrC1=CC=CC=C1"), label: [bromobenzene]),
+      rxn-arrow(above: ce("HNO3"), below: ce("H2SO4")),
+      mol(smiles("[O-][N+](=O)C1=CC=CC=C1Br"), label: [nitro]),
+    ),
+  )
+  ```, side: false)
+]
+
+#note[
+  #c("fit") is applied after #c("scale"). #c("scale") first sets the size of the
+  scheme, and #c("fit: \"width\"") then shrinks the result only if it is still
+  wider than the available width. Use #c("scale") to choose the size on the
+  page and #c("fit") to guarantee that a scheme never overruns its container.
+]
+
 === Page-break behaviour
 
 #demo[
@@ -1816,6 +1859,41 @@ arrow-label content, and annotations are not counted.
   the heavy-atom and H badges are centered on their rendered label glyphs. Charge
   marks are excluded from the atom center, so #c("atom(0)") in #c("[O-]") points
   to the O glyph rather than the combined #c("O-") label.
+]
+
+=== Counting species
+
+#demo[
+  A species index is an item's position in written order, counting from 0. Every
+  #c("mol()") counts, and so does every content item, including a plain symbol
+  such as #c("[+]") placed between reagents. A #c("mol()") inside an
+  #c("rxn-arrow(above:)") or #c("rxn-arrow(below:)") slot counts at the arrow's
+  position, with #c("above") before #c("below"). The arrows themselves, the label
+  content of an arrow, and any #c("arrow()") or #c("highlight()") do not count.
+
+  In the protonation below, ethanol is species 0, the plus sign is species 1, the
+  proton is species 2, and the protonated ethanol is species 3. The arrow from the
+  oxygen lone pair therefore points at #c("atom(0)") of species 2.
+
+  #example(```typ
+  #reaction(
+    mol("CCO", lone-pairs: "dots"),   // species 0
+    [+],                              // species 1: a content item counts
+    mol("[H+]"),                      // species 2
+    rxn-arrow(above: [fast]),         // the arrow and its label do not count
+    mol("CC[OH2+]"),                  // species 3
+    arrow(from: lp(0, 2), to: atom(2, 0)),
+  )
+  ```, side: false)
+]
+
+#note[
+  A species index that does not exist, or that names a content item where atoms
+  are needed, stops compilation with a list of every index and its item. If
+  #c("atom(5, 0)") replaced #c("atom(2, 0)") in the reaction above, the message
+  would give the valid range #c("0") through #c("3") and list #c("0 = mol(\"CCO\")"),
+  #c("1 = content [+]"), #c("2 = mol(\"[H+]\")"), and #c("3 = mol(\"CC[OH2+]\")"),
+  so the reference can be corrected at once.
 ]
 
 == Automatic substructure highlighting
@@ -2566,6 +2644,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("breakable")], [`false`], [Allow the scheme to split across pages.],
   [#c("flow")], [`"right"`], [Writing direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"") (left/up reflect the scheme).],
   [#c("show-indices")], [`false`], [Default atom-index overlay for string SMILES molecules in this reaction.],
+  [#c("fit")], [`none`], [#c("\"width\"") shrinks the whole scheme uniformly to the available width after #c("scale"), never enlarging it.],
 )
 
 == #raw("rxn-arrow()") options

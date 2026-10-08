@@ -23,6 +23,9 @@
   _bond-arrow-attachment,
   _atom-arrow-attachment,
   _resolve-reference,
+  _species-description,
+  _species-index-listing,
+  _addressable-species-listing,
 )
 
 /// A curly electron-pushing arrow between two references.
@@ -180,6 +183,13 @@
 
 // ── Annotation drawing ──────────────────────────────────────────────────────────
 
+// " Label: listing." for a non-empty listing, or "" so that a reaction without
+// the relevant species does not print an empty list.
+#let _species-listing-sentence(listing, label) = {
+  if listing == "" { return "" }
+  " " + label + ": " + listing + "."
+}
+
 #let _validate-reference(reference, placed-species-list, input-context, allowed-kinds) = {
   if type(reference) != dictionary {
     _invalid-input(
@@ -211,7 +221,11 @@
       input-context + " species index",
       str(species-index) + " does not exist",
       _available-index-description(placed-species-list.len())
-        + " Species indices count mol() and visible content items; rxn-arrow() itself does not count as a species.",
+        + _species-listing-sentence(
+          _species-index-listing(placed-species-list),
+          "Species by index",
+        )
+        + " Species indices count mol() and visible content items in written order; rxn-arrow() itself does not count as a species.",
     )
   }
   if kind == "species" {
@@ -224,10 +238,16 @@
       input-context,
       "species "
         + str(species-index)
-        + " is opaque content and has no addressable atoms",
+        + " ("
+        + _species-description(placed-species)
+        + ") is opaque content and has no addressable atoms",
       "Use species("
         + str(species-index)
-        + ") for the whole item, or wrap a SMILES string in mol() to address its atoms.",
+        + ") for the whole item, or wrap a SMILES string in mol() to address its atoms."
+        + _species-listing-sentence(
+          _addressable-species-listing(placed-species-list),
+          "Species with atoms",
+        ),
     )
   }
   let layout = placed-species.layout

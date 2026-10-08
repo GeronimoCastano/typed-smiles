@@ -431,6 +431,23 @@
   _scale-reaction-arrow(body, arrow-scale)
 }
 
+// Shrinks a finished scheme uniformly when its natural width exceeds the width
+// available where it is placed. The measurement happens inside layout(), so it
+// sees the container width of the enclosing page, cell, or box.
+#let _fit-scheme-to-width(scheme, fit) = {
+  if fit == none {
+    return scheme
+  }
+  layout(available => {
+    let natural-width = measure(scheme).width
+    if natural-width <= available.width {
+      return scheme
+    }
+    let shrink-factor = available.width / natural-width
+    _typst-scale(x: shrink-factor * 100%, y: shrink-factor * 100%, reflow: true, scheme)
+  })
+}
+
 /// Lays out a reaction scheme or an electron-pushing mechanism.
 ///
 /// Items are any mix of mol(), content (smiles(), ce(), text…), rxn-arrow()
@@ -459,8 +476,21 @@
 /// - breakable (bool): Whether the block may split across pages. Default: false.
 /// - show-indices (bool): Default index overlay for string SMILES molecules in
 ///   this reaction. Individual mol(..., show-indices: ...) calls can override it.
+/// - fit (none / str): `"width"` shrinks the whole scheme uniformly when it is
+///   wider than the space it is placed in, such as a page, cell, or box. The
+///   shrink applies after `scale`, and it never enlarges a scheme. `none` keeps
+///   the natural size. Default: none.
 /// -> content
-#let reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, show-indices: false, flow: "right", ..items) = {
+#let reaction(
+  gap-h: 1.5em,
+  gap-v: 1.5em,
+  scale: 1.0,
+  breakable: false,
+  show-indices: false,
+  flow: "right",
+  fit: none,
+  ..items,
+) = {
   _validate-nonnegative-length(gap-h, "reaction gap-h")
   _validate-nonnegative-length(gap-v, "reaction gap-v")
   _validate-positive-number(scale, "reaction scale")
@@ -471,6 +501,13 @@
       "reaction flow",
       "expected \"right\", \"left\", \"up\", or \"down\", got " + repr(flow),
       "Choose one of the supported layout directions.",
+    )
+  }
+  if fit not in (none, "width") {
+    _invalid-input(
+      "reaction fit",
+      "expected none or \"width\", got " + repr(fit),
+      "Pass fit: \"width\" to shrink a scheme that is wider than its container, or leave fit out to keep its natural size.",
     )
   }
   if items.pos().len() == 0 {
@@ -770,7 +807,7 @@
       )
     }
 
-    block(breakable: breakable, scaled)
+    block(breakable: breakable, _fit-scheme-to-width(scaled, fit))
   } else {
     // ── Mechanism (shared canvas) path ──────────────────────────────────────
     // Draw at a neutral physical scale, then scale the completed canvas. This
@@ -845,6 +882,7 @@
           )
           (
             kind: "mol-smiles",
+            source: molecule-item.spec,
             layout: molecule-layout,
             mol-scale: molecule-scale,
             rotation: rotation,
@@ -887,6 +925,7 @@
           let height = measured-content.height / canvas-scale
           (
             kind: "content",
+            source: molecule-item.spec,
             body: molecule-item.spec,
             rotation: 0deg,
             origin: (
@@ -1317,7 +1356,7 @@
           canvas,
         )
       }
-      block(breakable: breakable, scaled-canvas)
+      block(breakable: breakable, _fit-scheme-to-width(scaled-canvas, fit))
     }
   }
 }

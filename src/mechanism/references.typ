@@ -21,6 +21,46 @@
   _abbreviation-lone-pair-directions,
 )
 
+// ── Species naming for diagnostics ────────────────────────────────────────────
+
+// Names one species so a user can match its index to the item it came from.
+// SMILES species show their string; content shows its text when that text is
+// short and plain, and otherwise falls back to a generic name, because rich
+// content such as a ce() formula prints its whole syntax tree.
+#let _species-description(placed-species) = {
+  let source = placed-species.source
+  if type(source) == str {
+    return "mol(" + repr(source) + ")"
+  }
+  let source-text = repr(source)
+  if source-text.contains("(") or source-text.len() > 24 {
+    return "content item"
+  }
+  "content " + source-text
+}
+
+// Joins "index = description" pairs, or returns "" when there are none.
+#let _format-species-listing(indexed-species) = {
+  if indexed-species.len() == 0 { return "" }
+  indexed-species
+    .map(((species-index, placed-species)) => (
+      str(species-index) + " = " + _species-description(placed-species)
+    ))
+    .join(", ")
+}
+
+// "0 = mol(\"CCO\"), 1 = content [+]" for every species in written order.
+#let _species-index-listing(placed-species-list) = _format-species-listing(
+  placed-species-list.enumerate(),
+)
+
+// The same listing restricted to species with atoms a curly arrow can point at.
+#let _addressable-species-listing(placed-species-list) = _format-species-listing(
+  placed-species-list
+    .enumerate()
+    .filter(((species-index, placed-species)) => "layout" in placed-species),
+)
+
 // ── Reference resolution ──────────────────────────────────────────────────────
 
 // Screen-space position of layout coordinate (x, y) under `rotation`.

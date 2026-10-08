@@ -290,6 +290,28 @@
   reaction(mol(aligned.at(1), abbreviate: "all"))
 } else if selected-case == "grid-scaffold-abbreviate" {
   molecule-grid(scaffold: "c1ccccc1", "COc1ccccc1", mol("COc1ccccc1C", abbreviate: "OMe"))
+} else if selected-case == "reaction-fit-value" {
+  reaction(fit: "height", mol("CCO"))
+} else if selected-case == "reaction-fit-type" {
+  reaction(fit: true, mol("CCO"))
+} else if selected-case == "species-index-out-of-range-listing" {
+  reaction(
+    mol("CCO"),
+    [+],
+    mol("CCN"),
+    rxn-arrow(),
+    mol("CCBr"),
+    arrow(from: atom(0, 0), to: atom(5, 0)),
+  )
+} else if selected-case == "opaque-species-listing" {
+  reaction(
+    mol("CCO"),
+    [+],
+    mol("CCN"),
+    arrow(from: atom(1, 0), to: atom(2, 0)),
+  )
+} else if selected-case == "curl-without-reference-turn" {
+  smiles("C=C!cC=C")
 } else {
   panic("unknown validation test case: " + selected-case)
 }

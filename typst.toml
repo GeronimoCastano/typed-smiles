@@ -8,4 +8,4 @@ description = "Render SMILES strings as molecular diagrams."
 repository = "https://github.com/GeronimoCastano/typed-smiles"
 keywords = ["chemistry", "smiles", "molecules", "cheminformatics"]
 categories = ["visualization"]
-exclude = ["assets/readme/*.png"]
+exclude = ["assets/readme/*.png", "assets/readme/examples/*.png"]

@@ -120,6 +120,8 @@
   cholesterol: "CC(C)CCC[C@@H](C)[C@H]1CC[C@H]2[C@@H]3CC=C4C[C@@H](O)CC[C@]4(C)[C@H]3CC[C@]12C",
   testosterone: "C[C@]12CC[C@H]3[C@@H](CCC4=CC(=O)CC[C@]34C)[C@@H]1CC[C@@H]2O",
   estradiol: "C[C@]12CC[C@H]3[C@@H](CCc4cc(O)ccc34)[C@@H]1CC[C@@H]2O",
+  progesterone: "C1[C@]2(C)[C@@H](C(C)=O)CC[C@H]2[C@H]2[C@H](C1)[C@]1(C)C(=CC(=O)CC1)CC2",
+  cortisol: "C1[C@@]2([C@@](O)(C(CO)=O)CC[C@H]2[C@H]2[C@H]([C@H]1O)[C@]1(C)C(=CC(=O)CC1)CC2)C",
 
   // Laboratory reagents
   sulfuric-acid: "OS(=O)(=O)O",
