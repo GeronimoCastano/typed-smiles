@@ -84,7 +84,8 @@
 /// - show-indices (bool): Stamp each atom's writing-order index on the diagram, as a
 ///   development aid for writing atom()/bond()/lp() references. Default: false.
 /// - abbreviate (none / "all" / str / array): Draw terminal groups from the
-///   automatic catalogue ("tBu", "CF3", "NO2", "CN", "OEt", "OMe", "Ac") as
+///   automatic catalogue ("tBu", "CO2Et", "CO2Me", "OAc", "NHAc", "SO3H",
+///   "CF3", "NO2", "CO2H", "CO2-", "CN", "CHO", "OEt", "OMe", "Ac") as
 ///   labels. Atom indices keep their meaning; atoms hidden inside a label
 ///   cannot be referenced. A named group must occur in the molecule.
 ///   Default: none.

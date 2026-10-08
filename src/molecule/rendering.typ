@@ -798,7 +798,9 @@
 
 // Formats the lightweight script notation accepted in abbreviation labels.
 // A marker applies to the preceding glyph; writing both forms after that glyph
-// keeps its superscript and subscript paired (NH_4^+, rather than 4^+).
+// keeps its superscript and subscript paired (NH_4^+, rather than 4^+). A
+// marker at the start of a label has no preceding glyph, so its script is
+// drawn before the first glyph (^-O_2C for a carboxylate read leftward).
 #let _abbreviation-label(label, atom-label, subscript-size, superscript-size) = {
   let formatted-label = []
   let character-index = 0
@@ -810,9 +812,10 @@
       continue
     }
 
+    let starts-with-script = character-index == 0 and (base == "^" or base == "_")
     let subscript = none
     let superscript = none
-    let next = character-index + 1
+    let next = if starts-with-script { character-index } else { character-index + 1 }
     while next < label.len() and (label.at(next) == "_" or label.at(next) == "^") {
       let marker = label.at(next)
       let start = next + 1
@@ -835,7 +838,7 @@
       next = end
     }
 
-    let base-content = atom-label(base)
+    let base-content = if starts-with-script and next > character-index { [] } else { atom-label(base) }
     if superscript != none or subscript != none {
       let scripts = (:)
       if superscript != none {

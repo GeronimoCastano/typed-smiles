@@ -4837,9 +4837,9 @@ structure contracts the same atoms.
   abbreviation-cell(`O(C)c1ccccc1`, "O(C)c1ccccc1", abbreviate: "OMe", scale: 0.7),
 )
 
-Overlapping candidates follow catalogue priority (tBu, CF3, NO2, CN, OEt, OMe,
-Ac) whatever the request order, and a group never attaches to another
-automatic label. Groups whose isotope, charge, stereo mark, or bracket
+Overlapping candidates follow catalogue priority whatever the request order
+(OEt before OMe; the larger CO#sub[2]Me and OAc before OMe and Ac), and a
+group never attaches to another automatic label. Groups whose isotope, charge, stereo mark, or bracket
 hydrogen a label would hide stay expanded under `"all"`.
 
 #grid(
@@ -4948,4 +4948,54 @@ stereocenter.
   integration-cell([Cocaine, all groups], "COC(=O)[C@H]1[C@@H](OC(=O)c2ccccc2)C[C@@H]2CC[C@H]1N2C", abbreviate: "all", scale: 0.6),
   integration-cell([Methoxy norbornane], "COC1CC2CCC1C2", abbreviate: "OMe", scale: 0.8),
   integration-cell([Trifluoromethyl macrocycle], "FC(F)(F)C1CCCCCCCCCCC1", abbreviate: "CF3", scale: 0.6),
+)
+
+#pagebreak()
+
+= Expanded abbreviation catalogue
+
+Esters, acids, a carboxylate, an aldehyde, a sulfonic acid, acetoxy, and
+acetamido groups contract like the original groups. Each pair shows the label
+read away from the molecule and, rotated 90°, toward its bond.
+
+#let catalogue-cell(title, smiles-str, ..options) = [
+  #text(size: 8pt, title) \ #text(size: 6pt, raw(smiles-str)) \
+  #smiles(smiles-str, ..options)
+]
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+  ..(
+    ([CO2Et], "CCOC(=O)c1ccccc1"),
+    ([CO2Me], "COC(=O)c1ccccc1"),
+    ([OAc], "CC(=O)Oc1ccccc1"),
+    ([NHAc], "CC(=O)Nc1ccccc1"),
+    ([SO3H], "OS(=O)(=O)c1ccccc1"),
+    ([CO2H], "OC(=O)c1ccccc1"),
+    ([CO2#super[−]], "[O-]C(=O)c1ccccc1"),
+    ([CHO], "O=Cc1ccccc1"),
+  ).map(((title, smiles-str)) => (
+    catalogue-cell(title, smiles-str, abbreviate: "all", scale: 0.7),
+    catalogue-cell([#title, 90°], smiles-str, abbreviate: "all", rotation: 90deg, scale: 0.7),
+  )).flatten(),
+)
+
+Larger groups outrank the groups they contain under `"all"`: CO#sub[2]Me over
+OMe and Ac, OAc over Ac, NHAc over Ac. A protonation or substitution the label
+does not express keeps the group expanded.
+
+#grid(
+  columns: (1fr,) * 4,
+  gutter: 1.2em,
+  align: center + horizon,
+  catalogue-cell([Methyl acetate], "COC(C)=O", abbreviate: "all", scale: 0.7),
+  catalogue-cell([Aspirin], "CC(=O)Oc1ccccc1C(=O)O", abbreviate: "all", scale: 0.7),
+  catalogue-cell([Paracetamol], "CC(=O)Nc1ccc(O)cc1", abbreviate: "all", scale: 0.7),
+  catalogue-cell([Vanillin], "COc1cc(C=O)ccc1O", abbreviate: "all", scale: 0.7),
+  catalogue-cell([N-methyl acetanilide], "CC(=O)N(C)c1ccccc1", abbreviate: "all", scale: 0.7),
+  catalogue-cell([Sulfonate stays], "[O-]S(=O)(=O)c1ccccc1", abbreviate: "all", scale: 0.7),
+  catalogue-cell([Zwitterion], "[NH3+]CC(=O)[O-]", abbreviate: "CO2-", scale: 0.7),
+  catalogue-cell([Manual leading script], "{^-O_2>C}c1ccccc1", scale: 0.7),
 )

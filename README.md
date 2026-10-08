@@ -169,7 +169,8 @@ glyph roughly perpendicular to the written label.
 Use `_(...)` and `^(...)` for explicit label subscripts and superscripts:
 `{PPh_(3)}`, `{NH_4^+}`, and `{SO_(4)^(2-)}`. When both follow one glyph,
 they attach to that glyph, so `{NH_4^+}` renders the charge on H rather than 4,
-with script sizing and placement matching `ce()` notation.
+with script sizing and placement matching `ce()` notation. A script at the very
+start of a label is drawn ahead of the first glyph: `{^-O_2>C}` reads ⁻O₂C.
 `font` sets the atom-label typeface.
 
 ```typst
@@ -216,10 +217,29 @@ intentionally create overlaps.
 ## Automatic abbreviations
 
 Write the full structure and let `abbreviate` draw common terminal groups as
-labels. Pass catalogue names, or `"all"` for every catalogue group that occurs:
-`"tBu"`, `"CF3"`, `"NO2"`, `"CN"`, `"OEt"`, `"OMe"`, `"Ac"`. Groups are matched
-on the molecular structure, so every atom order of the same molecule gives the
-same drawing. A label reads away from the molecule, and toward its bond when
+labels. Pass catalogue names, or `"all"` for every catalogue group that occurs.
+In priority order:
+
+| Name | Group | Labels |
+|---|---|---|
+| `"tBu"` | *tert*-butyl | tBu |
+| `"CO2Et"` | ethyl ester, `C(=O)OCC` | CO₂Et / EtO₂C |
+| `"CO2Me"` | methyl ester, `C(=O)OC` | CO₂Me / MeO₂C |
+| `"OAc"` | acetoxy, `OC(C)=O` | OAc / AcO |
+| `"NHAc"` | acetamido, `NC(C)=O` | NHAc / AcHN |
+| `"SO3H"` | sulfonic acid, `S(=O)(=O)O` | SO₃H / HO₃S |
+| `"CF3"` | trifluoromethyl | CF₃ / F₃C |
+| `"NO2"` | nitro, `[N+](=O)[O-]` or `N(=O)=O` | NO₂ / O₂N |
+| `"CO2H"` | carboxylic acid, `C(=O)O` | CO₂H / HO₂C |
+| `"CO2-"` | carboxylate, `C(=O)[O-]` | CO₂⁻ / ⁻O₂C |
+| `"CN"` | nitrile | CN / NC |
+| `"CHO"` | aldehyde, `C=O` with one H | CHO / OHC |
+| `"OEt"` | ethoxy | OEt / EtO |
+| `"OMe"` | methoxy | OMe / MeO |
+| `"Ac"` | acetyl, `C(C)=O` | Ac |
+
+Groups are matched on the molecular structure, so every atom order of the same
+molecule gives the same drawing. A label reads away from the molecule, and toward its bond when
 that bond leaves to the right (MeO, F₃C).
 
 ```typst
@@ -238,7 +258,9 @@ that bond leaves to the right (MeO, F₃C).
   charge, a bracket hydrogen count, or a `{label}` stay expanded. Stereocenters next to a label
   keep their configuration.
 - Overlapping candidates follow the catalogue order above, whatever order you
-  list them in, and a group never attaches to another automatic label. A group
+  list them in, so larger groups win: a methyl ester draws as CO₂Me rather
+  than OMe, and an acetanilide as NHAc rather than Ac. A group never attaches
+  to another automatic label. A group
   named explicitly must be drawn at least once, or the call fails.
 - `mol-formula()` and `mol-weight()` always use the full structure.
   `atom-colors: ("{OMe}": purple)` colors an automatic label in both reading

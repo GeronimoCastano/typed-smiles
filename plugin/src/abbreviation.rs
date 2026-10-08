@@ -56,10 +56,25 @@ const fn bonded(order: BondOrder, atom: GroupAtom) -> GroupBond {
 const METHYL: GroupAtom = terminal_atom("C", 0, 3);
 const FLUORINE: GroupAtom = terminal_atom("F", 0, 0);
 const CARBONYL_OXYGEN: GroupAtom = terminal_atom("O", 0, 0);
+const HYDROXYL_OXYGEN: GroupAtom = terminal_atom("O", 0, 1);
+
+/// An acetyl carbon, C(=O)CH3, below the attachment atom.
+const ACETYL_CARBON: GroupAtom = GroupAtom {
+    element: "C",
+    charge: 0,
+    hydrogens: 0,
+    substituents: &[
+        bonded(BondOrder::Double, CARBONYL_OXYGEN),
+        bonded(BondOrder::Single, METHYL),
+    ],
+};
 
 /// The catalogue in priority order. When candidates overlap, the group listed
 /// first wins, so the selection never depends on the order of the request.
-/// Alkoxy groups precede acetyl so esters keep their carbonyl drawn.
+/// Larger groups come first, so an ester contracts as CO2Me rather than OMe
+/// and an acetamide as NHAc rather than Ac. Among the remaining groups, alkoxy
+/// groups precede acetyl so that, when esters are not requested, they keep
+/// their carbonyl drawn.
 const CATALOGUE: &[GroupDefinition] = &[
     GroupDefinition {
         name: "tBu",
@@ -73,6 +88,95 @@ const CATALOGUE: &[GroupDefinition] = &[
                 bonded(BondOrder::Single, METHYL),
                 bonded(BondOrder::Single, METHYL),
                 bonded(BondOrder::Single, METHYL),
+            ],
+        }],
+    },
+    GroupDefinition {
+        name: "CO2Et",
+        label: ">CO_2Et",
+        reversed_label: "EtO_2>C",
+        forms: &[GroupAtom {
+            element: "C",
+            charge: 0,
+            hydrogens: 0,
+            substituents: &[
+                bonded(BondOrder::Double, CARBONYL_OXYGEN),
+                bonded(
+                    BondOrder::Single,
+                    GroupAtom {
+                        element: "O",
+                        charge: 0,
+                        hydrogens: 0,
+                        substituents: &[bonded(
+                            BondOrder::Single,
+                            GroupAtom {
+                                element: "C",
+                                charge: 0,
+                                hydrogens: 2,
+                                substituents: &[bonded(BondOrder::Single, METHYL)],
+                            },
+                        )],
+                    },
+                ),
+            ],
+        }],
+    },
+    GroupDefinition {
+        name: "CO2Me",
+        label: ">CO_2Me",
+        reversed_label: "MeO_2>C",
+        forms: &[GroupAtom {
+            element: "C",
+            charge: 0,
+            hydrogens: 0,
+            substituents: &[
+                bonded(BondOrder::Double, CARBONYL_OXYGEN),
+                bonded(
+                    BondOrder::Single,
+                    GroupAtom {
+                        element: "O",
+                        charge: 0,
+                        hydrogens: 0,
+                        substituents: &[bonded(BondOrder::Single, METHYL)],
+                    },
+                ),
+            ],
+        }],
+    },
+    GroupDefinition {
+        name: "OAc",
+        label: ">OAc",
+        reversed_label: "Ac>O",
+        forms: &[GroupAtom {
+            element: "O",
+            charge: 0,
+            hydrogens: 0,
+            substituents: &[bonded(BondOrder::Single, ACETYL_CARBON)],
+        }],
+    },
+    GroupDefinition {
+        name: "NHAc",
+        label: ">NHAc",
+        reversed_label: "AcH>N",
+        forms: &[GroupAtom {
+            element: "N",
+            charge: 0,
+            hydrogens: 1,
+            substituents: &[bonded(BondOrder::Single, ACETYL_CARBON)],
+        }],
+    },
+    GroupDefinition {
+        name: "SO3H",
+        label: ">SO_3H",
+        reversed_label: "HO_3>S",
+        forms: &[GroupAtom {
+            element: "S",
+            charge: 0,
+            hydrogens: 0,
+            substituents: &[
+                bonded(BondOrder::Double, CARBONYL_OXYGEN),
+                bonded(BondOrder::Double, CARBONYL_OXYGEN),
+                bonded(BondOrder::Single, HYDROXYL_OXYGEN),
             ],
         }],
     },
@@ -117,6 +221,34 @@ const CATALOGUE: &[GroupDefinition] = &[
         ],
     },
     GroupDefinition {
+        name: "CO2H",
+        label: ">CO_2H",
+        reversed_label: "HO_2>C",
+        forms: &[GroupAtom {
+            element: "C",
+            charge: 0,
+            hydrogens: 0,
+            substituents: &[
+                bonded(BondOrder::Double, CARBONYL_OXYGEN),
+                bonded(BondOrder::Single, HYDROXYL_OXYGEN),
+            ],
+        }],
+    },
+    GroupDefinition {
+        name: "CO2-",
+        label: ">CO_2^-",
+        reversed_label: "^-O_2>C",
+        forms: &[GroupAtom {
+            element: "C",
+            charge: 0,
+            hydrogens: 0,
+            substituents: &[
+                bonded(BondOrder::Double, CARBONYL_OXYGEN),
+                bonded(BondOrder::Single, terminal_atom("O", -1, 0)),
+            ],
+        }],
+    },
+    GroupDefinition {
         name: "CN",
         label: ">CN",
         reversed_label: "N>C",
@@ -125,6 +257,17 @@ const CATALOGUE: &[GroupDefinition] = &[
             charge: 0,
             hydrogens: 0,
             substituents: &[bonded(BondOrder::Triple, terminal_atom("N", 0, 0))],
+        }],
+    },
+    GroupDefinition {
+        name: "CHO",
+        label: ">CHO",
+        reversed_label: "OH>C",
+        forms: &[GroupAtom {
+            element: "C",
+            charge: 0,
+            hydrogens: 1,
+            substituents: &[bonded(BondOrder::Double, CARBONYL_OXYGEN)],
         }],
     },
     GroupDefinition {
@@ -161,15 +304,7 @@ const CATALOGUE: &[GroupDefinition] = &[
         name: "Ac",
         label: "Ac",
         reversed_label: "Ac",
-        forms: &[GroupAtom {
-            element: "C",
-            charge: 0,
-            hydrogens: 0,
-            substituents: &[
-                bonded(BondOrder::Double, CARBONYL_OXYGEN),
-                bonded(BondOrder::Single, METHYL),
-            ],
-        }],
+        forms: &[ACETYL_CARBON],
     },
 ];
 
@@ -703,6 +838,14 @@ mod tests {
             ("CCOc1ccccc1", "OEt", 2, 3),
             ("COc1ccccc1", "OMe", 1, 2),
             ("CC(=O)Nc1ccccc1", "Ac", 1, 3),
+            ("CCOC(=O)c1ccccc1", "CO2Et", 3, 5),
+            ("COC(=O)c1ccccc1", "CO2Me", 2, 4),
+            ("CC(=O)Oc1ccccc1", "OAc", 3, 4),
+            ("CC(=O)Nc1ccccc1", "NHAc", 3, 4),
+            ("OS(=O)(=O)c1ccccc1", "SO3H", 1, 4),
+            ("OC(=O)c1ccccc1", "CO2H", 1, 3),
+            ("[O-]C(=O)c1ccccc1", "CO2-", 1, 3),
+            ("O=Cc1ccccc1", "CHO", 1, 2),
         ];
         for (smiles, name, attachment_atom, group_size) in cases {
             let layout_output = abbreviated(smiles, name);
@@ -805,6 +948,15 @@ mod tests {
             ("{OMe}c1ccccc1", "OMe"),
             ("C1=CC=CC=C1", "all"),
             ("CC(C)(C)[C@H](F)Cl", "OMe"),
+            ("OC(=O)c1ccccc1", "CO2-"),
+            ("[O-]C(=O)c1ccccc1", "CO2H"),
+            ("[OH]C(=O)c1ccccc1", "CO2H"),
+            ("[O-]S(=O)(=O)c1ccccc1", "SO3H"),
+            ("CC(=O)N(C)c1ccccc1", "NHAc"),
+            ("CC(=O)[NH]c1ccccc1", "NHAc"),
+            ("OC(=O)c1ccccc1", "CHO"),
+            ("CC(=O)c1ccccc1", "CHO"),
+            ("[13CH3]OC(=O)c1ccccc1", "CO2Me"),
         ];
         for (smiles, request) in expanded_cases {
             let layout_output = abbreviated(smiles, request);
@@ -843,6 +995,25 @@ mod tests {
 
         let aryl_acetate = abbreviated("CC(=O)Oc1ccccc1", "Ac,OMe");
         assert_eq!(group_names(&aryl_acetate), ["Ac"]);
+    }
+
+    #[test]
+    fn larger_groups_outrank_the_groups_they_contain() {
+        let cases = [
+            ("CCOC(=O)c1ccccc1", "CO2Et"),
+            ("COC(=O)c1ccccc1", "CO2Me"),
+            ("COC(C)=O", "CO2Me"),
+            ("CC(=O)Oc1ccccc1", "OAc"),
+            ("CC(=O)Nc1ccccc1", "NHAc"),
+            ("CC(=O)O", "CO2H"),
+        ];
+        for (smiles, winner) in cases {
+            assert_eq!(
+                group_names(&abbreviated(smiles, "all")),
+                [winner],
+                "{smiles}"
+            );
+        }
     }
 
     #[test]
@@ -889,7 +1060,9 @@ mod tests {
             "{unknown}"
         );
         assert!(
-            unknown.contains("tBu, CF3, NO2, CN, OEt, OMe, Ac"),
+            unknown.contains(
+                "tBu, CO2Et, CO2Me, OAc, NHAc, SO3H, CF3, NO2, CO2H, CO2-, CN, CHO, OEt, OMe, Ac"
+            ),
             "{unknown}"
         );
         let repeated = requested_definitions("OMe,OMe").err().unwrap();
@@ -899,8 +1072,8 @@ mod tests {
 
     #[test]
     fn catalogue_labels_anchor_the_attachment_element() {
-        let attachment_elements = ["C", "C", "N", "C", "O", "O", "C"];
-        for (definition, element) in CATALOGUE.iter().zip(attachment_elements) {
+        for definition in CATALOGUE {
+            let element = definition.forms[0].element;
             for raw_label in [definition.label, definition.reversed_label] {
                 let label = parsed_label(raw_label).unwrap();
                 if label.anchor_len == 0 {
@@ -969,6 +1142,25 @@ mod tests {
                 full_handedness.signum(),
                 abbreviated_handedness.signum(),
                 "{smiles}"
+            );
+        }
+    }
+
+    #[test]
+    fn stereocenters_next_to_an_ester_label_keep_their_configuration() {
+        // Cocaine: the CO2Me label hangs off stereocenter 4, next to stereocenter 5.
+        let smiles = "COC(=O)[C@H]1[C@@H](OC(=O)c2ccccc2)C[C@@H]2CC[C@H]1N2C";
+        let abbreviated_layout = abbreviated(smiles, "all");
+        assert!(group_names(&abbreviated_layout).contains(&"CO2Me"));
+        for center in [4, 5] {
+            let full_handedness =
+                depicted_handedness(&layout_native(smiles).unwrap(), smiles, center);
+            let abbreviated_handedness = depicted_handedness(&abbreviated_layout, smiles, center);
+            assert!(full_handedness.abs() > 1e-6, "center {center}");
+            assert_eq!(
+                full_handedness.signum(),
+                abbreviated_handedness.signum(),
+                "center {center}"
             );
         }
     }

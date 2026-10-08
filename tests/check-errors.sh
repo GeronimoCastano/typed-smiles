@@ -137,7 +137,7 @@ expect_error "grid-scaffold-rotation" "the grid scaffold sets each molecule's or
 expect_error "grid-scaffold-absent" "does not occur in molecule 0"
 # Typst escapes quotation marks in panic messages, so quoted values appear as \".
 expect_error "abbreviate-wrong-type" 'smiles abbreviate is invalid: expected none, \"all\", a group name, or an array of group names, got true'
-expect_error "abbreviate-unknown-group" 'smiles abbreviate is invalid: unknown group \"Boc\". Available groups are \"tBu\", \"CF3\", \"NO2\", \"CN\", \"OEt\", \"OMe\", \"Ac\".'
+expect_error "abbreviate-unknown-group" 'smiles abbreviate is invalid: unknown group \"Boc\". Available groups are \"tBu\", \"CO2Et\", \"CO2Me\", \"OAc\", \"NHAc\", \"SO3H\", \"CF3\", \"NO2\", \"CO2H\", \"CO2-\", \"CN\", \"CHO\", \"OEt\", \"OMe\", \"Ac\".'
 expect_error "abbreviate-wrong-case" "Group names are case-sensitive"
 expect_error "abbreviate-duplicate-group" 'group \"OMe\" is listed more than once'
 expect_error "abbreviate-all-in-list" '\"all\" appears inside a list of group names'

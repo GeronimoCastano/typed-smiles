@@ -305,7 +305,7 @@ call site. See @sec-library for every entry.]
   [#c("bond-customizations")], [`array`], [`()`], [Per-bond style overrides as #c("(bond(i, j), (..options..))") pairs; options are #c("color"), #c("stroke"), and #c("opacity").],
   [#c("lone-pairs")], [`none` / `"dots"` / `"lines"`], [`none`], [Draw optional non-bonding electron pairs on skeletal atom labels.],
   [#c("atom-colors")], [`dictionary`], [`(:)`], [Color overrides for elements and labels. Element-symbol keys (e.g. #c("O: red")) override CPK colors; brace-quoted label keys (e.g. #c("\"{PPh3}\": purple")) override a specific abbreviated group. See @sec-colors.],
-  [#c("abbreviate")], [`none` / `"all"` / `str` / `array`], [`none`], [Draw catalogue terminal groups (#c("\"tBu\""), #c("\"CF3\""), #c("\"NO2\""), #c("\"CN\""), #c("\"OEt\""), #c("\"OMe\""), #c("\"Ac\"")) as labels. See @sec-auto-abbrev.],
+  [#c("abbreviate")], [`none` / `"all"` / `str` / `array`], [`none`], [Draw catalogue terminal groups (#c("\"tBu\""), #c("\"CO2Et\""), #c("\"CO2Me\""), #c("\"OAc\""), #c("\"NHAc\""), #c("\"SO3H\""), #c("\"CF3\""), #c("\"NO2\""), #c("\"CO2H\""), #c("\"CO2-\""), #c("\"CN\""), #c("\"CHO\""), #c("\"OEt\""), #c("\"OMe\""), #c("\"Ac\"")) as labels. See @sec-auto-abbrev.],
   [#c("show-maps")], [`bool`], [`false`], [Label atoms carrying an atom map such as #c("[CH3:7]") with #c(":7"). See @sec-atom-maps.],
   [#c("undepicted-stereo")], [`"error"` / `"omit"`], [`"error"`], [Report written stereochemistry the drawing cannot show, or draw the structure without it. See @sec-undepicted-stereo.],
 )
@@ -611,7 +611,7 @@ cannot be represented by this helper's ordinary-element output.
 #demo[
   #c("bond-customizations") restyles individual bonds. Each entry pairs a
   #c("bond(i, j)") reference (the same atom-index form used by #c("arrow()")
-  and #c("highlight()"); a plain #c("(i, j)") array also works) with an
+  and #c("highlight()")\; a plain #c("(i, j)") array also works) with an
   options dictionary:
 
   - #c("color") — draw the whole bond in one color instead of the bicolor halves,
@@ -713,7 +713,7 @@ section covers the points specific to typed-smiles.
 #note[Atom indices follow SMILES writing order for both aromatic and Kekulé
 input, so the same #c("show-indices"), #c("highlight(...)"), and #c("arrow(...)")
 references apply to either form. Write aromatic hydrogens explicitly, as in
-#c("[nH]"); invalid aromatic rings or aromatic atoms outside a ring produce an
+#c("[nH]")\; invalid aromatic rings or aromatic atoms outside a ring produce an
 error.]
 
 == Charges
@@ -1200,12 +1200,15 @@ two highlighted groups, keep or set `color: true` and put everything else in
   and #c("^+") for explicit subscripts and superscripts in a label. When both
   follow one glyph, they are paired with that glyph: #c("{NH_4^+}") places the
   plus above H rather than above 4. Script size, spacing, and vertical placement
-  match #c("ce()") notation. Parenthesize multi-character scripts.
+  match #c("ce()") notation. Parenthesize multi-character scripts. A script
+  at the very start of a label has no glyph before it, so it is drawn ahead of
+  the first glyph: #c("{^-O_2>C}") reads #super[−]O#sub[2]C.
 
   #example(```typ
   #smiles("{>PPh_(3)}C=O") \
   #smiles("{NH_4^+}") \
-  #smiles("{SO_(4)^(2-)}")
+  #smiles("{SO_(4)^(2-)}") \
+  #smiles("{^-O_2>C}c1ccccc1")
   ```)
 ]
 
@@ -1296,9 +1299,17 @@ coincide.]
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Name*], [*Matched terminal group*], [*Labels*],
   [#c("\"tBu\"")], [Quaternary carbon carrying three methyl groups], [tBu],
+  [#c("\"CO2Et\"")], [Ethyl ester: carbonyl carbon carrying an ethoxy group], [CO#sub[2]Et / EtO#sub[2]C],
+  [#c("\"CO2Me\"")], [Methyl ester: carbonyl carbon carrying a methoxy group], [CO#sub[2]Me / MeO#sub[2]C],
+  [#c("\"OAc\"")], [Acetoxy: oxygen carrying an acetyl group], [OAc / AcO],
+  [#c("\"NHAc\"")], [Acetamido: NH carrying an acetyl group], [NHAc / AcHN],
+  [#c("\"SO3H\"")], [Sulfonic acid, written #c("S(=O)(=O)O")], [SO#sub[3]H / HO#sub[3]S],
   [#c("\"CF3\"")], [Carbon carrying three fluorines], [CF#sub[3] / F#sub[3]C],
   [#c("\"NO2\"")], [Nitro group, written #c("[N+](=O)[O-]") or #c("N(=O)=O")], [NO#sub[2] / O#sub[2]N],
+  [#c("\"CO2H\"")], [Carboxylic acid: carbonyl carbon carrying an OH], [CO#sub[2]H / HO#sub[2]C],
+  [#c("\"CO2-\"")], [Carboxylate with its charge shown in the label, written #c("C(=O)[O-]")], [CO#sub[2]#super[−] / #super[−]O#sub[2]C],
   [#c("\"CN\"")], [Nitrile carbon triple-bonded to nitrogen], [CN / NC],
+  [#c("\"CHO\"")], [Aldehyde: carbonyl carbon carrying one hydrogen], [CHO / OHC],
   [#c("\"OEt\"")], [Oxygen carrying an ethyl group], [OEt / EtO],
   [#c("\"OMe\"")], [Oxygen carrying a methyl group], [OMe / MeO],
   [#c("\"Ac\"")], [Carbonyl carbon carrying a methyl group], [Ac],
@@ -1318,8 +1329,10 @@ label reads away from the molecule; when its bond leaves toward the right after
   keep their configuration.
 
   *Overlaps.* When candidates share atoms, the catalogue order of the table
-  decides, whatever order the request lists: OEt wins over OMe in an ethyl
-  methyl ether, and OMe over Ac in a methyl ester. A group never attaches to
+  decides, whatever order the request lists. Larger groups come first, so
+  CO#sub[2]Me wins over OMe and Ac in a methyl ester, NHAc over Ac in an
+  acetanilide, and OEt over OMe in an ethyl methyl ether. When the ester is
+  not requested, OMe still wins over Ac. A group never attaches to
   another automatic label. A group named explicitly must be drawn at least
   once, or the call fails; #c("\"all\"") silently skips absent groups.
 
@@ -1373,7 +1386,7 @@ no #c("atom-<i>") anchor for hidden atoms.]
 == Fonts and size
 
 #demo[
-  #c("ce") accepts #c("font") and #c("font-size"); any other arguments pass
+  #c("ce") accepts #c("font") and #c("font-size")\; any other arguments pass
   through to chemformula.
 
   #example(```typ
@@ -1945,11 +1958,11 @@ highlight results.
 #demo[
   #c("arrow(from:, to:, label: none, color: black, stroke: auto, bend: \"left\", angle: 15deg, half: false, heads: \"end\", head-length: 0.11, head-width: 0.07, style: \"solid\")")
   draws a curly arrow between two references. #c("bend") is #c("\"left\""),
-  #c("\"right\""), or #c("none"); #c("angle") sets how strongly it bows;
+  #c("\"right\""), or #c("none")\; #c("angle") sets how strongly it bows;
   #c("half: true") draws fishhook (single-electron) heads. #c("heads") selects
   which ends carry an arrowhead — #c("\"end\"") (default), #c("\"both\""), or
   #c("\"none\"") — and #c("style") the shaft: #c("\"solid\"") (default),
-  #c("\"dashed\""), or #c("\"wavy\""); both combine freely with #c("bend"). The
+  #c("\"dashed\""), or #c("\"wavy\"")\; both combine freely with #c("bend"). The
   compact triangle tip is sized in bond-length units by #c("head-length") (along
   the shaft) and #c("head-width") (base); they apply to every drawn head and
   scale with the drawing. #c("highlight(ref, fill:)")
@@ -2517,7 +2530,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("font-size")], [`none`], [Atom-label size only.],
   [#c("font")], [`"New Computer Modern"`], [Atom-label font.],
   [#c("bond-stroke")], [`none`], [Bond width only.],
-  [#c("color")], [`auto`], [CPK colors for #c("\"default\""); monochrome for journal presets.],
+  [#c("color")], [`auto`], [CPK colors for #c("\"default\"")\; monochrome for journal presets.],
   [#c("fg")], [`auto`], [Foreground for bonds/carbon labels; `auto` inherits the text color.],
   [#c("theme")], [`auto`], [CPK palette variant; `auto` goes dark when #c("fg") is light.],
   [#c("rotation")], [`0deg`], [Rotate, labels stay upright.],
@@ -2579,7 +2592,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
   [#c("mol-formula(smiles)")], [Hill-ordered molecular formula content; errors on wildcards, abbreviations, and isotopes.],
-  [#c("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float"); errors on wildcards, abbreviations, and isotopes.],
+  [#c("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float")\; errors on wildcards, abbreviations, and isotopes.],
   [#c("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],
   [#c("smiles-cetz(smiles, name:, origin:, fg:, theme:, ..opts)")], [Molecule as CeTZ elements with #c("atom-<i>") / #c("bond-<i>-<j>") / #c("center") anchors.],
   [#c("molecules.<name>")], [Bundled SMILES string for a common molecule (@sec-library); #c("molecules.at(\"name\")") for computed names.],
