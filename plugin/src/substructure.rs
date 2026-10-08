@@ -607,6 +607,30 @@ pub(crate) fn find_matches(
     Ok(matches.into_iter().collect())
 }
 
+/// Every ordered mapping of the pattern onto the molecule. Entry `k` of an
+/// embedding is the molecule atom matched by pattern atom `k`, so embeddings
+/// of a symmetric pattern share an atom set but differ in correspondence.
+pub(crate) fn find_embeddings(
+    molecule: &MoleculeGraph,
+    pattern: &str,
+) -> Result<Vec<Vec<usize>>, String> {
+    let query = parse_pattern(pattern)
+        .map_err(|error| format!("typed-smiles: invalid SMARTS {pattern:?}: {error}"))?;
+    let mut embeddings = Vec::new();
+    let mut matcher = Matcher {
+        molecule,
+        visits: 0,
+    };
+    matcher.search(&query, &mut vec![None; query.atoms.len()], None, &mut |mapping| {
+        embeddings.push(mapping.iter().map(|atom| atom.unwrap()).collect());
+        if embeddings.len() > MAX_MATCHES {
+            return Err("SMARTS search exceeds 4096 embeddings; use a more specific pattern (no partial matches returned)".into());
+        }
+        Ok(false)
+    }).map_err(|error| format!("typed-smiles: SMARTS {pattern:?}: {error}"))?;
+    Ok(embeddings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -638,6 +662,14 @@ mod tests {
         assert_eq!(matches("CC", "CC").len(), 1);
         assert_eq!(matches("c1ccccc1", "c1ccccc1").len(), 1);
         assert_eq!(matches("CCC", "CC").len(), 2);
+    }
+
+    #[test]
+    fn embeddings_keep_pattern_order_and_symmetry() {
+        let molecule = crate::parse_molecule("OCC").unwrap();
+        assert_eq!(find_embeddings(&molecule, "CO").unwrap(), vec![vec![1, 0]]);
+        let benzene = crate::parse_molecule("c1ccccc1").unwrap();
+        assert_eq!(find_embeddings(&benzene, "c1ccccc1").unwrap().len(), 12);
     }
 
     #[test]

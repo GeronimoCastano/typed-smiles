@@ -13,6 +13,7 @@
   _validate-molecule-options,
 )
 #import "../chemistry.typ": _compute-layout
+#import "alignment.typ": _is-aligned-molecule, _aligned-molecule-drawing
 #import "../substructure.typ": _substructure-highlights
 #import "../styles.typ": _resolve-foreground-theme, _canvas-scale, _style-preset
 #import "rendering.typ": (
@@ -32,8 +33,8 @@
 
 /// Renders a SMILES string as a 2D skeletal molecular diagram.
 ///
-/// - smiles-str (str): A valid SMILES string, e.g. "C1=CC=CC=C1" or
-///   "c1ccccc1" for benzene.
+/// - smiles-str (str / dictionary): A valid SMILES string, e.g. "C1=CC=CC=C1"
+///   or "c1ccccc1" for benzene, or a molecule returned by align-molecules().
 /// - style ("default" / "acs" / "rsc" / "nature" / "wiley"): Journal style
 ///   preset filling in bond-length, font-size, bond-stroke, and font from the
 ///   journal's published drawing settings. Arguments passed explicitly win;
@@ -118,6 +119,16 @@
   highlight-unmatched: "error",
   ..annotations
 ) = context {
+  let (smiles-str, rotation, mirror) = if _is-aligned-molecule(smiles-str) {
+    let aligned-drawing = _aligned-molecule-drawing(
+      smiles-str,
+      (rotation: rotation, mirror: mirror, show-h: show-h),
+      "smiles",
+    )
+    (aligned-drawing.smiles, aligned-drawing.options.rotation, aligned-drawing.options.mirror)
+  } else {
+    (smiles-str, rotation, mirror)
+  }
   _validate-positive-number(scale, "smiles scale")
   if bond-length != none {
     _validate-positive-number(bond-length, "smiles bond-length")
@@ -259,7 +270,7 @@
 /// overlapped; the default height keeps ordinary line spacing (nearly)
 /// unchanged, and larger heights make only the molecule's own line taller.
 ///
-/// - smiles-str (str): The SMILES string.
+/// - smiles-str (str / dictionary): The SMILES string or aligned molecule.
 /// - height (length): Target height of the drawing. Default: 1.4em.
 /// - baseline (auto / length): How far the drawing's vertical center sits
 ///   above the text baseline. `auto` centers it on the lowercase body of the
@@ -316,7 +327,7 @@
 /// Coordinates are in bond-length units; give the canvas
 /// `length: 30pt * scale` so sizes match #smiles(scale: ...).
 ///
-/// - smiles-str (str): The SMILES string.
+/// - smiles-str (str / dictionary): The SMILES string or aligned molecule.
 /// - name (str): CeTZ group name carrying the anchors.
 /// - origin (array): (x, y) placement of the molecule center, in canvas units.
 /// - fg (color): Foreground color. `auto` is not resolvable inside a raw
@@ -329,7 +340,12 @@
 /// -> none  (emits CeTZ draw elements)
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
-  let options = opts.named()
+  let (smiles-str, options) = if _is-aligned-molecule(smiles-str) {
+    let aligned-drawing = _aligned-molecule-drawing(smiles-str, opts.named(), "smiles-cetz")
+    (aligned-drawing.smiles, aligned-drawing.options)
+  } else {
+    (smiles-str, opts.named())
+  }
   if name != none and type(name) != str {
     _invalid-input(
       "smiles-cetz name",

@@ -1,3 +1,4 @@
+mod alignment;
 mod error;
 mod graph;
 mod kekulize;
@@ -5,6 +6,7 @@ mod layout;
 mod render;
 mod substructure;
 
+pub use alignment::{AlignmentRequest, MoleculeAlignment};
 pub use render::LayoutOutput;
 pub use substructure::SubstructureMatch;
 
@@ -752,6 +754,17 @@ mod wasm_entrypoint {
         serde_json::to_vec(&matches).map_err(|error| format!("JSON error: {error}"))
     }
 
+    /// Called from Typst with a JSON-encoded `AlignmentRequest`.
+    /// Returns a JSON array of `MoleculeAlignment`, one per molecule.
+    #[wasm_func]
+    pub fn align_molecules(request: &[u8]) -> Result<Vec<u8>, String> {
+        let request: AlignmentRequest = serde_json::from_slice(request)
+            .map_err(|error| format!("alignment request error: {error}"))?;
+        let alignments = alignment::align_molecules(&request)
+            .map_err(|error| format!("typed-smiles: align-molecules: {error}"))?;
+        serde_json::to_vec(&alignments).map_err(|error| format!("JSON error: {error}"))
+    }
+
     /// Called from Typst as `smiles-plugin.mol_weight(bytes(smiles-str))`.
     /// Returns the molecular weight in g/mol as a JSON number.
     #[wasm_func]
@@ -781,6 +794,13 @@ mod wasm_entrypoint {
 pub fn layout_native(smiles: &str) -> Result<LayoutOutput, String> {
     let molecule = parse_molecule(smiles)?;
     compute_layout(&molecule)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn align_molecules_native(
+    request: &AlignmentRequest,
+) -> Result<Vec<MoleculeAlignment>, String> {
+    alignment::align_molecules(request)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

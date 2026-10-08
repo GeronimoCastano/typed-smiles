@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, molecules, substructure-matches
+#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, molecules, substructure-matches, align-molecules, molecule-grid, smiles-cetz
 
 #let selected-case = sys.inputs.at("case", default: "")
 
@@ -110,6 +110,102 @@
   smiles(molecules.cafeine)
 } else if selected-case == "one-sided-directional-bond" {
   smiles("F/C=CF")
+} else if selected-case == "align-not-array" {
+  align-molecules("CC(=O)c1ccccc1", scaffold: "c1ccccc1")
+} else if selected-case == "align-single-molecule" {
+  align-molecules(("CCO",), scaffold: "CC")
+} else if selected-case == "align-molecule-type" {
+  align-molecules(("CCO", 3), scaffold: "CC")
+} else if selected-case == "align-aligned-input" {
+  let aligned = align-molecules(("CCO", "CCN"), scaffold: "CC")
+  align-molecules(aligned, scaffold: "CC")
+} else if selected-case == "align-scaffold-type" {
+  align-molecules(("CCO", "CCN"), scaffold: 5)
+} else if selected-case == "align-no-correspondence" {
+  align-molecules(("CCO", "CCN"))
+} else if selected-case == "align-partial-atoms-without-scaffold" {
+  align-molecules(("CCO", "CCN"), atoms: ((0, 1), auto))
+} else if selected-case == "align-atoms-length" {
+  align-molecules(("CCO", "CCN"), scaffold: "CC", atoms: (auto,))
+} else if selected-case == "align-atoms-entry" {
+  align-molecules(("CCO", "CCN"), scaffold: "CC", atoms: (auto, (0, "1")))
+} else if selected-case == "align-reference-range" {
+  align-molecules(("CCO", "CCN"), scaffold: "CC", reference: 2)
+} else if selected-case == "align-rotation-type" {
+  align-molecules(("CCO", "CCN"), scaffold: "CC", rotation: 30)
+} else if selected-case == "align-mirror-value" {
+  align-molecules(("CCO", "CCN"), scaffold: "CC", mirror: "diagonal")
+} else if selected-case == "align-allow-reflection-type" {
+  align-molecules(("CCO", "CCN"), scaffold: "CC", allow-reflection: "no")
+} else if selected-case == "align-absent-scaffold" {
+  align-molecules(("CCO", "CCN"), scaffold: "c1ccccc1")
+} else if selected-case == "align-invalid-scaffold" {
+  align-molecules(("CCO", "CCN"), scaffold: "[C")
+} else if selected-case == "align-invalid-smiles" {
+  align-molecules(("CCO", "C1CC"), scaffold: "CC")
+} else if selected-case == "align-distinct-occurrences" {
+  align-molecules(("c1ccccc1", "c1ccccc1-c1ccc(Cl)cc1"), scaffold: "c1ccccc1")
+} else if selected-case == "align-atoms-not-scaffold-match" {
+  align-molecules(("CCO", "CCO"), scaffold: "CO", atoms: (auto, (0, 1)))
+} else if selected-case == "align-atom-out-of-range" {
+  align-molecules(("CCO", "CCO"), atoms: ((0, 1), (0, 7)))
+} else if selected-case == "align-repeated-atom" {
+  align-molecules(("CCO", "CCO"), atoms: ((0, 1), (1, 1)))
+} else if selected-case == "align-unequal-atom-lists" {
+  align-molecules(("CCO", "CCO"), atoms: ((0, 1, 2), (0, 1)))
+} else if selected-case == "align-single-atom-correspondence" {
+  align-molecules(("CO", "CN"), scaffold: "C")
+} else if selected-case == "aligned-rotation-conflict" {
+  let aligned = align-molecules(("CCO", "OCC"), scaffold: "CCO")
+  smiles(aligned.at(1), rotation: 30deg)
+} else if selected-case == "aligned-mirror-conflict" {
+  let aligned = align-molecules(("CCO", "OCC"), scaffold: "CCO")
+  reaction(mol(aligned.at(1), mirror: "horizontal"))
+} else if selected-case == "aligned-cetz-rotation-conflict" {
+  let aligned = align-molecules(("CCO", "OCC"), scaffold: "CCO")
+  smiles-cetz(aligned.at(1), rotation: 90deg)
+} else if selected-case == "aligned-skeleton-hydrogens" {
+  let aligned = align-molecules(("CCO", "OCC"), scaffold: "CCO")
+  smiles(aligned.at(0), show-h: "skeleton")
+} else if selected-case == "invalid-mol-spec" {
+  reaction(mol(42))
+} else if selected-case == "grid-empty" {
+  molecule-grid()
+} else if selected-case == "grid-columns" {
+  molecule-grid(columns: 0, "CCO")
+} else if selected-case == "grid-columns-type" {
+  molecule-grid(columns: "3", "CCO")
+} else if selected-case == "grid-scale" {
+  molecule-grid(scale: -1, "CCO")
+} else if selected-case == "grid-bond-length" {
+  molecule-grid(bond-length: 0, "CCO")
+} else if selected-case == "grid-sizing" {
+  molecule-grid(sizing: "stretch", "CCO")
+} else if selected-case == "grid-gutter" {
+  molecule-grid(column-gutter: -1pt, "CCO")
+} else if selected-case == "grid-breakable" {
+  molecule-grid(breakable: "yes", "CCO")
+} else if selected-case == "grid-unknown-option" {
+  molecule-grid(gap: 1em, "CCO")
+} else if selected-case == "grid-invalid-item" {
+  molecule-grid("CCO", [plain content])
+} else if selected-case == "grid-item-scale" {
+  molecule-grid("CCO", mol("CCN", scale: 2))
+} else if selected-case == "grid-item-bond-length" {
+  molecule-grid("CCO", mol("CCN", bond-length: 2))
+} else if selected-case == "grid-overflow" {
+  set page(width: 6cm)
+  molecule-grid(columns: 3, "CCCCCCCCCCCC", "CCO")
+} else if selected-case == "grid-scaffold-type" {
+  molecule-grid(scaffold: (), "CCO", "CCN")
+} else if selected-case == "grid-scaffold-single" {
+  molecule-grid(scaffold: "CC", "CCO")
+} else if selected-case == "grid-scaffold-content" {
+  molecule-grid(scaffold: "CC", "CCO", mol([content]))
+} else if selected-case == "grid-scaffold-rotation" {
+  molecule-grid(scaffold: "CC", "CCO", mol("CCN", rotation: 30deg))
+} else if selected-case == "grid-scaffold-absent" {
+  molecule-grid(scaffold: "c1ccccc1", "CCO", "CCN")
 } else {
   panic("unknown validation test case: " + selected-case)
 }

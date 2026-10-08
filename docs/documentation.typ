@@ -5,7 +5,7 @@
 
 #import "@preview/codly:1.3.0": *
 #import "@preview/codly-languages:0.1.1": *
-#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, molecules, substructure-matches, functional-groups
+#import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, molecules, substructure-matches, functional-groups, align-molecules, molecule-grid
 #import "@preview/cetz:0.5.2"
 
 #let version = "0.12.0"
@@ -64,6 +64,7 @@
   atom: atom, bond: bond, lp: lp, species: species, arrow: arrow,
   highlight: highlight, brackets: brackets, mol-formula: mol-formula, mol-weight: mol-weight,
   molecules: molecules,
+  align-molecules: align-molecules, molecule-grid: molecule-grid,
   cetz: cetz,
 )
 
@@ -1350,7 +1351,8 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 
 #demo[
   #c("mol(spec, ..annotations, label: none, offset: (0,0), ..opts)") is a reaction item. #c("spec")
-  is either any content (#c("smiles(...)"), #c("ce(...)"), text) or a SMILES *string*.
+  is either any content (#c("smiles(...)"), #c("ce(...)"), text), a SMILES *string*, or a
+  molecule returned by #c("align-molecules()") (@sec-series).
   Passing a string lets #c("reaction") render the molecule itself so its atoms become
   addressable by curly arrows (see #link(<sec-mech>)[Reaction mechanisms]). String
   molecules accept common drawing options such as #c("scale"), #c("font-size"),
@@ -2037,6 +2039,185 @@ species alone.]
 ]
 
 // ═════════════════════════════════════════════════════════════════════════════
+= Molecule series <sec-series>
+// ═════════════════════════════════════════════════════════════════════════════
+
+Comparison figures — a starting material and its product, or a numbered
+compound series — read best when the shared core keeps one orientation and
+every molecule is drawn at the same scale. #c("align-molecules()") orients a
+series onto a common scaffold, and #c("molecule-grid()") lays out a series at
+one shared bond length.
+
+== Aligning a series: #raw("align-molecules()")
+
+#demo[
+  #c("align-molecules(molecules, scaffold:, atoms:, reference:, rotation:, mirror:, allow-reflection:)")
+  takes an array of SMILES strings and returns one *aligned molecule* per
+  input. Each molecule is turned — and mirrored when that fits better — so
+  its scaffold lies over the reference molecule's scaffold. Pass an aligned
+  molecule anywhere a SMILES string is accepted: #c("smiles()"),
+  #c("smiles-inline()"), #c("smiles-cetz()"), #c("mol()"), #c("reaction()"),
+  #c("cycle()"), and #c("molecule-grid()").
+
+  #example(```typ
+  #let aligned = align-molecules(
+    ("CC(=O)c1ccccc1", "CC(O)c1ccccc1"),
+    scaffold: "c1ccccc1",
+  )
+  #reaction(
+    mol(aligned.at(0)),
+    rxn-arrow(above: [NaBH#sub[4]]),
+    mol(aligned.at(1)),
+  )
+  ```)
+]
+
+#table(
+  columns: (auto, auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Argument*], [*Default*], [*Meaning*],
+  [#c("molecules")], [—], [Array of two or more SMILES strings.],
+  [#c("scaffold")], [#c("none")], [SMARTS pattern (@sec-mech) found once in every molecule. Plain SMILES such as #c("\"c1ccccc1\"") work as patterns.],
+  [#c("atoms")], [#c("none")], [One entry per molecule: #c("auto"), or an array of atom indices (as shown by #c("show-indices: true")). With a scaffold, the array selects which occurrence to use; without one, the arrays correspond atom by atom across the series.],
+  [#c("reference")], [#c("0")], [Index of the molecule whose own layout sets the orientation.],
+  [#c("rotation")], [#c("0deg")], [Rotation of the reference, and so of the whole series.],
+  [#c("mirror")], [#c("none")], [#c("\"horizontal\"") or #c("\"vertical\"") page-axis reflection of the whole series.],
+  [#c("allow-reflection")], [#c("true")], [Let a molecule be mirrored when that overlays its scaffold better than any rotation.],
+)
+
+#demo[
+  The same compound written in different atom orders is laid out in different
+  orientations; aligned on a shared scaffold, the series reads at a glance.
+  #c("rotation") and #c("mirror") turn the whole series at once.
+
+  #example(```typ
+  #let acids = align-molecules(
+    ("c1ccccc1C(=O)O", "O=C(O)c1ccccc1",
+     "OC(=O)c1ccccc1O"),
+    scaffold: "c1ccccc1C(=O)O",
+    rotation: 90deg,
+  )
+  #grid(
+    columns: 3, gutter: 1em,
+    ..acids.map(acid => smiles(acid, scale: 0.5)),
+  )
+  ```)
+]
+
+=== Symmetric scaffolds and several occurrences
+
+A symmetric scaffold such as benzene fits the reference in several ways.
+#c("align-molecules()") picks the correspondence that puts substituted
+scaffold atoms where the reference has its substituents — preferring
+substituents of the same element — then the closest overlay, then a rotation
+over a reflection. The choice is deterministic.
+
+When the scaffold occurs at places that are interchangeable by symmetry, such
+as the two rings of biphenyl or the methyls of an isobutyl group, the best
+fitting one is used. When it occurs at chemically distinct places, such as
+either ring of 4-chlorobiphenyl, alignment stops with an error that lists the
+candidate atoms; choose one by passing its atoms, in any order, in
+#c("atoms"):
+
+#example(```typ
+#let biphenyls = align-molecules(
+  ("Clc1ccccc1", "c1ccccc1-c1ccc(Cl)cc1"),
+  scaffold: "c1ccccc1",
+  atoms: (auto, (6, 7, 8, 9, 11, 12)),
+)
+#grid(
+  columns: 2, gutter: 2em, align: horizon,
+  ..biphenyls.map(biphenyl => smiles(biphenyl, scale: 0.6)),
+)
+```)
+
+With a scaffold, an atom list must cover exactly one place where the scaffold
+occurs, and the substituent rules above still decide how its atoms
+correspond. For a fixed atom-by-atom correspondence, omit the scaffold and give
+every molecule an atom list of the same length: atom #c("k") of each list is
+placed over atom #c("k") of the reference's list. At least two corresponding
+atoms are needed.
+
+=== What alignment changes
+
+Alignment only rotates or mirrors each molecule's own layout; it does not
+redraw the scaffold. Ring cores are drawn identically by the layout engine
+and therefore coincide, but a chain scaffold drawn with a different zigzag
+in two molecules keeps a residual mismatch. Each aligned molecule reports it
+as #c("deviation"): the largest distance, in bond lengths, between a scaffold
+atom and its reference atom. Its #c("atoms") field lists the molecule's
+scaffold atoms in scaffold order, ready for #c("highlight()") references.
+
+A mirrored molecule exchanges wedges and hashes, so the depicted
+stereochemistry is unchanged. Because an aligned molecule already carries its
+orientation, #c("rotation") and #c("mirror") cannot be passed again with it;
+turn the whole series through #c("align-molecules()") instead.
+#c("show-h: \"skeleton\"") redraws carbon chains and is not available for
+aligned molecules.
+
+== Compound grids: #raw("molecule-grid()")
+
+#demo[
+  #c("molecule-grid(columns:, scale:, bond-length:, sizing:, scaffold:, ..items)")
+  arranges SMILES strings, aligned molecules, and #c("mol()") items in
+  equal-width columns. Every molecule shares one bond length and is centered
+  in its cell, so a small molecule is never enlarged to fill its space.
+  Captions come from #c("mol(label: ...)") and start on one line across each
+  row.
+
+  #example(```typ
+  #molecule-grid(
+    columns: 3,
+    bond-length: 0.6,
+    mol("Oc1ccccc1", label: [*1* Phenol]),
+    mol("COc1ccccc1", label: [*2* Anisole]),
+    mol("Clc1ccccc1", label: [*3* PhCl]),
+  )
+  ```)
+]
+
+#table(
+  columns: (auto, auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Argument*], [*Default*], [*Meaning*],
+  [#c("columns")], [#c("auto")], [Number of equal-width columns; #c("auto") uses one per molecule, up to four.],
+  [#c("scale")], [#c("1.0")], [Shared scale of bonds, labels, and strokes.],
+  [#c("bond-length")], [#c("none")], [Shared bond length (1.0 = 30 pt), overriding the one implied by #c("scale").],
+  [#c("sizing")], [#c("\"fixed\"")], [#c("\"fixed\"") draws at the given scale; #c("\"fit\"") scales the whole series by one factor so the widest molecule fills its column.],
+  [#c("scaffold")], [#c("none")], [Align every molecule onto the first one's occurrence of this SMARTS pattern.],
+  [#c("column-gutter")], [#c("1.5em")], [Space between columns.],
+  [#c("row-gutter")], [#c("1.5em")], [Space between rows.],
+  [#c("label-gap")], [#c("0.6em")], [Space between a molecule and its caption.],
+  [#c("breakable")], [#c("true")], [Allow page breaks between rows; #c("false") keeps the grid on one page.],
+)
+
+#demo[
+  With #c("sizing: \"fit\"") the series keeps its relative sizes while filling
+  the available width, and #c("scaffold:") aligns it like
+  #c("align-molecules()") with the first molecule as reference.
+
+  #example(```typ
+  #molecule-grid(
+    columns: 3,
+    sizing: "fit",
+    scaffold: "c1ccccc1C(=O)O",
+    mol("c1ccccc1C(=O)O", label: [Benzoic]),
+    mol("O=C(O)c1ccccc1", label: [Same]),
+    mol("OC(=O)c1ccccc1O", label: [Salicylic]),
+  )
+  ```)
+]
+
+#note[Drawing options such as #c("show-h"), #c("color"), or highlights go on
+each #c("mol()") item. A per-item #c("scale") or #c("bond-length") would break
+the shared scale and is rejected; set it on the grid. With #c("sizing:
+\"fixed\"") a molecule wider than its column stops with an error that suggests a
+smaller scale, fewer columns, or #c("sizing: \"fit\""). Page breaks fall only
+between rows, so a molecule never separates from its caption.]
+
+// ═════════════════════════════════════════════════════════════════════════════
 = Project-wide defaults
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -2083,6 +2264,9 @@ parameter.
 - Ring stereochemistry between adjacent centers and bridged bicyclics can overlap
   or need a manual adjustment (try #c("rotation"), or the manual #c("!w") and
   #c("!h") wedges).
+- #c("align-molecules()") rotates and mirrors existing layouts; it does not
+  redraw a scaffold to match the reference. Chain scaffolds drawn with
+  different zigzags keep a residual #c("deviation") (@sec-series).
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Molecule library <sec-library>
@@ -2233,13 +2417,24 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
-  [#c("mol(spec, ..annotations, label:, offset:, ..opts)")], [Reaction item; string #c("spec") has addressable atoms; positional arrows/highlights use local references; #c("offset") nudges in page coordinates; per-molecule #c("scale") also works in mechanism mode.],
+  [#c("mol(spec, ..annotations, label:, offset:, ..opts)")], [Reaction item; string or aligned #c("spec") has addressable atoms; positional arrows/highlights use local references; #c("offset") nudges in page coordinates; per-molecule #c("scale") also works in mechanism mode.],
   [#c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
   [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
   [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
   [#c("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, head-length:, head-width:, style:)")], [Curly electron-pushing arrow (default #c("color: black")); #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("head-length") / #c("head-width") size the tip; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
   [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:)")], [Shade one atom/bond reference or an array of references.],
   [#c("brackets(body, sup:, sub:)")], [Square brackets around content; inside #c("reaction()"), accepts reference-transparent reaction items too.],
+)
+
+== Molecule series
+
+#table(
+  columns: (auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Helper*], [*Purpose*],
+  [#c("align-molecules(molecules, scaffold:, atoms:, reference:, rotation:, mirror:, allow-reflection:)")], [Array of aligned molecules whose shared scaffold keeps the reference's orientation; fields #c("smiles"), #c("rotation"), #c("mirror"), #c("atoms"), #c("deviation").],
+  [#c("molecule-grid(columns:, scale:, bond-length:, sizing:, scaffold:, column-gutter:, row-gutter:, label-gap:, breakable:, ..items)")], [Compound grid at one shared bond length with row-aligned captions.],
 )
 
 == Label color names
