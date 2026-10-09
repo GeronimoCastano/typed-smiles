@@ -1,8 +1,8 @@
-#import "../../../src/lib.typ": smiles, highlight, bond
+#import "../../../src/lib.typ": smiles, highlight, bond, atom
 
 #let ciprofloxacin = "C1CC1N2C=C(C(=O)C3=CC(=C(C=C32)N4CCNCC4)F)C(=O)O"
 
-#let tint(color) = color.transparentize(45%)
+#let tint(color) = color.transparentize(20%)
 #let quinolone-ring-color = rgb("#A7B94A")
 #let piperazine-color = rgb("#5FBFA0")
 #let fluorine-color = rgb("#C9A06A")
@@ -19,6 +19,7 @@
     ciprofloxacin,
     color: false,
     scale: 1.1,
+    bond-stroke : 1.3pt,
     rotation: 90deg,
     highlight(
       (bond(3, 4), bond(4, 5), bond(3, 13), bond(8, 13), bond(8, 9), bond(9, 10), bond(10, 11), bond(11, 12), bond(12, 13)),
@@ -32,7 +33,7 @@
     ),
     highlight((bond(10, 20)), fill: tint(fluorine-color), include-atoms: true),
     highlight((bond(5, 6), bond(6, 7), bond(6, 8)), fill: tint(ketone-color), include-atoms: true),
-    highlight((bond(5, 21), bond(21, 22), bond(21, 23)), fill: tint(acid-color), include-atoms: true),
+    highlight((bond(5, 21), bond(21, 22), bond(21, 23), atom(25)), fill: tint(acid-color), include-atoms: true),
     highlight((bond(0, 1), bond(1, 2), bond(0, 2), bond(2, 3)), fill: tint(cyclopropyl-color), include-atoms: true),
   ))
 ]

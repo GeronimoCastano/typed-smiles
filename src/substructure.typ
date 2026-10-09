@@ -1,11 +1,11 @@
 // Named teaching patterns and conversion to the existing highlight annotations.
 #import "chemistry.typ": substructure-matches
-#import "validation.typ": _invalid-input, _color-type, _validate-bool
+#import "validation.typ": _invalid-input, _color-type, _validate-bool, _validate-include-hydrogens
 #import "mechanism/references.typ": atom, bond
 #import "mechanism/annotations.typ": highlight
 
 /// SMARTS definitions for common groups. Recursive clauses are context only:
-/// only atoms and bonds outside $(...) are shaded. Keys use hyphenated names.
+/// only atoms and bonds outside `$(...)` are shaded. Keys use hyphenated names.
 #let functional-groups = (
   carboxylic-acid: "[CX3;H1,$(C-[#6])](=O)[OX2H1;+0]",
   carboxylate: "[CX3;H1,$(C-[#6])](=O)[O-]",
@@ -37,6 +37,20 @@
   amine: ("N",), amide: ("N",), thiol: ("S",), aldehyde: ("C",),
 )
 
+// Resolves a request's hydrogen shading into the highlight() argument and the
+// curated element list. Under `auto`, named groups shade only their curated
+// elements, since their SMARTS was written around those atoms. Pattern requests
+// keep the highlight() default, which shades every selected heteroatom.
+#let _request-hydrogen-shading(request) = {
+  if request.include-hydrogens == auto and "curated-hydrogen-elements" in request {
+    return (
+      include-hydrogens: false,
+      hydrogen-elements: request.curated-hydrogen-elements,
+    )
+  }
+  (include-hydrogens: request.include-hydrogens, hydrogen-elements: ())
+}
+
 #let _highlight-requests(value, field, input-context) = {
   let values = if value == none {
     ()
@@ -49,7 +63,7 @@
     _invalid-input(
       input-context,
       "expected a string, request dictionary, or array, got " + repr(value),
-      "Pass a string or a dictionary with " + field + " and optional include-atoms.",
+      "Pass a string or a dictionary with " + field + ", include-atoms, and include-hydrogens.",
     )
   }
   let requests = ()
@@ -59,15 +73,15 @@
       _invalid-input(
         input-context,
         "expected a string or request dictionary, got " + repr(value),
-        "Pass a string or a dictionary with " + field + " and optional include-atoms.",
+        "Pass a string or a dictionary with " + field + ", include-atoms, and include-hydrogens.",
       )
     }
     for key in request.keys() {
-      if key not in (field, "include-atoms") {
+      if key not in (field, "include-atoms", "include-hydrogens") {
         _invalid-input(
           input-context,
           "unknown request option " + repr(key),
-          "Use only " + field + " and include-atoms.",
+          "Use only " + field + ", include-atoms, and include-hydrogens.",
         )
       }
     }
@@ -81,7 +95,13 @@
     }
     let include-atoms = request.at("include-atoms", default: true)
     _validate-bool(include-atoms, input-context + " include-atoms")
-    requests.push((name: name, include-atoms: include-atoms))
+    let include-hydrogens = request.at("include-hydrogens", default: auto)
+    _validate-include-hydrogens(include-hydrogens, input-context + " include-hydrogens")
+    requests.push((
+      name: name,
+      include-atoms: include-atoms,
+      include-hydrogens: include-hydrogens,
+    ))
   }
   requests
 }
@@ -106,7 +126,7 @@
     }
     patterns.push(request + (
       pattern: functional-groups.at(key),
-      hydrogen-elements: _group-hydrogen-elements.at(key, default: ()),
+      curated-hydrogen-elements: _group-hydrogen-elements.at(key, default: ()),
     ))
   }
   if highlight-unmatched not in ("error", "ignore") {
@@ -150,12 +170,14 @@
       let references = match.atoms.filter(index => index not in endpoints)
         .map(index => atom(index))
       references += match.bonds.map(pair => bond(..pair))
+      let hydrogen-shading = _request-hydrogen-shading(request)
       let annotation = highlight(
         references,
         fill: colors.at(calc.rem(annotations.len(), colors.len())),
         include-atoms: request.include-atoms,
+        include-hydrogens: hydrogen-shading.include-hydrogens,
       )
-      annotation.hydrogen-elements = request.at("hydrogen-elements", default: ())
+      annotation.hydrogen-elements = hydrogen-shading.hydrogen-elements
       annotations.push(annotation)
     }
   }

@@ -20,6 +20,11 @@
     assert.eq(annotations.first().at("hydrogen-elements"), (element,))
   }
   assert.eq(_substructure-highlights("CCS", highlight-smarts: "[SX2H1]").first().at("hydrogen-elements"), ())
+  assert.eq(_substructure-highlights("CCS", highlight-smarts: "[SX2H1]").first().at("hydrogen-heteroatoms"), true)
+  assert.eq(_substructure-highlights("CCS", highlight-smarts: (pattern: "[SX2H1]", include-hydrogens: false)).first().at("hydrogen-heteroatoms"), false)
+  assert.eq(_substructure-highlights("CC(=O)O", highlight-groups: (group: "carboxylic-acid", include-hydrogens: false)).first().at("hydrogen-elements"), ())
+  assert.eq(_substructure-highlights("CC(=O)O", highlight-groups: (group: "carboxylic-acid", include-hydrogens: true)).first().at("hydrogen-heteroatoms"), true)
+  assert.eq(_substructure-highlights("CC(=O)O", highlight-groups: (group: "carboxylic-acid", include-hydrogens: true)).first().at("hydrogen-elements"), ())
   assert.eq(_substructure-highlights("COC", highlight-groups: "ether").first().at("hydrogen-elements"), ())
 
   // A thiol H stays at the S-H bond length after page-axis rotation/mirroring,

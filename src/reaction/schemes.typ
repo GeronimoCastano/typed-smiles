@@ -12,6 +12,9 @@
   _validate-nonnegative-length,
   _validate-bool,
   _validate-offset,
+  _validate-highlight-overlap,
+  _positional-highlight-hint,
+  _reject-unknown-named-options,
 )
 #import "../substructure.typ": _substructure-highlights
 #import "../molecule/abbreviations.typ": (
@@ -27,7 +30,8 @@
 )
 #import "../mechanism/annotations.typ": (
   _validate-annotations,
-  _draw-highlight,
+  _draw-highlight-layer,
+  _with-highlight-overlap,
   _draw-arrow,
   _annotation-configuration,
 )
@@ -39,7 +43,7 @@
 /// Creates a reaction arrow for use inside `reaction()`.
 ///
 /// - above (content / dictionary): Label above a horizontal arrow / to the right
-///   of a vertical one. A mol() item renders as a molecule; in mechanism mode it
+///   of a vertical one. A `mol()` item renders as a molecule; in mechanism mode it
 ///   also becomes a referenceable species of its own.
 /// - below (content / dictionary): Label below a horizontal arrow / to the left
 ///   of a vertical one. Accepts the same values as `above`.
@@ -109,21 +113,21 @@
 }
 
 /// A reaction-scheme item: a molecule or any content, with an optional label and
-/// position offset. Consumed by #reaction() and by the above/below slots of
-/// #rxn-arrow().
+/// position offset. Consumed by `reaction()` and by the above/below slots of
+/// `rxn-arrow()`.
 ///
 /// - spec (str / dictionary / content): A SMILES string or a molecule from
-///   align-molecules() (rendered by #reaction with addressable atoms), or any
-///   content (e.g. ce(...), smiles(...), text — an opaque block).
+///   `align-molecules()` (rendered by `reaction()` with addressable atoms), or any
+///   content (e.g. `ce(...)`, `smiles(...)`, text — an opaque block).
 /// - label (content): Optional label shown below. Default: none.
 /// - offset (array): (dx, dy) page-axis nudge in bond-length units. Positive x
 ///   moves right and positive y moves up, independent of reaction flow.
-/// - ..opts: Positional arrow()/highlight() annotations use local atom and bond
+/// - ..opts: Positional `arrow()`/`highlight()` annotations use local atom and bond
 ///   references for this molecule. Named options control molecule drawing,
 ///   including per-molecule `scale`, labels, strokes, colors, rotation, mirroring,
 ///   hydrogens, lone pairs, opacity, bond customizations, and index overlays.
 ///   `reaction(scale: ...)` scales the complete scheme uniformly.
-/// -> dictionary  (consumed by #reaction / #rxn-arrow)
+/// -> dictionary  (consumed by `reaction()` / `rxn-arrow()`)
 #let mol(spec, label: none, offset: (0, 0), ..opts) = {
   if type(spec) != str and type(spec) != _content-type and not _is-aligned-molecule(spec) {
     _invalid-input(
@@ -161,16 +165,16 @@
     "atom-annotations", "opacity", "bond-customizations", "lone-pairs",
     "atom-colors", "show-indices", "abbreviate",
     "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
-    "show-maps", "undepicted-stereo",
+    "show-maps", "undepicted-stereo", "highlight-overlap",
   )
-  for option-name in options.keys() {
-    if option-name not in allowed-options {
-      _invalid-input(
-        "mol option " + repr(option-name),
-        "the option is not supported",
-        "Use an option accepted by smiles().",
-      )
-    }
+  _reject-unknown-named-options(
+    options,
+    "mol",
+    allowed-options,
+    hints: (highlight: _positional-highlight-hint),
+  )
+  if "highlight-overlap" in options {
+    _validate-highlight-overlap(options.at("highlight-overlap"), "mol highlight-overlap")
   }
   if "scale" in options {
     _validate-positive-number(options.scale, "mol scale")
@@ -220,10 +224,13 @@
 }
 
 // Render a mol() item to standalone content (scheme/grid path).
-#let _render-molecule-item(molecule-item, show-indices-default: false, offset-unit: 30pt) = context {
+#let _render-molecule-item(molecule-item, show-indices-default: false, highlight-overlap-default: "merge", offset-unit: 30pt) = context {
   let options = molecule-item.opts
   if type(molecule-item.spec) == str and not ("show-indices" in options) {
     options.insert("show-indices", show-indices-default)
+  }
+  if type(molecule-item.spec) == str and not ("highlight-overlap" in options) {
+    options.insert("highlight-overlap", highlight-overlap-default)
   }
   let body = if type(molecule-item.spec) == str {
     smiles(molecule-item.spec, ..options)
@@ -450,32 +457,35 @@
 
 /// Lays out a reaction scheme or an electron-pushing mechanism.
 ///
-/// Items are any mix of mol(), content (smiles(), ce(), text…), rxn-arrow()
-/// (straight reaction arrows) and — for mechanisms — arrow() (curly electron
-/// arrows) and highlight() items.
+/// Items are any mix of `mol()`, content (`smiles()`, `ce()`, text…), `rxn-arrow()`
+/// (straight reaction arrows) and — for mechanisms — `arrow()` (curly electron
+/// arrows) and `highlight()` items.
 ///
 /// Two modes are detected automatically:
-///  - Scheme (default): no curly arrow()/highlight(). Items are packed in a grid;
-///    rxn-arrow(dir: "right"|"left"|"down"|"up") can wrap the scheme across the
-///    page. mol(offset:) nudges content in page coordinates inside its grid cell.
-///  - Mechanism: any curly arrow()/highlight(). Species are placed in one shared
+///  - Scheme (default): no curly `arrow()`/`highlight()`. Items are packed in a grid;
+///    `rxn-arrow(dir: "right"|"left"|"down"|"up")` can wrap the scheme across the
+///    page. `mol(offset:)` nudges content in page coordinates inside its grid cell.
+///  - Mechanism: any curly `arrow()`/`highlight()`. Species are placed in one shared
 ///    canvas (left to right, each nudged by its offset) so curly arrows can
-///    reference atoms across species. References are atom(s, i),
-///    bond(s, i, j), lp(s, i) and species(k), where s/k count mol()/content items
-///    in written order — including mol() items inside rxn-arrow(above:/below:)
+///    reference atoms across species. References are `atom(s, i)`,
+///    `bond(s, i, j)`, `lp(s, i)` and `species(k)`, where s/k count `mol()`/content items
+///    in written order — including `mol()` items inside `rxn-arrow(above:/below:)`
 ///    slots (above before below, at the arrow's position in the sequence).
 ///    Plain arrow-label content and annotations are not counted. Positional
-///    arrow()/highlight() items inside mol() use local references. Reaction items
-///    inside brackets(..items) stay on this same canvas and remain referenceable.
+///    `arrow()`/`highlight()` items inside `mol()` use local references. Reaction items
+///    inside `brackets(..items)` stay on this same canvas and remain referenceable.
 ///
 
 /// - gap-h (length): Horizontal gap between grid items (scheme mode). Default: 1.5em.
 /// - gap-v (length): Vertical gap between grid items (scheme mode). Default: 1.5em.
 /// - scale (float): Uniform scale. In mechanism mode it sets the shared canvas
-///   bond length, which each mol(scale: ...) multiplies for its own species.
+///   bond length, which each `mol(scale: ...)` multiplies for its own species.
 /// - breakable (bool): Whether the block may split across pages. Default: false.
 /// - show-indices (bool): Default index overlay for string SMILES molecules in
-///   this reaction. Individual mol(..., show-indices: ...) calls can override it.
+///   this reaction. Individual `mol(..., show-indices: ...)` calls can override it.
+/// - highlight-overlap ("merge" / "stack"): Default for highlights in this reaction.
+///   `"merge"` paints each highlight color as one shape; `"stack"` paints each
+///   piece on its own. A `mol()` can set its own value. Default: "merge".
 /// - fit (none / str): `"width"` shrinks the whole scheme uniformly when it is
 ///   wider than the space it is placed in, such as a page, cell, or box. The
 ///   shrink applies after `scale`, and it never enlarges a scheme. `none` keeps
@@ -489,6 +499,7 @@
   show-indices: false,
   flow: "right",
   fit: none,
+  highlight-overlap: "merge",
   ..items,
 ) = {
   _validate-nonnegative-length(gap-h, "reaction gap-h")
@@ -496,6 +507,7 @@
   _validate-positive-number(scale, "reaction scale")
   _validate-bool(breakable, "reaction breakable")
   _validate-bool(show-indices, "reaction show-indices")
+  _validate-highlight-overlap(highlight-overlap, "reaction highlight-overlap")
   if flow not in ("right", "left", "up", "down") {
     _invalid-input(
       "reaction flow",
@@ -510,6 +522,12 @@
       "Pass fit: \"width\" to shrink a scheme that is wider than its container, or leave fit out to keep its natural size.",
     )
   }
+  _reject-unknown-named-options(
+    items.named(),
+    "reaction",
+    ("gap-h", "gap-v", "scale", "breakable", "show-indices", "flow", "fit", "highlight-overlap"),
+    hints: (highlight: _positional-highlight-hint),
+  )
   if items.pos().len() == 0 {
     _invalid-input(
       "reaction items",
@@ -751,6 +769,7 @@
             _render-molecule-item(
               placed-item.data,
               show-indices-default: show-indices,
+              highlight-overlap-default: highlight-overlap,
             )
           } else {
             placed-item.data
@@ -918,6 +937,7 @@
             ),
             show-h: molecule-item.opts.at("show-h", default: ()),
             aromatic: molecule-item.opts.at("aromatic", default: "kekule"),
+            highlight-overlap: molecule-item.opts.at("highlight-overlap", default: highlight-overlap),
           )
         } else {
           let measured-content = measure(molecule-item.spec)
@@ -992,11 +1012,18 @@
       }
       let register-species(placed-species, species-list, annotation-list) = {
         let species-index = species-list.len()
+        let species-overlap = placed-species.at(
+          "highlight-overlap",
+          default: highlight-overlap,
+        )
         let local-annotations = placed-species.at(
           "annotations",
           default: (),
         ).map(annotation => (
-          scope-local-annotation(annotation, species-index)
+          _with-highlight-overlap(
+            scope-local-annotation(annotation, species-index),
+            species-overlap,
+          )
         ))
         (
           species-list: species-list + (placed-species,),
@@ -1231,15 +1258,14 @@
       let canvas = cetz.canvas(length: canvas-scale, {
         import cetz.draw: *
 
-        for annotation in annotations {
-          if annotation.at("__highlight__", default: false) {
-            _draw-highlight(
-              annotation,
-              placed-species-list,
-              configuration,
-            )
-          }
-        }
+        _draw-highlight-layer(
+          annotations.filter(annotation => (
+            type(annotation) == dictionary and annotation.at("__highlight__", default: false)
+          )),
+          placed-species-list,
+          configuration,
+          highlight-overlap,
+        )
 
         for bracket-item in bracket-items {
           line(
@@ -1366,14 +1392,14 @@
 /// a ‡ for a transition state, …).
 ///
 /// - ..body (content / reaction items): One content value to enclose, or a list
-///   of mol(), rxn-arrow(), arrow(), and highlight() items consumed directly by
-///   an enclosing reaction(). Reaction items remain referenceable across the
+///   of `mol()`, `rxn-arrow()`, `arrow()`, and `highlight()` items consumed directly by
+///   an enclosing `reaction()`. Reaction items remain referenceable across the
 ///   bracket boundary.
 /// - sup (content): Optional superscript outside the right bracket. Default: none.
 /// - sub (content): Optional subscript outside the right bracket. Default: none.
 /// - stroke (stroke): Bracket stroke. Default: 0.6pt black.
 /// - gap (length): Padding between the brackets and the body. Default: 0.3em.
-/// -> content / dictionary (consumed by #reaction)
+/// -> content / dictionary (consumed by `reaction()`)
 #let _render-brackets(body, sup: none, sub: none, stroke: 0.6pt + black, gap: 0.3em) = context {
   let body-height = measure(body).height
   let absolute-gap = gap.to-absolute()

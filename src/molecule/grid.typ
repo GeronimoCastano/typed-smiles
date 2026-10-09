@@ -105,13 +105,13 @@
 ///   molecule too wide for its column; "fit" scales the whole series by one
 ///   common factor so the widest molecule fills its column. Default: "fixed".
 /// - scaffold (none / str): Orient every SMILES molecule onto the first
-///   molecule's occurrence of this SMARTS pattern, as align-molecules() does.
+///   molecule's occurrence of this SMARTS pattern, as `align-molecules()` does.
 ///   Default: none.
 /// - column-gutter (length): Space between columns. Default: 1.5em.
 /// - row-gutter (length): Space between rows. Default: 1.5em.
 /// - label-gap (length): Space between a molecule and its caption. Default: 0.6em.
 /// - breakable (bool): Allow page breaks between rows. Default: true.
-/// - ..items: SMILES strings, align-molecules() results, or mol() items.
+/// - ..items: SMILES strings, `align-molecules()` results, or `mol()` items.
 /// -> content
 #let molecule-grid(
   columns: auto,

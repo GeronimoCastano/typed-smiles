@@ -404,6 +404,58 @@
   }
 }
 
+#let _smiles-option-names = (
+  "style", "scale", "bond-length", "font-size", "font", "bond-stroke", "color", "fg",
+  "theme", "rotation", "mirror", "show-h", "aromatic", "atom-annotations", "opacity",
+  "bond-customizations", "lone-pairs", "atom-colors", "show-indices", "abbreviate",
+  "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
+  "highlight-overlap", "show-maps", "undepicted-stereo",
+)
+
+#let _positional-highlight-hint = "Pass highlight(...) positionally, or use highlight-smarts / highlight-groups."
+
+#let _reject-unknown-option(option-name, function-name, accepted-names, hint) = {
+  _invalid-input(
+    function-name + " option " + repr(option-name),
+    "the option is not supported. Accepted options: " + accepted-names.join(", "),
+    hint,
+  )
+}
+
+// Named arguments that are not options of the function would otherwise be
+// dropped silently, so each unknown key is reported before any drawing begins.
+#let _reject-unknown-named-options(named-arguments, function-name, accepted-names, hints: (:)) = {
+  for option-name in named-arguments.keys() {
+    if option-name in accepted-names { continue }
+    _reject-unknown-option(
+      option-name,
+      function-name,
+      accepted-names,
+      hints.at(option-name, default: "Remove the option or use one of the accepted option names."),
+    )
+  }
+}
+
+#let _validate-highlight-overlap(overlap, input-context) = {
+  if overlap not in ("merge", "stack") {
+    _invalid-input(
+      input-context,
+      "expected \"merge\" or \"stack\", got " + repr(overlap),
+      "Use \"merge\" to paint each highlight color as one shape, or \"stack\" to paint every highlight piece on its own.",
+    )
+  }
+}
+
+#let _validate-include-hydrogens(include-hydrogens, input-context) = {
+  if include-hydrogens not in (auto, true, false) {
+    _invalid-input(
+      input-context,
+      "expected auto, true, or false, got " + repr(include-hydrogens),
+      "Use auto for the default, true to shade every selected heteroatom's displayed hydrogens, or false to leave them unshaded.",
+    )
+  }
+}
+
 #let _validate-molecule-options(
   layout,
   scale,

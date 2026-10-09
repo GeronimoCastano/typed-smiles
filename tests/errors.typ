@@ -312,6 +312,34 @@
   )
 } else if selected-case == "curl-without-reference-turn" {
   smiles("C=C!cC=C")
+} else if selected-case == "highlight-overlap-value" {
+  smiles("CCO", highlight-overlap: "outline")
+} else if selected-case == "highlight-overlap-type" {
+  smiles("CCO", highlight-overlap: true)
+} else if selected-case == "mol-highlight-overlap-value" {
+  reaction(mol("CCO", highlight-overlap: "both"))
+} else if selected-case == "reaction-highlight-overlap-value" {
+  reaction(highlight-overlap: "stacked", mol("CCO"))
+} else if selected-case == "cetz-highlight-overlap-value" {
+  cetz.canvas(smiles-cetz("CCO", highlight-overlap: "merged"))
+} else if selected-case == "smiles-named-highlight" {
+  smiles("CCO", highlight: highlight(atom(0)))
+} else if selected-case == "smiles-unknown-named-option" {
+  smiles("CCO", fill-color: red)
+} else if selected-case == "mol-named-highlight" {
+  reaction(mol("CCO", highlight: highlight(atom(0))))
+} else if selected-case == "reaction-unknown-named-option" {
+  reaction(scale-factor: 2, mol("CCO"))
+} else if selected-case == "cetz-named-highlight" {
+  cetz.canvas(smiles-cetz("CCO", highlight: highlight(atom(0))))
+} else if selected-case == "highlight-radius-zero" {
+  smiles("CCO", highlight(bond(0, 1), radius: 0))
+} else if selected-case == "highlight-include-hydrogens-value" {
+  smiles("CCO", highlight(atom(2), include-hydrogens: "yes"))
+} else if selected-case == "highlight-smarts-include-hydrogens-type" {
+  smiles("CCO", highlight-smarts: (pattern: "[OX2H1]", include-hydrogens: 1))
+} else if selected-case == "highlight-group-include-hydrogens-value" {
+  reaction(mol("CCO", highlight-groups: (group: "alcohol", include-hydrogens: "true")))
 } else {
   panic("unknown validation test case: " + selected-case)
 }

@@ -11,6 +11,11 @@
   _validate-positive-length,
   _validate-offset,
   _validate-molecule-options,
+  _validate-highlight-overlap,
+  _smiles-option-names,
+  _positional-highlight-hint,
+  _reject-unknown-named-options,
+  _reject-unknown-option,
 )
 #import "alignment.typ": _is-aligned-molecule, _aligned-molecule-drawing
 #import "../substructure.typ": _substructure-highlights
@@ -24,7 +29,7 @@
 )
 #import "../mechanism/annotations.typ": (
   _validate-annotations,
-  _draw-highlight,
+  _draw-highlight-layer,
   _draw-arrow,
   _annotation-configuration,
 )
@@ -34,7 +39,7 @@
 /// Renders a SMILES string as a 2D skeletal molecular diagram.
 ///
 /// - smiles-str (str / dictionary): A valid SMILES string, e.g. "C1=CC=CC=C1"
-///   or "c1ccccc1" for benzene, or a molecule returned by align-molecules().
+///   or "c1ccccc1" for benzene, or a molecule returned by `align-molecules()`.
 /// - style ("default" / "acs" / "rsc" / "nature" / "wiley"): Journal style
 ///   preset filling in bond-length, font-size, bond-stroke, and font from the
 ///   journal's published drawing settings. Arguments passed explicitly win;
@@ -75,14 +80,14 @@
 /// - opacity (ratio / float): Fade the whole drawing — bonds, labels, lone
 ///   pairs, annotations — e.g. for ghost molecules. Default: 100%.
 /// - bond-customizations (array): Per-bond style overrides as
-///   (bond(i, j), (..options..)) pairs; options are color, stroke (width),
+///   (`bond(i, j)`, (..options..)) pairs; options are color, stroke (width),
 ///   and opacity. Default: ().
 /// - lone-pairs (none / "dots" / "lines"): Draw non-bonding electron pairs on
 ///   skeletal atom labels. Default: none.
 /// - atom-colors (dictionary): Color overrides taking priority over the CPK palette
 ///   and inline `{label|style}` styles. See documentation for the two key forms.
 /// - show-indices (bool): Stamp each atom's writing-order index on the diagram, as a
-///   development aid for writing atom()/bond()/lp() references. Default: false.
+///   development aid for writing `atom()`/`bond()`/`lp()` references. Default: false.
 /// - abbreviate (none / "all" / str / array): Draw terminal groups from the
 ///   automatic catalogue ("tBu", "CO2Et", "CO2Me", "OAc", "NHAc", "SO3H",
 ///   "CF3", "NO2", "CO2H", "CO2-", "CN", "CHO", "OEt", "OMe", "Ac") as
@@ -90,19 +95,24 @@
 ///   cannot be referenced. A named group must occur in the molecule.
 ///   Default: none.
 /// - highlight-smarts (str / dictionary / array): Patterns or requests with
-///   pattern and include-atoms (default: true); shade every match.
+///   pattern, include-atoms (default: true), and include-hydrogens (default:
+///   auto, which shades the H of every selected heteroatom); shade every match.
 /// - highlight-groups (str / dictionary / array): Group names or requests with
-///   group and include-atoms (default: true).
+///   group, include-atoms (default: true), and include-hydrogens (default: auto,
+///   which shades each group's curated H).
 /// - highlight-colors (auto / array): Palette cycled over distinct matches.
 /// - highlight-unmatched ("error" / "ignore"): Policy for absent patterns/groups.
+/// - highlight-overlap ("merge" / "stack"): Painting of translucent highlights. `"merge"`
+///   paints each highlight color as one shape, so overlapping pieces do not darken;
+///   `"stack"` paints each piece on its own. Default: "merge".
 /// - show-maps (bool): Label atoms that carry an OpenSMILES atom map, such as
 ///   the 7 in `[CH3:7]`, with ":7". Default: false.
 /// - undepicted-stereo ("error" / "omit"): What to do with written
 ///   stereochemistry the drawing cannot show, such as octahedral `@OH` centers.
 ///   "error" reports it; "omit" draws the structure without it.
 ///   Default: "error".
-/// - ..annotations: Any number of arrow() / highlight() items referencing atoms of
-///   this molecule (single-index form, e.g. atom(2)).
+/// - ..annotations: Any number of `arrow()` / `highlight()` items referencing atoms of
+///   this molecule (single-index form, e.g. `atom(2)`).
 /// -> content
 #let smiles(
   smiles-str,
@@ -130,10 +140,17 @@
   highlight-groups: (),
   highlight-colors: auto,
   highlight-unmatched: "error",
+  highlight-overlap: "merge",
   show-maps: false,
   undepicted-stereo: "error",
   ..annotations
 ) = context {
+  _reject-unknown-named-options(
+    annotations.named(),
+    "smiles",
+    _smiles-option-names,
+    hints: (highlight: _positional-highlight-hint),
+  )
   let (smiles-str, rotation, mirror) = if _is-aligned-molecule(smiles-str) {
     let aligned-drawing = _aligned-molecule-drawing(
       smiles-str,
@@ -243,15 +260,19 @@
     show-maps: show-maps,
     undepicted-stereo: undepicted-stereo,
   )
+  _validate-highlight-overlap(highlight-overlap, "smiles highlight-overlap")
   _validate-annotations(annotation, placed-species-list, "smiles annotation")
 
   cetz.canvas(length: canvas-scale, {
     import cetz.draw: *
-    for h in annotation {
-      if type(h) == dictionary and h.at("__highlight__", default: false) {
-        _draw-highlight(h, placed-species-list, configuration)
-      }
-    }
+    _draw-highlight-layer(
+      annotation.filter(item => (
+        type(item) == dictionary and item.at("__highlight__", default: false)
+      )),
+      placed-species-list,
+      configuration,
+      highlight-overlap,
+    )
     _draw-molecule(
       layout,
       scale: the-scale,
@@ -297,7 +318,7 @@
 /// - baseline (auto / length): How far the drawing's vertical center sits
 ///   above the text baseline. `auto` centers it on the lowercase body of the
 ///   surrounding text. Default: auto.
-/// - ..args: Any #smiles() drawing options (color, fg, show-h, rotation, …).
+/// - ..args: Any `smiles()` drawing options (color, fg, show-h, rotation, …).
 /// -> content
 #let smiles-inline(smiles-str, height: 1.4em, baseline: auto, ..args) = context {
   _validate-positive-length(height, "smiles-inline height")
@@ -336,18 +357,18 @@
   )
 }
 
-/// Draws a molecule as CeTZ elements inside an existing #cetz.canvas and
+/// Draws a molecule as CeTZ elements inside an existing `cetz.canvas` and
 /// registers named anchors on the group, so arbitrary CeTZ drawing can attach
 /// to real molecular positions: dashed hydrogen bonds between molecules,
 /// distance labels, coupling arcs, custom arrows into a larger diagram.
 ///
 /// Anchors on `name` (writing-order indices, as shown by `show-indices`):
-///  - "atom-<i>" — every atom center,
-///  - "bond-<i>-<j>" — every bond midpoint (i < j),
+///  - `"atom-<i>"` — every atom center,
+///  - `"bond-<i>-<j>"` — every bond midpoint (i < j),
 ///  - "center" — the molecule origin.
 ///
 /// Coordinates are in bond-length units; give the canvas
-/// `length: 30pt * scale` so sizes match #smiles(scale: ...).
+/// `length: 30pt * scale` so sizes match `smiles(scale: ...)`.
 ///
 /// - smiles-str (str / dictionary): The SMILES string or aligned molecule.
 /// - name (str): CeTZ group name carrying the anchors.
@@ -355,12 +376,12 @@
 /// - fg (color): Foreground color. `auto` is not resolvable inside a raw
 ///   canvas and falls back to black. Default: black.
 /// - theme ("light" / "dark"): CPK palette variant. Default: "light".
-/// - ..opts: #smiles() drawing options — scale, font-size, font, bond-stroke,
+/// - ..opts: `smiles()` drawing options — scale, font-size, font, bond-stroke,
 ///   color, rotation, mirror, show-h, aromatic, atom-annotations, opacity,
 ///   bond-customizations, lone-pairs, atom-colors, show-indices, abbreviate,
 ///   highlight-smarts, highlight-groups, highlight-colors, highlight-unmatched,
-///   show-maps, undepicted-stereo. Hidden abbreviation atoms get no
-///   "atom-<i>" anchor.
+///   highlight-overlap, show-maps, undepicted-stereo. Hidden abbreviation atoms get no
+///   `"atom-<i>"` anchor.
 /// -> none  (emits CeTZ draw elements)
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
@@ -432,13 +453,24 @@
     "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
   )
   let matching-options = (:)
+  let highlight-overlap = options.at("highlight-overlap", default: "merge")
+  _validate-highlight-overlap(highlight-overlap, "smiles-cetz highlight-overlap")
   for (option-name, option-value) in options {
     if option-name in allowed {
       drawing-options.insert(option-name, option-value)
     } else if option-name in highlight-options {
       matching-options.insert(option-name, option-value)
-    } else if option-name not in ("mirror", "abbreviate") {
-      panic("smiles-cetz does not accept option \"" + option-name + "\"")
+    } else if option-name not in ("mirror", "abbreviate", "highlight-overlap") {
+      _reject-unknown-option(
+        option-name,
+        "smiles-cetz",
+        allowed + highlight-options + ("mirror", "abbreviate", "highlight-overlap"),
+        if option-name == "highlight" {
+          "highlight() is not accepted by smiles-cetz(); use highlight-smarts or highlight-groups."
+        } else {
+          "Remove the option or use one of the accepted option names."
+        },
+      )
     }
   }
   if drawing-options.at("font", default: none) == auto {
@@ -461,9 +493,7 @@
   let configuration = _annotation-configuration(canvas-scale, actual-font-size, molecule-scale, bond-stroke: bond-stroke)
   group(name: name, {
     translate(origin)
-    for annotation in annotations {
-      _draw-highlight(annotation, placed-species-list, configuration)
-    }
+    _draw-highlight-layer(annotations, placed-species-list, configuration, highlight-overlap)
     _draw-molecule(layout, fg: fg, theme: theme, ..drawing-options)
     for atom-index in range(layout.atoms.len()) {
       let atom = layout.atoms.at(atom-index)

@@ -135,9 +135,9 @@
   rxn-arrow(above: ce("Br2")),
   mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[*A*]),
   rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
-  mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[*B*]),
+  mol(smiles("BrC1=CC=C(C=C1)[N+](=O)[O-]"), label: text(size: 8pt)[*B*]),
   rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
-  mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[*C*]),
+  mol(smiles("BrC1=CC=C(C=C1)N"), label: text(size: 8pt)[*C*]),
 )
 
 #v(1.5em)
@@ -798,9 +798,9 @@ Standard SMILES bonding rules apply around it.
     rxn-arrow(above: ce("Br2")),
     mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[*A*]),
     rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
-    mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[*B*]),
+    mol(smiles("BrC1=CC=C(C=C1)[N+](=O)[O-]"), label: text(size: 8pt)[*B*]),
     rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
-    mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[*C*]),
+    mol(smiles("BrC1=CC=C(C=C1)N"), label: text(size: 8pt)[*C*]),
   )
 ]
 
@@ -1052,7 +1052,7 @@ A development aid: stamp each atom's writing-order index, then reference it in
    #text(size: 8pt, `CC#CC, bond(1, 2)`) \
    #smiles(
      "CC#CC",
-     highlight(bond(1, 2), fill: rgb("#FFCAD4")),
+     highlight(bond(1, 2), fill: rgb("#FFCAD4"), include-atoms: false),
      show-indices: true,
    )],
 
@@ -1325,7 +1325,7 @@ rotations, large labels, and reaction-level index overlays.
    #text(size: 8pt, `CC#CC`) \
    #smiles(
      "CC#CC",
-     highlight(bond(1, 2), fill: rgb("#FFCAD4")),
+     highlight(bond(1, 2), fill: rgb("#FFCAD4"), include-atoms: false),
      show-indices: true,
    )],
 
@@ -1537,37 +1537,37 @@ rotations, large labels, and reaction-level index overlays.
 
   [*O- dots, large* \
    #smiles("[O-]", scale: 1.3, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(0), fill: rgb("#BDE0FE")),
+     highlight(atom(0), fill: rgb("#BDE0FE")),
    )],
 
   [*O- lines, rotated* \
    #smiles("[O-]", scale: 1.15, rotation: 35deg, show-indices: true, lone-pairs: "lines",
-     highlight: highlight(atom(0), fill: rgb("#C7F9CC")),
+     highlight(atom(0), fill: rgb("#C7F9CC")),
    )],
 
   [*OH- dots* \
    #smiles("[OH-]", scale: 1.25, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(1)), fill: rgb("#FFD6A5")),
+     highlight((atom(0), atom(1)), fill: rgb("#FFD6A5")),
    )],
 
   [*F-, Cl-, Br-* \
    #stack(dir: ltr, spacing: 1.0em,
      smiles("[F-]", scale: 1.1, show-indices: true, lone-pairs: "dots",
-       highlight: highlight(atom(0), fill: rgb("#D8F7C7"))),
+       highlight(atom(0), fill: rgb("#D8F7C7"))),
      smiles("[Cl-]", scale: 1.1, show-indices: true, lone-pairs: "dots",
-       highlight: highlight(atom(0), fill: rgb("#D8F7C7"))),
+       highlight(atom(0), fill: rgb("#D8F7C7"))),
      smiles("[Br-]", scale: 1.1, show-indices: true, lone-pairs: "dots",
-       highlight: highlight(atom(0), fill: rgb("#D8F7C7"))),
+       highlight(atom(0), fill: rgb("#D8F7C7"))),
    )],
 
   [*NH4+ bracket Hs* \
    #smiles("[NH4+]", scale: 1.25, show-indices: true,
-     highlight: highlight((atom(0), atom(1)), fill: rgb("#E7C6FF")),
+     highlight((atom(0), atom(1)), fill: rgb("#E7C6FF")),
    )],
 
   [*Small font stress* \
    #smiles("[OH-]", scale: 0.9, font-size: 8pt, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(0), fill: rgb("#FDE2E4")),
+     highlight(atom(0), fill: rgb("#FDE2E4")),
    )],
 )
 
@@ -1583,32 +1583,32 @@ rotations, large labels, and reaction-level index overlays.
 
   [*C[OH], default* \
    #smiles("C[OH]", scale: 1.15, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(1), atom(2)), fill: rgb("#BDE0FE")),
+     highlight((atom(1), atom(2)), fill: rgb("#BDE0FE")),
    )],
 
   [*C[OH], rotated* \
    #smiles("C[OH]", scale: 1.15, rotation: 80deg, show-indices: true, lone-pairs: "lines",
-     highlight: highlight(atom(1), fill: rgb("#C7F9CC")),
+     highlight(atom(1), fill: rgb("#C7F9CC")),
    )],
 
   [*C[NH2], bracket Hs* \
    #smiles("C[NH2]", scale: 1.15, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(1), atom(2)), fill: rgb("#FFD6A5")),
+     highlight((atom(1), atom(2)), fill: rgb("#FFD6A5")),
    )],
 
   [*C[NH2], 180deg* \
    #smiles("C[NH2]", scale: 1.15, rotation: 180deg, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(1), fill: rgb("#E7C6FF")),
+     highlight(atom(1), fill: rgb("#E7C6FF")),
    )],
 
   [*CC[O-]* \
    #smiles("CC[O-]", scale: 1.15, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(2), fill: rgb("#FDE2E4")),
+     highlight(atom(2), fill: rgb("#FDE2E4")),
    )],
 
   [*CC[NH3+]* \
    #smiles("CC[NH3+]", scale: 1.15, show-indices: true,
-     highlight: highlight((atom(2), atom(3)), fill: rgb("#D8F7C7")),
+     highlight((atom(2), atom(3)), fill: rgb("#D8F7C7")),
    )],
 )
 
@@ -1624,22 +1624,22 @@ rotations, large labels, and reaction-level index overlays.
 
   [*Wide terminal labels* \
    #smiles("{PPh3}C({OEt})=O", scale: 1.0, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(2), atom(3)), fill: rgb("#BDE0FE")),
+     highlight((atom(0), atom(2), atom(3)), fill: rgb("#BDE0FE")),
    )],
 
   [*Colored leaving group* \
    #smiles("{Nu}!wC({LG|red})=O", scale: 1.0, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(2), bond(1, 1, 2)), fill: rgb("#FFCAD4")),
+     highlight((atom(0), atom(2), bond(1, 2)), fill: rgb("#FFCAD4")),
    )],
 
   [*Label rotation stress* \
    #smiles("{OEt}C({PPh3})F", scale: 1.0, rotation: -35deg, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(2)), fill: rgb("#C7F9CC")),
+     highlight((atom(0), atom(2)), fill: rgb("#C7F9CC")),
    )],
 
   [*Label plus bond endpoints* \
    #smiles("{MeO}C(=O){NHPh}", scale: 1.0, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(bond(1, 1, 3), fill: rgb("#FFD6A5"), include-atoms: true),
+     highlight(bond(1, 3), fill: rgb("#FFD6A5"), include-atoms: true),
    )],
 )
 
@@ -1655,22 +1655,22 @@ rotations, large labels, and reaction-level index overlays.
 
   [*Triple bond only* \
    #smiles("CC#CC", scale: 1.1, show-indices: true,
-     highlight: highlight((bond(1, 0, 1), bond(1, 1, 2), bond(1, 2, 3)), fill: rgb("#F7C6D0")),
+     highlight((bond(0, 1), bond(1, 2), bond(2, 3)), fill: rgb("#F7C6D0")),
    )],
 
   [*Triple bond with endpoints* \
    #smiles("CC#CC", scale: 1.1, rotation: 25deg, show-indices: true,
-     highlight: highlight((bond(1, 1, 2),), fill: rgb("#BDE0FE"), include-atoms: true),
+     highlight((bond(1, 2),), fill: rgb("#BDE0FE"), include-atoms: true),
    )],
 
   [*Carbonyl branch bonds* \
    #smiles("CCOC(=O)N", scale: 1.05, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((bond(1, 2, 3), bond(1, 3, 4), bond(1, 3, 5)), fill: rgb("#C7F9CC")),
+     highlight((bond(2, 3), bond(3, 4), bond(3, 5)), fill: rgb("#C7F9CC")),
    )],
 
   [*Carbonyl with endpoint toggle* \
    #smiles("CCOC(=O)N", scale: 1.05, rotation: -20deg, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((bond(1, 3, 4), bond(1, 3, 5)), fill: rgb("#FFD6A5"), include-atoms: true),
+     highlight((bond(3, 4), bond(3, 5)), fill: rgb("#FFD6A5"), include-atoms: true),
    )],
 )
 
@@ -1686,32 +1686,32 @@ rotations, large labels, and reaction-level index overlays.
 
   [*Cyclohexane atoms* \
    #smiles("C1CCCCC1", scale: 0.95, show-indices: true,
-     highlight: highlight((atom(0), atom(2), atom(4)), fill: rgb("#BDE0FE")),
+     highlight((atom(0), atom(2), atom(4)), fill: rgb("#BDE0FE")),
    )],
 
   [*Cyclohexane bonds* \
    #smiles("C1CCCCC1", scale: 0.95, rotation: 30deg, show-indices: true,
-     highlight: highlight((bond(1, 0, 1), bond(1, 2, 3), bond(1, 4, 5)), fill: rgb("#C7F9CC")),
+     highlight((bond(0, 1), bond(2, 3), bond(4, 5)), fill: rgb("#C7F9CC")),
    )],
 
   [*Benzene-style uppercase* \
    #smiles("C1=CC=CC=C1", scale: 0.95, show-indices: true,
-     highlight: highlight((bond(1, 0, 1), bond(1, 2, 3), bond(1, 4, 5)), fill: rgb("#FFCAD4")),
+     highlight((bond(0, 1), bond(2, 3), bond(4, 5)), fill: rgb("#FFCAD4")),
    )],
 
   [*Substituted ring O* \
    #smiles("OC1CCCCC1", scale: 0.95, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), bond(1, 0, 1)), fill: rgb("#FFD6A5"), include-atoms: true),
+     highlight((atom(0), bond(0, 1)), fill: rgb("#FFD6A5"), include-atoms: true),
    )],
 
   [*Ring plus halide* \
    #smiles("ClC1CCCCC1", scale: 0.95, rotation: -45deg, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), bond(1, 0, 1)), fill: rgb("#E7C6FF")),
+     highlight((atom(0), bond(0, 1)), fill: rgb("#E7C6FF")),
    )],
 
   [*Ring plus amine* \
    #smiles("NC1CCCCC1", scale: 0.95, rotation: 85deg, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(7)), fill: rgb("#D8F7C7")),
+     highlight((atom(0), atom(7)), fill: rgb("#D8F7C7")),
    )],
 )
 
@@ -1727,22 +1727,22 @@ rotations, large labels, and reaction-level index overlays.
 
   [*Chiral center, all fragile indices* \
    #smiles("N[C@@H](C)C(=O)O", scale: 1.1, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(4), atom(5), atom(6)), fill: rgb("#BDE0FE")),
+     highlight((atom(0), atom(4), atom(5), atom(6)), fill: rgb("#BDE0FE")),
    )],
 
   [*Chiral center rotated* \
    #smiles("N[C@@H](C)C(=O)O", scale: 1.1, rotation: -35deg, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((bond(1, 1, 0), bond(1, 3, 4)), fill: rgb("#FFCAD4"), include-atoms: true),
+     highlight((bond(1, 0), bond(3, 4)), fill: rgb("#FFCAD4"), include-atoms: true),
    )],
 
   [*Forced hash to N* \
    #smiles("C!hN", scale: 1.25, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(1), atom(2)), fill: rgb("#C7F9CC")),
+     highlight((atom(1), atom(2)), fill: rgb("#C7F9CC")),
    )],
 
   [*Halogen stereocenter load* \
    #smiles("C(Br)(Cl)(F)I", scale: 1.05, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(1), atom(2), atom(3), atom(4)), fill: rgb("#FFD6A5")),
+     highlight((atom(1), atom(2), atom(3), atom(4)), fill: rgb("#FFD6A5")),
    )],
 )
 
@@ -1758,32 +1758,32 @@ rotations, large labels, and reaction-level index overlays.
 
   [*Ether O dots* \
    #smiles("COC", scale: 1.1, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(1), fill: rgb("#BDE0FE")),
+     highlight(atom(1), fill: rgb("#BDE0FE")),
    )],
 
   [*Ether O lines* \
    #smiles("COC", scale: 1.1, rotation: 70deg, show-indices: true, lone-pairs: "lines",
-     highlight: highlight(atom(1), fill: rgb("#C7F9CC")),
+     highlight(atom(1), fill: rgb("#C7F9CC")),
    )],
 
   [*Amine N dots* \
    #smiles("CNC", scale: 1.1, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(1), fill: rgb("#FFD6A5")),
+     highlight(atom(1), fill: rgb("#FFD6A5")),
    )],
 
   [*Tertiary amine* \
    #smiles("CN(C)C", scale: 1.1, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(1), fill: rgb("#E7C6FF")),
+     highlight(atom(1), fill: rgb("#E7C6FF")),
    )],
 
   [*Thiol sulfur* \
    #smiles("CCS", scale: 1.1, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(2), atom(3)), fill: rgb("#D8F7C7")),
+     highlight((atom(2), atom(3)), fill: rgb("#D8F7C7")),
    )],
 
   [*Phosphorus label* \
    #smiles("CP", scale: 1.1, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(1), fill: rgb("#FDE2E4")),
+     highlight(atom(1), fill: rgb("#FDE2E4")),
    )],
 )
 
@@ -1875,22 +1875,22 @@ rotations, large labels, and reaction-level index overlays.
 
   [*Large charged oxygen* \
    #smiles("[O-]", scale: 1.8, show-indices: true, lone-pairs: "dots",
-     highlight: highlight(atom(0), fill: rgb("#BDE0FE")),
+     highlight(atom(0), fill: rgb("#BDE0FE")),
    )],
 
   [*Large custom label* \
    #smiles("{PPh3}C=O", scale: 1.45, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(2)), fill: rgb("#FFD6A5")),
+     highlight((atom(0), atom(2)), fill: rgb("#FFD6A5")),
    )],
 
   [*Short bonds* \
    #smiles("CCOC(=O)N", scale: 1.0, bond-length: 0.7, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(2), atom(4), atom(5)), fill: rgb("#C7F9CC")),
+     highlight((atom(2), atom(4), atom(5)), fill: rgb("#C7F9CC")),
    )],
 
   [*Long bonds rotated* \
    #smiles("CCOC(=O)N", scale: 1.0, bond-length: 1.4, rotation: 35deg, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((bond(1, 2, 3), bond(1, 3, 4)), fill: rgb("#FFCAD4")),
+     highlight((bond(2, 3), bond(3, 4)), fill: rgb("#FFCAD4")),
    )],
 )
 
@@ -1906,22 +1906,22 @@ rotations, large labels, and reaction-level index overlays.
 
   [*Charged carboxylate* \
    #smiles("[O-]C(=O)O", scale: 1.05, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(2), atom(3), bond(1, 1, 2)), fill: rgb("#BDE0FE")),
+     highlight((atom(0), atom(2), atom(3), bond(1, 2)), fill: rgb("#BDE0FE")),
    )],
 
   [*Rotated charged carboxylate* \
    #smiles("[O-]C(=O)O", scale: 1.05, rotation: -55deg, show-indices: true, lone-pairs: "lines",
-     highlight: highlight((atom(0), bond(1, 0, 1), bond(1, 1, 3)), fill: rgb("#C7F9CC"), include-atoms: true),
+     highlight((atom(0), bond(0, 1), bond(1, 3)), fill: rgb("#C7F9CC"), include-atoms: true),
    )],
 
   [*Mixed labels and halides* \
    #smiles("{EtO}C(Cl)(Br)F", scale: 1.05, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(2), atom(3), atom(4)), fill: rgb("#FFD6A5")),
+     highlight((atom(0), atom(2), atom(3), atom(4)), fill: rgb("#FFD6A5")),
    )],
 
   [*Stereo plus labels* \
    #smiles("{Nu}!wC({LG|blue})(Cl)F", scale: 1.05, show-indices: true, lone-pairs: "dots",
-     highlight: highlight((atom(0), atom(2), bond(1, 1, 3)), fill: rgb("#E7C6FF"), include-atoms: true),
+     highlight((atom(0), atom(2), bond(1, 3)), fill: rgb("#E7C6FF"), include-atoms: true),
    )],
 )
 
@@ -5102,4 +5102,175 @@ Progesterone and cortisol, both drawn from the bundled library.
   align: center + horizon,
   [progesterone #linebreak() #smiles(molecules.progesterone)],
   [cortisol #linebreak() #smiles(molecules.cortisol)],
+)
+
+
+= Uniform translucent highlights
+
+Translucent highlight colors are painted as one shape per fill color by
+default. A bond capsule and the atom disks at its ends keep the tint of the
+mid-bond, and two bonds that share an atom do not darken where they meet.
+`highlight-overlap: "stack"` paints each piece separately, which darkens those
+junctions.
+
+#let translucent-orange = rgb("#FF8000").transparentize(50%)
+#let translucent-blue = rgb("#4A90D9").transparentize(50%)
+#let benzene-bonds = (bond(0, 1), bond(1, 2), bond(2, 3), bond(3, 4), bond(4, 5), bond(5, 0))
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Merge (default)* \
+   #text(size: 8pt, `highlight-overlap: "merge"`) \
+   #smiles(
+     "C1=CC=CC=C1",
+     highlight(benzene-bonds, fill: translucent-orange, include-atoms: true),
+   )],
+
+  [*Stack* \
+   #text(size: 8pt, `highlight-overlap: "stack"`) \
+   #smiles(
+     "C1=CC=CC=C1",
+     highlight(benzene-bonds, fill: translucent-orange, include-atoms: true),
+     highlight-overlap: "stack",
+   )],
+
+  [*Two translucent groups sharing an atom* \
+   #text(size: 8pt)[`bond(0, 1)` and `bond(1, 2)`] \
+   #smiles(
+     "CCOCC",
+     highlight(bond(0, 1), fill: translucent-orange, include-atoms: true),
+     highlight(bond(1, 2), fill: translucent-blue, include-atoms: true),
+   )],
+
+  [*Bond highlight, new default* \
+   #text(size: 8pt, `highlight(bond(1, 2))`) \
+   #smiles(
+     "CCOCC",
+     highlight(bond(1, 2), fill: translucent-orange),
+   )],
+
+  [*Bond only* \
+   #text(size: 8pt, `include-atoms: false`) \
+   #smiles(
+     "CCOCC",
+     highlight(bond(1, 2), fill: translucent-orange, include-atoms: false),
+   )],
+)
+
+#v(1em)
+*Band radius:* `radius` is the half-width of the band. Atom disks, bond
+capsules and endpoint disks share it, so the band keeps one width.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*radius: auto* \
+   #smiles(
+     "C1=CC=CC=C1",
+     highlight(benzene-bonds, fill: translucent-orange, include-atoms: true),
+   )],
+
+  [*Small radius: 0.1* \
+   #smiles(
+     "C1=CC=CC=C1",
+     highlight(benzene-bonds, fill: translucent-orange, include-atoms: true, radius: 0.1),
+   )],
+
+  [*Large radius: 0.35* \
+   #smiles(
+     "C1=CC=CC=C1",
+     highlight(benzene-bonds, fill: translucent-orange, include-atoms: true, radius: 0.35),
+   )],
+)
+
+
+= Heteroatom hydrogens in highlights
+
+A highlight shades the displayed H labels of the heteroatoms it selects, so the
+H of an N–H or O–H stays inside the band. `include-hydrogens: false` leaves
+them unshaded, and carbon H labels shown through `show-h` are never shaded by
+a manual highlight.
+
+#let translucent-orange = rgb("#FF8000").transparentize(50%)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Amide, default* \
+   #text(size: 8pt, `highlight(bond(1, 3))`) \
+   #smiles(
+     "CC(=O)NC",
+     highlight(bond(1, 3), fill: translucent-orange),
+   )],
+
+  [*Amide, include-hydrogens: false* \
+   #text(size: 8pt, `include-hydrogens: false`) \
+   #smiles(
+     "CC(=O)NC",
+     highlight(bond(1, 3), fill: translucent-orange, include-hydrogens: false),
+   )],
+
+  [*Bond only* \
+   #text(size: 8pt, `include-atoms: false`) \
+   #smiles(
+     "CC(=O)NC",
+     highlight(bond(1, 3), fill: translucent-orange, include-atoms: false),
+   )],
+
+  [*Alcohol, highlight-smarts* \
+   #text(size: 8pt, `highlight-smarts: "[OX2H1]"`) \
+   #smiles(
+     "CCO",
+     highlight-smarts: "[OX2H1]",
+     highlight-colors: (translucent-orange,),
+   )],
+
+  [*Translucent atom and bond* \
+   #text(size: 8pt)[`atom(3)` and `bond(1, 3)`] \
+   #smiles(
+     "CC(=O)NC",
+     highlight(bond(1, 3), fill: translucent-orange),
+     highlight(atom(3), fill: translucent-orange),
+   )],
+
+  [*Carbon H through show-h* \
+   #text(size: 8pt, `show-h: "all"`) \
+   #smiles(
+     "CCO",
+     show-h: "all",
+     highlight(atom(1), fill: translucent-orange),
+   )],
+)
+
+#v(1em)
+*Named groups:* `include-hydrogens: auto` keeps each group's own hydrogen
+elements, so the acid OH is shaded by default and not when opted out.
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Acid group, default* \
+   #text(size: 8pt, `highlight-groups: "carboxylic-acid"`) \
+   #smiles(
+     "CC(=O)O",
+     highlight-groups: "carboxylic-acid",
+     highlight-colors: (translucent-orange,),
+   )],
+
+  [*Acid group, include-hydrogens: false* \
+   #text(size: 8pt, `include-hydrogens: false`) \
+   #smiles(
+     "CC(=O)O",
+     highlight-groups: (group: "carboxylic-acid", include-hydrogens: false),
+     highlight-colors: (translucent-orange,),
+   )],
 )

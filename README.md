@@ -15,19 +15,19 @@ source instead of copying diagrams from a separate editor.
 <table>
 <tr>
   <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/ciprofloxacin.typ"><img src="assets/readme/examples/ciprofloxacin.png" width="400"></a></td>
-  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/sn2-inversion.typ"><img src="assets/readme/examples/sn2-inversion.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/coumarin.typ"><img src="assets/readme/examples/coumarin.png" width="400"></a></td>
 </tr>
 <tr>
   <td>Ciprofloxacin, with each functional region shaded</td>
-  <td>SN2 Walden inversion of (R)-2-bromobutane to (S)-butan-2-ol</td>
+  <td>Coumarin scaffold evolution with highlighted pharmacophores</td>
 </tr>
 <tr>
-  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/ibuprofen-synthesis.typ"><img src="assets/readme/examples/ibuprofen-synthesis.png" width="400"></a></td>
-  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/steroid-core.typ"><img src="assets/readme/examples/steroid-core.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/watson-crick.typ"><img src="assets/readme/examples/watson-crick.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/dark-bromination.typ"><img src="assets/readme/examples/dark-bromination.png" width="400"></a></td>
 </tr>
 <tr>
-  <td>Three-step ibuprofen synthesis, with each changed group shaded</td>
-  <td>Steroid hormones aligned on their shared four-ring core</td>
+  <td>Watson–Crick A–T pair drawn in CeTZ with `smiles-cetz`</td>
+  <td>Bromination then nitration on a dark neon theme in Iosevka</td>
 </tr>
 </table>
 
@@ -38,7 +38,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": *
+#import "@preview/typed-smiles:0.13.0": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -55,7 +55,7 @@ Aromatic rings can be written either in lowercase aromatic notation
 on parse and both render identically.
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": smiles
+#import "@preview/typed-smiles:0.13.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -83,7 +83,7 @@ laboratory reagents. Type `molecules.` and the editor suggests the available
 names.
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": smiles, molecules
+#import "@preview/typed-smiles:0.13.0": smiles, molecules
 
 #smiles(molecules.caffeine)
 #smiles(molecules.alanine)
@@ -432,9 +432,14 @@ Highlight a group by its chemistry instead of looking up atom indices:
 
 `highlight-smarts` and `highlight-groups` accept a string, a request dictionary,
 or a tuple mixing both. Dictionaries use `pattern` for SMARTS and `group` for a
-named group, with optional `include-atoms` (default: `true`). For example,
+named group, with optional `include-atoms` (default: `true`) and
+`include-hydrogens` (default: `auto`). For example,
 `highlight-groups: ((group: "carbonyl", include-atoms: false), "alcohol")`
 customizes one request while leaving the other at its default.
+`include-hydrogens` shades the displayed H labels of selected heteroatoms. With
+`auto`, a pattern shades the H of every selected heteroatom, and a named group
+shades the H of its own atoms (for example the acid OH); `false` shades none,
+and `true` shades every selected heteroatom's H.
 Every distinct match shades its atoms and the bonds specified by the
 pattern, using the existing disk/capsule highlight style.
 Automatic highlights use `include-atoms: true`, joining bond capsules at their
@@ -584,7 +589,7 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": ce
+#import "@preview/typed-smiles:0.13.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -609,7 +614,7 @@ explicit hydrogens. Dot-separated fragments (salts, hydrates) are summed
 together.
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": mol-weight
+#import "@preview/typed-smiles:0.13.0": mol-weight
 
 Ethanol: #calc.round(mol-weight("CCO"), digits: 2) g/mol // 46.07
 Caffeine: #calc.round(mol-weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C"), digits: 2) g/mol // 194.19
@@ -628,7 +633,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.13.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -698,9 +703,9 @@ schemes.
     rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
     mol(smiles("BrC1=CC=CC=C1"), label: text(size: 8pt)[A]),
     rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
-    mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 8pt)[B]),
+    mol(smiles("BrC1=CC=C(C=C1)[N+](=O)[O-]"), label: text(size: 8pt)[B]),
     rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
-    mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 8pt)[C]),
+    mol(smiles("BrC1=CC=C(C=C1)N"), label: text(size: 8pt)[C]),
   )),
 )
 ```
@@ -723,6 +728,20 @@ itself and its atoms become addressable; `offset:` nudges a species in page
 coordinates, so `(0.5, 0)` always moves it right even in vertical flows. A curly
 `arrow()` or `highlight()` switches `reaction()` from a grid into one shared
 canvas — plain schemes are unaffected.
+
+`highlight()` shades bond endpoints by default, so bond highlights join into one
+continuous region. It also shades the displayed H of selected heteroatoms, such
+as the H of an N–H or O–H. **Migration:** `highlight()` now shades bond endpoints
+and those H by default; pass `include-atoms: false` for bond-only capsules and
+`include-hydrogens: false` to keep the H unshaded. `radius` sets the
+half-width of the highlighted band in bond-length units: bond capsules, endpoint
+disks, and label capsules all share that width. With the default `radius: auto`,
+a bond band keeps its usual width and its endpoint disks match it.
+Translucent highlights are painted as one shape per fill color by default
+(`highlight-overlap: "merge"`), so a bond meeting its atom disks, or two bonds
+sharing an atom, keep one tint; `highlight-overlap: "stack"` paints each piece
+separately, which darkens those overlaps. The option is accepted by `smiles()`,
+`mol()`, and `reaction()`.
 
 ```typst
 #smiles(
@@ -801,7 +820,7 @@ or an angle), and `label-offset:`/`into-offset:`/`out-offset:` nudge pieces like
 a `mol` offset.
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": cycle, step, mol, ce
+#import "@preview/typed-smiles:0.13.0": cycle, step, mol, ce
 
 #let cplx(body) = box(inset: 2pt, body)
 
@@ -837,7 +856,7 @@ from `mol(label: ...)` start on one line per row, and page breaks fall only
 between rows.
 
 ```typst
-#import "@preview/typed-smiles:0.12.0": *
+#import "@preview/typed-smiles:0.13.0": *
 
 #let aligned = align-molecules(
   ("CC(=O)c1ccccc1", "CC(O)c1ccccc1"),
@@ -979,10 +998,11 @@ a mapped atom replaces its label.
 | `atom-colors` | `(:)` | Color overrides: element key `O: red` or label key `"{PPh3}": blue` |
 | `show-indices` | `false` | Stamp atom indices for writing arrow references |
 | `abbreviate` | `none` | Catalogue group names (`"OMe"`, `"CF3"`, …) or `"all"` to draw as labels |
-| `highlight-smarts` | `()` | SMARTS string, `(pattern:, include-atoms:)` dictionary, or tuple mixing both |
-| `highlight-groups` | `()` | Group name, `(group:, include-atoms:)` dictionary, or tuple mixing both |
+| `highlight-smarts` | `()` | SMARTS string, `(pattern:, include-atoms:, include-hydrogens:)` dictionary, or tuple mixing both |
+| `highlight-groups` | `()` | Group name, `(group:, include-atoms:, include-hydrogens:)` dictionary, or tuple mixing both |
 | `highlight-colors` | `auto` | Non-empty color tuple; cycle through matches |
 | `highlight-unmatched` | `"error"` | `"error"` for absent matches, or explicitly `"ignore"` |
+| `highlight-overlap` | `"merge"` | `"merge"` paints each translucent color as one shape; `"stack"` paints every piece separately |
 | `show-maps` | `false` | Label mapped atoms such as `[CH3:7]` with `:7` |
 | `undepicted-stereo` | `"error"` | Stereochemistry the drawing cannot show: report it, or `"omit"` it |
 | `…annotations` | — | `arrow()` / `highlight()` items on this molecule |
@@ -1019,6 +1039,7 @@ an electron-pushing mechanism (shared canvas).
 | `flow` | `"right"` | Writing direction: `"right"`, `"left"`, `"up"`, `"down"`; `"left"`/`"up"` reflect the scheme so branches emerging left/bottom read naturally |
 | `show-indices` | `false` | Default atom-index overlay for string SMILES molecules in this reaction |
 | `fit` | `none` | `"width"` shrinks the scheme uniformly to the available width after `scale`; never enlarges |
+| `highlight-overlap` | `"merge"` | Default highlight painting for this reaction (`"merge"` or `"stack"`); a `mol()` can set its own |
 
 For vertical flows, ordinary non-arrow items stack vertically too, so
 `reaction(flow: "down", mol("A"), [+], mol("B"))` reads top-to-bottom.
@@ -1102,7 +1123,7 @@ Per-item `scale` and `bond-length` are rejected.
 | `lp(i)` / `lp(s, i)` | Lone-pair reference (`pair: n` to select) |
 | `species(k)` | Bounding-box edge of a whole item |
 | `arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, style:)` | Curly electron arrow; `stroke: auto` matches molecule bonds and scales with the drawing; `heads: "end"/"both"/"none"`, `style: "solid"/"dashed"/"wavy"` |
-| `highlight(ref, fill:, stroke:, radius:)` | Shade an atom (disk) or bond (capsule) |
+| `highlight(ref, fill:, stroke:, radius:, include-atoms:, include-hydrogens:)` | Shade an atom (disk) or bond (capsule); `include-atoms` defaults to `true` for bonds; `include-hydrogens` (`auto`) shades the H of selected heteroatoms; `radius` sets the band half-width |
 | `brackets(body, sup:, sub:)` | Square brackets around content |
 | `brackets(..reaction-items, sup:, sub:)` | Reference-transparent brackets on an enclosing reaction canvas |
 

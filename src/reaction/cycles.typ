@@ -21,16 +21,16 @@
 // ── Catalytic cycle ───────────────────────────────────────────────────────────
 
 /// A transformation between two species on a catalytic cycle, consumed by
-/// #cycle(). Steps alternate with the species (mol()/content) items: the k-th
+/// `cycle()`. Steps alternate with the species (`mol()`/content) items: the k-th
 /// step is the arc from the k-th species to the next one around the ring.
 ///
 /// - label (content): Name of the transformation, placed outside the arc.
 /// - into (str / content): A reagent entering at this arc (drawn outside the
-///   ring with a small merging arrow pointing inward), e.g. ce("H2") or a
-///   mol()/smiles(). Default: none.
+///   ring with a small merging arrow pointing inward), e.g. `ce("H2")` or a
+///   `mol()`/`smiles()`. Default: none.
 /// - out (str / content): A product leaving at this arc (drawn outside the ring
 ///   with an arrow pointing outward). Any content works, including a nested
-///   reaction() to continue a branch from the released molecule. Default: none.
+///   `reaction()` to continue a branch from the released molecule. Default: none.
 /// - bend (auto / float): Curvature of this step's into/out side arrow. `0`
 ///   is nearly radial; positive values bow with the cycle direction, negative
 ///   values flip the bow. Default: auto (uses cycle's reagent-bend).
@@ -41,7 +41,7 @@
 /// - label-offset (array): (dx, dy) nudge for the label, in bond-length units.
 /// - into-offset (array): (dx, dy) nudge for the into reagent and its arrow.
 /// - out-offset (array): (dx, dy) nudge for the out reagent and its arrow.
-/// -> dictionary  (consumed by #cycle)
+/// -> dictionary  (consumed by `cycle()`)
 #let step(
   label: none, into: none, out: none, bend: auto, merge: false, rotation: "straight",
   label-offset: (0, 0), into-offset: (0, 0), out-offset: (0, 0),
@@ -116,15 +116,15 @@
 }
 
 /// Lays out a catalytic cycle: species arranged on a circle with arc arrows
-/// between them. Items alternate species and step()s, like #reaction()
-/// alternates molecules and rxn-arrow()s, but the sequence closes into a ring
-/// (the last step returns to the first species). Species are mol() items or any
-/// content (SMILES strings and align-molecules() results are rendered by
-/// #smiles); a mol(label:) is drawn under its species.
+/// between them. Items alternate species and `step()`s, like `reaction()`
+/// alternates molecules and `rxn-arrow()`s, but the sequence closes into a ring
+/// (the last step returns to the first species). Species are `mol()` items or any
+/// content (SMILES strings and `align-molecules()` results are rendered by
+/// `smiles()`); a `mol(label:)` is drawn under its species.
 ///
-/// step(label:) names the transformation on an arc; step(into:) adds a reagent
-/// merging into the arc from outside the ring, and step(out:) a product leaving
-/// it. Because step(out:) accepts any content, passing a reaction() there grows
+/// `step(label:)` names the transformation on an arc; `step(into:)` adds a reagent
+/// merging into the arc from outside the ring, and `step(out:)` a product leaving
+/// it. Because `step(out:)` accepts any content, passing a `reaction()` there grows
 /// a full linear branch out of a released molecule.
 ///
 /// - radius (auto / float): Ring radius in bond-length units. `auto` fits the
@@ -143,7 +143,7 @@
 /// - arrow-color (color): Arc and merge arrow color. Default: black.
 /// - label-color (auto / color): Step label color. Default: the maroon accent.
 /// - breakable (bool): Whether the block may split across pages. Default: false.
-/// - ..items: Species (mol()/content) and step()s in ring order.
+/// - ..items: Species (`mol()`/content) and `step()`s in ring order.
 /// -> content
 #let cycle(
   radius: auto,

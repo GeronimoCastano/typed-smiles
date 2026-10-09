@@ -8,7 +8,7 @@
 #import "../src/lib.typ": smiles, smiles-inline, smiles-cetz, ce, mol-formula, rxn-arrow, mol, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, brackets, mol-weight, molecules, substructure-matches, functional-groups, align-molecules, molecule-grid
 #import "@preview/cetz:0.5.2"
 
-#let version = "0.12.0"
+#let version = "0.13.0"
 #let accent = rgb("#239dad")
 #let accent-soft = rgb("#e7f4f6")
 
@@ -173,13 +173,13 @@ Import the package from the Typst preview namespace. A wildcard import gives you
 every public symbol:
 
 ```typ
-#import "@preview/typed-smiles:0.12.0": *
+#import "@preview/typed-smiles:0.13.0": *
 ```
 
 Or import only what you need:
 
 ```typ
-#import "@preview/typed-smiles:0.12.0": smiles, ce, mol, rxn-arrow, reaction
+#import "@preview/typed-smiles:0.13.0": smiles, ce, mol, rxn-arrow, reaction
 ```
 
 The package exports these main symbols:
@@ -1550,7 +1550,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   molecules accept common drawing options such as #c("scale"), #c("font-size"),
   #c("font"), #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-h"),
   #c("lone-pairs"), #c("opacity"), #c("bond-customizations"), #c("atom-colors"),
-  #c("show-indices"), and #c("abbreviate"). #c("offset") nudges the molecule in page coordinates, in
+  #c("show-indices"), #c("abbreviate"), and #c("highlight-overlap"). #c("offset") nudges the molecule in page coordinates, in
   bond-length units: positive x moves right and positive y moves up regardless
   of #c("reaction(flow:)"). Positional #c("arrow()") and #c("highlight()")
   annotations use local one-molecule references, so #c("atom(i)") and
@@ -1664,7 +1664,7 @@ scaling; #c("auto") matches the default 0.9pt SMILES bond stroke.
 == #raw("reaction()")
 
 #demo[
-  `reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, show-indices: false, flow: "right", ..items)`
+  `reaction(gap-h: 1.5em, gap-v: 1.5em, scale: 1.0, breakable: false, show-indices: false, flow: "right", fit: none, highlight-overlap: "merge", ..items)`
   lays out molecules and arrows left to right. An up or down arrow wraps the
   scheme onto a new row.
 
@@ -1746,9 +1746,9 @@ mechanism mode (curly arrows) is unaffected.]
     rxn-arrow(above: ce("Br2"), below: ce("FeBr3")),
     mol(smiles("BrC1=CC=CC=C1"), label: text(size: 7pt)[A]),
     rxn-arrow(dir: "down", above: ce("HNO3"), below: ce("H2SO4")),
-    mol(smiles("BrC1=CC(=CC=C1)[N+](=O)[O-]"), label: text(size: 7pt)[B]),
+    mol(smiles("BrC1=CC=C(C=C1)[N+](=O)[O-]"), label: text(size: 7pt)[B]),
     rxn-arrow(dir: "left", above: ce("Fe"), below: ce("HCl")),
-    mol(smiles("BrC1=CC(=CC=C1)N"), label: text(size: 7pt)[C]),
+    mol(smiles("BrC1=CC=C(C=C1)N"), label: text(size: 7pt)[C]),
   )
   ```, side: false)
 ]
@@ -1934,6 +1934,9 @@ Each request can override this: use
 trimmed bond capsules without endpoint atom disks. Standalone matched atoms
 (including single-atom groups) are still shaded. Strings and dictionaries may
 be mixed in a tuple; the override applies to all matches of that request.
+A request also accepts #c("include-hydrogens") (default #c("auto")) for the
+displayed H labels of selected heteroatoms; see the #c("highlight()") section
+below for its values.
 Symmetric mappings of the same atoms and bonds count once; overlapping matches
 remain. The six-color
 palette cycles across SMARTS requests, then group requests. Set
@@ -1979,6 +1982,9 @@ displayed attached H, including #c("SH"), #c("OH"), and #c("NH₂") labels.
 Skeleton mode shades the corresponding H atoms and bonds. Carboxylic-acid OH,
 amide NH, and aldehyde H are included likewise. Omitted hydrogens stay hidden;
 bond-only requests leave endpoint atoms and their H unshaded. Ether selects O.
+Named groups keep this curated list under #c("include-hydrogens: auto");
+#c("include-hydrogens: false") removes these H, and #c("include-hydrogens: true")
+shades the H of every selected heteroatom instead.
 Carboxylic acid and carboxylate exclude carbonic and carbamic acids.
 
 #c("substructure-matches") returns only query atom/bond indices; named-group
@@ -2045,11 +2051,22 @@ highlight results.
   the shaft) and #c("head-width") (base); they apply to every drawn head and
   scale with the drawing. #c("highlight(ref, fill:)")
   shades an atom (disk) or bond (capsule) behind the structure. Pass an array of
-  references to shade several atoms or bonds with one call. Bond highlights are
-  trimmed away from atom centers by default; set #c("include-atoms: true") to also
-  shade the endpoint atoms of each highlighted bond. Abbreviated group labels such
-  as #c("{PPh3}") are highlighted as measured label-width capsules rather than
-  atom-sized disks.
+  references to shade several atoms or bonds with one call. Bond highlights also
+  shade their endpoint atoms by default, so bonded highlights join into one
+  continuous region; set #c("include-atoms: false") for bond-only capsules trimmed
+  away from atom centers. #c("include-hydrogens") (default #c("auto")) also shades
+  the displayed H labels of selected heteroatoms, such as the H of an N–H or O–H,
+  so the highlight covers them. #c("include-hydrogens: false") leaves those labels
+  unshaded. Carbon H labels shown with #c("show-h") are not shaded by a manual
+  highlight. #c("radius") sets the half-width of the highlighted band
+  in bond-length units: it sets the disk radius of atom highlights and endpoint
+  disks, the half-width of bond capsules, and the half-height of label capsules.
+  With the default #c("radius: auto"), a bond band has its usual width and its
+  endpoint disks match that width; atom highlights keep the atom size.
+  Abbreviated group labels such as #c("{PPh3}") are highlighted as measured
+  label-width capsules rather than atom-sized disks.
+
+  #note[*Migration:* #c("highlight()") now shades bond endpoints by default; pass #c("include-atoms: false") for bond-only capsules. It also shades the displayed H of selected heteroatoms; pass #c("include-hydrogens: false") to keep those H unshaded.]
 
   #c("stroke") sets the unscaled shaft width. Its #c("auto") default matches
   the molecule's effective bond stroke, including an explicit
@@ -2085,6 +2102,49 @@ highlight results.
       fill: rgb("#BBE1FA"),
       include-atoms: true,
     ),
+  )
+  ```)
+]
+
+#demo[
+  The displayed H of a selected heteroatom joins the highlight, so the amide N–H
+  stays inside the band. #c("include-hydrogens: false") leaves it unshaded.
+
+  #example(```typ
+  #smiles(
+    "CC(=O)NC",
+    highlight(bond(1, 3), fill: rgb("#FFE45C")),
+  )
+  #smiles(
+    "CC(=O)NC",
+    highlight(bond(1, 3), fill: rgb("#FFE45C"), include-hydrogens: false),
+  )
+  ```)
+]
+
+#demo[
+  Translucent highlights, such as #c("rgb(\"#FF8000\").transparentize(50%)"), are
+  painted as one shape per fill color by default. A bond capsule and the atom
+  disks at its ends keep the same tint where they meet, and bonds that share an
+  atom do not darken there. #c("highlight-overlap: \"stack\"") paints every piece
+  on its own, so the overlaps are darker again. The same option is accepted by
+  #c("smiles()"), #c("mol()"), and #c("reaction()").
+
+  #example(```typ
+  #smiles(
+    "C1=CC=CC=C1",
+    highlight(
+      (bond(0, 1), bond(1, 2), bond(2, 3), bond(3, 4), bond(4, 5), bond(5, 0)),
+      fill: rgb("#FF8000").transparentize(50%),
+    ),
+  )
+  #smiles(
+    "C1=CC=CC=C1",
+    highlight(
+      (bond(0, 1), bond(1, 2), bond(2, 3), bond(3, 4), bond(4, 5), bond(5, 0)),
+      fill: rgb("#FF8000").transparentize(50%),
+    ),
+    highlight-overlap: "stack",
   )
   ```)
 ]
@@ -2490,7 +2550,7 @@ parameter.
 
 ```typ
 // ── preamble ───────────────────────────────────────────────────────────
-#import "@preview/typed-smiles:0.12.0": *
+#import "@preview/typed-smiles:0.13.0": *
 
 #let smiles = smiles.with(
   bond-length: 0.9,
@@ -2624,10 +2684,11 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("abbreviate")], [`none`], [Catalogue group names, or #c("\"all\""), to draw as labels.],
   [#c("show-maps")], [`false`], [Label mapped atoms such as #c("[CH3:7]") with #c(":7").],
   [#c("undepicted-stereo")], [`"error"`], [Stereochemistry the drawing cannot show: report it, or #c("\"omit\"") it.],
-  [#c("highlight-smarts")], [`()`], [SMARTS string, #c("(pattern:, include-atoms:)") dictionary, or tuple mixing both.],
-  [#c("highlight-groups")], [`()`], [Group name, #c("(group:, include-atoms:)") dictionary, or tuple mixing both.],
+  [#c("highlight-smarts")], [`()`], [SMARTS string, #c("(pattern:, include-atoms:, include-hydrogens:)") dictionary, or tuple mixing both.],
+  [#c("highlight-groups")], [`()`], [Group name, #c("(group:, include-atoms:, include-hydrogens:)") dictionary, or tuple mixing both.],
   [#c("highlight-colors")], [`auto`], [Non-empty color tuple; cycle across matches.],
   [#c("highlight-unmatched")], [`"error"`], [Diagnostic on absent matches; #c("\"ignore\"") permits absence.],
+  [#c("highlight-overlap")], [`"merge"`], [#c("\"merge\"") paints each translucent color as one shape; #c("\"stack\"") paints every piece separately.],
   [#c("..annotations")], [—], [#c("arrow()") / #c("highlight()") items on this molecule.],
 )
 
@@ -2645,6 +2706,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("flow")], [`"right"`], [Writing direction: #c("\"right\""), #c("\"left\""), #c("\"up\""), or #c("\"down\"") (left/up reflect the scheme).],
   [#c("show-indices")], [`false`], [Default atom-index overlay for string SMILES molecules in this reaction.],
   [#c("fit")], [`none`], [#c("\"width\"") shrinks the whole scheme uniformly to the available width after #c("scale"), never enlarging it.],
+  [#c("highlight-overlap")], [`"merge"`], [Default highlight painting for this reaction: #c("\"merge\"") or #c("\"stack\""). A #c("mol()") can set its own value.],
 )
 
 == #raw("rxn-arrow()") options
@@ -2691,7 +2753,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
   [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
   [#c("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, head-length:, head-width:, style:)")], [Curly electron-pushing arrow (default #c("color: black")); #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("head-length") / #c("head-width") size the tip; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
-  [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:)")], [Shade one atom/bond reference or an array of references.],
+  [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:, include-hydrogens:)")], [Shade one atom/bond reference or an array of references, and the displayed H of selected heteroatoms.],
   [#c("brackets(body, sup:, sub:)")], [Square brackets around content; inside #c("reaction()"), accepts reference-transparent reaction items too.],
 )
 

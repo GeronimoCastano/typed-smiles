@@ -12,6 +12,7 @@
   _validate-bool,
   _validate-offset,
   _validate-index,
+  _validate-include-hydrogens,
   _abbreviation-group-of,
   _reject-contracted-atom,
   _available-index-description,
@@ -47,7 +48,7 @@
 /// - head-width (float): triangle-tip base width, in bond-length units (before
 ///   `scale`). Applies to every drawn head. Default: 0.07.
 /// - style (str): shaft style — "solid" (default), "dashed", or "wavy".
-/// -> dictionary  (consumed by smiles()/reaction())
+/// -> dictionary  (consumed by `smiles()`/`reaction()`)
 #let arrow(from: none, to: none, label: none, color: black, stroke: auto, bend: "left", angle: 15deg, half: false, heads: "end", head-length: 0.11, head-width: 0.07, style: "solid") = {
   if type(from) != dictionary or from.at("__ref__", default: "") == "" {
     _invalid-input(
@@ -125,11 +126,18 @@
 ///   references to highlight together.
 /// - fill (color): highlight color. Default: a soft yellow.
 /// - stroke (none/stroke): outline of an atom highlight. Default: none.
-/// - radius (auto/float): atom-highlight radius in bond-length units.
-/// - include-atoms (bool): for bond highlights, also shade both endpoint atoms.
-///   Default: false.
-/// -> dictionary  (consumed by smiles()/reaction())
-#let highlight(ref, fill: rgb("#FFE45C"), stroke: none, radius: auto, include-atoms: false) = {
+/// - radius (auto/float): half-width of the highlighted band in bond-length units.
+///   Sets the disk radius of atom highlights and endpoint disks, the half-width of
+///   bond capsules, and the half-height of label capsules. Default: auto, which
+///   uses the atom size for atom highlights and the bond's own half-width for bonds.
+/// - include-atoms (bool): for bond highlights, also shade both endpoint atoms, so
+///   that bonds join into a continuous region. Default: true.
+/// - include-hydrogens (auto / bool): shade the displayed H labels of selected
+///   heteroatoms, such as the H of an N-H or O-H. `auto` and `true` cover every
+///   selected heteroatom; `false` shades none. Carbon H labels are not included.
+///   Default: auto.
+/// -> dictionary  (consumed by `smiles()`/`reaction()`)
+#let highlight(ref, fill: rgb("#FFE45C"), stroke: none, radius: auto, include-atoms: true, include-hydrogens: auto) = {
   let references = if type(ref) == array { ref } else { (ref,) }
   if references.len() == 0 {
     _invalid-input(
@@ -171,6 +179,7 @@
     _validate-positive-number(radius, "highlight radius")
   }
   _validate-bool(include-atoms, "highlight include-atoms")
+  _validate-include-hydrogens(include-hydrogens, "highlight include-hydrogens")
   (
     __highlight__: true,
     ref: ref,
@@ -178,6 +187,8 @@
     stroke: stroke,
     radius: radius,
     include-atoms: include-atoms,
+    hydrogen-heteroatoms: include-hydrogens != false,
+    hydrogen-elements: (),
   )
 }
 
@@ -469,166 +480,410 @@
   )
 }
 
-#let _draw-highlight(highlight-specification, placed-species-list, configuration) = {
+// ── Highlight drawing ───────────────────────────────────────────────────────────
+
+// Cubic-Bezier handle length that approximates a quarter circle.
+#let _quarter-arc-handle = 0.5522847498
+
+// A highlight region is a list of pieces. A capsule piece is a straight band
+// with round ends, given by its two centre points and its stroke thickness. A
+// disk piece is a filled circle given by its centre and radius in bond-length
+// units. Each piece can be stroked on its own or merged into a single outline.
+#let _capsule-piece(start, end, thickness) = (
+  kind: "capsule",
+  start: start,
+  end: end,
+  thickness: thickness,
+)
+
+#let _disk-piece(centre, radius) = (kind: "disk", centre: centre, radius: radius)
+
+#let _linear-combination(first, first-weight, second, second-weight) = (
+  first.at(0) * first-weight + second.at(0) * second-weight,
+  first.at(1) * first-weight + second.at(1) * second-weight,
+)
+
+#let _offset-point(origin, offset, scale) = _linear-combination(origin, 1.0, offset, scale)
+
+// Quarter circle around `centre`, running clockwise from the unit vector
+// `start-unit` to its clockwise neighbour. Every outline uses this winding, so
+// merged subpaths never cancel where they overlap under the non-zero rule.
+#let _clockwise-quarter-arc(centre, radius, start-unit) = {
   import cetz.draw: *
+  let end-unit = (start-unit.at(1), -start-unit.at(0))
+  bezier(
+    _offset-point(centre, start-unit, radius),
+    _offset-point(centre, end-unit, radius),
+    _offset-point(
+      centre,
+      _linear-combination(start-unit, 1.0, end-unit, _quarter-arc-handle),
+      radius,
+    ),
+    _offset-point(
+      centre,
+      _linear-combination(end-unit, 1.0, start-unit, _quarter-arc-handle),
+      radius,
+    ),
+  )
+}
+
+// Closed stadium around the segment start-end: two straight sides joined by
+// semicircular caps of the given radius.
+#let _capsule-outline(start, end, radius) = {
+  import cetz.draw: *
+  let offset = (end.at(0) - start.at(0), end.at(1) - start.at(1))
+  let length = calc.max(
+    1e-6,
+    calc.sqrt(offset.at(0) * offset.at(0) + offset.at(1) * offset.at(1)),
+  )
+  let direction = (offset.at(0) / length, offset.at(1) / length)
+  let normal = (-direction.at(1), direction.at(0))
+  let reversed-direction = (-direction.at(0), -direction.at(1))
+  let reversed-normal = (-normal.at(0), -normal.at(1))
+  merge-path(
+    (
+      ..line(
+        _offset-point(start, normal, radius),
+        _offset-point(end, normal, radius),
+      ),
+      ..
+      _clockwise-quarter-arc(end, radius, normal),
+      ..
+      _clockwise-quarter-arc(end, radius, direction),
+      ..line(
+        _offset-point(end, reversed-normal, radius),
+        _offset-point(start, reversed-normal, radius),
+      ),
+      ..
+      _clockwise-quarter-arc(start, radius, reversed-normal),
+      ..
+      _clockwise-quarter-arc(start, radius, reversed-direction),
+    ),
+    close: true,
+  )
+}
+
+// Closed circle built from four clockwise quarter arcs.
+#let _disk-outline(centre, radius) = {
+  import cetz.draw: *
+  merge-path(
+    (
+      .. _clockwise-quarter-arc(centre, radius, (1.0, 0.0)),
+      .. _clockwise-quarter-arc(centre, radius, (0.0, -1.0)),
+      .. _clockwise-quarter-arc(centre, radius, (-1.0, 0.0)),
+      .. _clockwise-quarter-arc(centre, radius, (0.0, 1.0)),
+    ),
+    close: true,
+  )
+}
+
+#let _piece-outline(piece, configuration) = {
+  if piece.kind == "capsule" {
+    return _capsule-outline(
+      piece.start,
+      piece.end,
+      piece.thickness / (2 * configuration.canvas-scale),
+    )
+  }
+  _disk-outline(piece.centre, piece.radius)
+}
+
+// Stroke or fill one piece on its own, exactly as an individual highlight shape.
+// The parameters avoid the names `fill` and `stroke`, which cetz.draw exports
+// as functions and would shadow inside the importing block.
+#let _stroke-piece(piece, paint, outline) = {
+  import cetz.draw: *
+  if piece.kind == "capsule" {
+    return line(piece.start, piece.end, stroke: (
+      paint: paint,
+      thickness: piece.thickness,
+      cap: "round",
+    ))
+  }
+  circle(piece.centre, radius: piece.radius, fill: paint, stroke: outline)
+}
+
+// Disk radius of an atom or bond endpoint. `radius: auto` keeps the default
+// atom size; an explicit radius is the half-width of the whole highlight band.
+#let _highlight-atom-radius(highlight-specification, molecule-scale, configuration) = {
+  if highlight-specification.radius == auto {
+    return configuration.atom-radius * molecule-scale
+  }
+  highlight-specification.radius
+}
+
+// Stroke thickness of a band (bond capsule, hydrogen bond, or label). An
+// explicit radius sets the band to twice that half-width.
+#let _highlight-band-thickness(highlight-specification, default-thickness, configuration) = {
+  if highlight-specification.radius == auto {
+    return default-thickness
+  }
+  2 * highlight-specification.radius * configuration.canvas-scale
+}
+
+// Endpoint disks of a bond highlight. With auto radius they take the capsule's
+// half-width, so the bond band and its endpoints share one width.
+#let _bond-endpoint-radius(highlight-specification, molecule-scale, configuration) = {
+  if highlight-specification.radius == auto {
+    return configuration.bond-thickness * molecule-scale / (2 * configuration.canvas-scale)
+  }
+  highlight-specification.radius
+}
+
+#let _bond-highlight-pieces(bond-reference, highlight-specification, placed-species-list, configuration) = {
+  let placed-species = placed-species-list.at(bond-reference.species)
+  let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+  let first-position = _atom-position(placed-species, bond-reference.i)
+  let second-position = _atom-position(placed-species, bond-reference.j)
+  let offset-x = second-position.at(0) - first-position.at(0)
+  let offset-y = second-position.at(1) - first-position.at(1)
+  let distance = calc.max(
+    1e-6,
+    calc.sqrt(offset-x * offset-x + offset-y * offset-y),
+  )
+  let trim = if highlight-specification.include-atoms {
+    0.0
+  } else {
+    calc.min(configuration.bond-trim * molecule-scale, distance * 0.45)
+  }
+  let direction-x = offset-x / distance
+  let direction-y = offset-y / distance
+  let band = _capsule-piece(
+    (
+      first-position.at(0) + direction-x * trim,
+      first-position.at(1) + direction-y * trim,
+    ),
+    (
+      second-position.at(0) - direction-x * trim,
+      second-position.at(1) - direction-y * trim,
+    ),
+    _highlight-band-thickness(
+      highlight-specification,
+      configuration.bond-thickness * molecule-scale,
+      configuration,
+    ),
+  )
+  if not highlight-specification.include-atoms {
+    return (band,)
+  }
+  let radius = _bond-endpoint-radius(highlight-specification, molecule-scale, configuration)
+  (
+    band,
+    _disk-piece(first-position, radius),
+    _disk-piece(second-position, radius),
+  )
+}
+
+#let _abbreviation-highlight-pieces(abbreviation, atom, reference-position, placed-species, highlight-specification, configuration) = {
+  let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+  let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+  let font-size = placed-species.at("actual-font-size", default: 11pt)
+  let font = placed-species.at("font", default: "New Computer Modern")
+  let atom-label = (body, size: font-size) => text(
+    size: size, font: font, style: "normal", weight: "regular", body,
+  )
+  let label = _abbreviation-label(abbreviation, atom-label, font-size, font-size)
+  let label-width-units = measure(label).width / canvas-scale
+  let label-width = body => measure(_abbreviation-label(body, atom-label, font-size, font-size)).width / canvas-scale
+  let center-x = reference-position.at(0) - _label-anchor-offset(
+    abbreviation,
+    atom.at("abbrev_anchor", default: 0),
+    atom.at("abbrev_anchor_len", default: 0),
+    label-width,
+  )
+  let label-height-units = measure(label).height / canvas-scale
+  let horizontal-padding = calc.max(
+    0.08 * molecule-scale,
+    font-size / canvas-scale * 0.16,
+  )
+  let default-thickness = canvas-scale * calc.max(
+    label-height-units + font-size / canvas-scale * 0.55,
+    configuration.atom-radius * molecule-scale * 1.7,
+  )
+  (_capsule-piece(
+    (center-x - label-width-units / 2 - horizontal-padding, reference-position.at(1)),
+    (center-x + label-width-units / 2 + horizontal-padding, reference-position.at(1)),
+    _highlight-band-thickness(highlight-specification, default-thickness, configuration),
+  ),)
+}
+
+#let _atom-highlight-pieces(reference, highlight-specification, placed-species-list, configuration) = {
+  let reference-position = _resolve-reference(
+    reference,
+    placed-species-list,
+    configuration.lp-offset,
+  )
+  let placed-species = placed-species-list.at(reference.species)
+  let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+  let atom = placed-species.layout.atoms.at(reference.index)
+  let abbreviation = atom.at("abbrev", default: "")
+  if reference.__ref__ == "atom" and abbreviation != "" {
+    return _abbreviation-highlight-pieces(
+      abbreviation,
+      atom,
+      reference-position,
+      placed-species,
+      highlight-specification,
+      configuration,
+    )
+  }
+  (_disk-piece(
+    reference-position,
+    _highlight-atom-radius(highlight-specification, molecule-scale, configuration),
+  ),)
+}
+
+// Whether a selected atom's displayed H labels join the highlight. Heteroatom
+// highlights cover every non-carbon atom, so carbon H shown through `show-h`
+// stays unshaded. Named groups add their curated elements, which may include
+// carbon for aldehyde H.
+#let _shades-hydrogens-of(highlight-specification, element) = (
+  (highlight-specification.at("hydrogen-heteroatoms", default: false) and element != "C")
+    or element in highlight-specification.at("hydrogen-elements", default: ())
+)
+
+// Only selected atoms expand, so bond-only requests keep their endpoint labels
+// unshaded and recursive carbon context stays unselected.
+#let _hydrogen-highlight-pieces(highlight-specification, references, placed-species-list, configuration) = {
+  let parents = ()
+  for reference in references {
+    if reference.__ref__ == "atom" {
+      parents.push((reference.species, reference.index))
+    } else if reference.__ref__ == "bond" and highlight-specification.include-atoms {
+      parents.push((reference.species, reference.i))
+      parents.push((reference.species, reference.j))
+    }
+  }
+  let pieces = ()
+  for (species-index, atom-index) in parents.dedup() {
+    let placed-species = placed-species-list.at(species-index)
+    let atom = placed-species.layout.atoms.at(atom-index)
+    if not _shades-hydrogens-of(highlight-specification, atom.symbol) { continue }
+    let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+    let radius = _highlight-atom-radius(highlight-specification, molecule-scale, configuration)
+    let parent = _atom-position(placed-species, atom-index)
+    let bond-thickness = _highlight-band-thickness(
+      highlight-specification,
+      configuration.bond-thickness * molecule-scale,
+      configuration,
+    )
+    let label-thickness = 2 * radius * configuration.canvas-scale
+    for hydrogen in _highlight-hydrogens(placed-species, atom-index) {
+      pieces.push(_capsule-piece(parent, hydrogen.position, bond-thickness))
+      // A capsule spans the whole H/Hn label, including a hydrogen subscript.
+      let half-span = calc.max(0.0, hydrogen.width / 2 - radius * 0.5)
+      pieces.push(_capsule-piece(
+        (hydrogen.position.at(0) - half-span, hydrogen.position.at(1)),
+        (hydrogen.position.at(0) + half-span, hydrogen.position.at(1)),
+        label-thickness,
+      ))
+    }
+  }
+  pieces
+}
+
+// All pieces covered by one highlight, in drawing order.
+#let _highlight-region-pieces(highlight-specification, placed-species-list, configuration) = {
   let references = if type(highlight-specification.ref) == array {
     highlight-specification.ref
   } else {
     (highlight-specification.ref,)
   }
+  let pieces = ()
   for reference in references {
     if reference.__ref__ == "bond" {
-      let placed-species = placed-species-list.at(reference.species)
-      let molecule-scale = placed-species.at("mol-scale", default: 1.0)
-      let first-position = _atom-position(placed-species, reference.i)
-      let second-position = _atom-position(placed-species, reference.j)
-      let offset-x = second-position.at(0) - first-position.at(0)
-      let offset-y = second-position.at(1) - first-position.at(1)
-      let distance = calc.max(
-        1e-6,
-        calc.sqrt(offset-x * offset-x + offset-y * offset-y),
-      )
-      let trim = if highlight-specification.include-atoms {
-        0.0
-      } else {
-        calc.min(configuration.bond-trim * molecule-scale, distance * 0.45)
-      }
-      let direction-x = offset-x / distance
-      let direction-y = offset-y / distance
-      line(
-        (
-          first-position.at(0) + direction-x * trim,
-          first-position.at(1) + direction-y * trim,
-        ),
-        (
-          second-position.at(0) - direction-x * trim,
-          second-position.at(1) - direction-y * trim,
-        ),
-        stroke: (
-          paint: highlight-specification.fill,
-          thickness: configuration.bond-thickness * molecule-scale,
-          cap: "round",
-        ),
-      )
-      if highlight-specification.include-atoms {
-        let radius = if highlight-specification.radius == auto {
-          configuration.atom-radius * molecule-scale
-        } else {
-          highlight-specification.radius
-        }
-        circle(
-          first-position,
-          radius: radius,
-          fill: highlight-specification.fill,
-          stroke: highlight-specification.stroke,
-        )
-        circle(
-          second-position,
-          radius: radius,
-          fill: highlight-specification.fill,
-          stroke: highlight-specification.stroke,
-        )
-      }
+      pieces += _bond-highlight-pieces(reference, highlight-specification, placed-species-list, configuration)
     } else {
-      let reference-position = _resolve-reference(
-        reference,
-        placed-species-list,
-        configuration.lp-offset,
-      )
-      let placed-species = placed-species-list.at(reference.species)
-      let molecule-scale = placed-species.at("mol-scale", default: 1.0)
-      let atom = placed-species.layout.atoms.at(reference.index)
-      let abbreviation = atom.at("abbrev", default: "")
-      if reference.__ref__ == "atom" and abbreviation != "" {
-        let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
-        let font-size = placed-species.at("actual-font-size", default: 11pt)
-        let font = placed-species.at("font", default: "New Computer Modern")
-        let atom-label = (body, size: font-size) => text(
-          size: size, font: font, style: "normal", weight: "regular", body,
-        )
-        let label = _abbreviation-label(abbreviation, atom-label, font-size, font-size)
-        let label-width-units = measure(label).width / canvas-scale
-        let label-width = body => measure(_abbreviation-label(body, atom-label, font-size, font-size)).width / canvas-scale
-        let center-x = reference-position.at(0) - _label-anchor-offset(
-          abbreviation,
-          atom.at("abbrev_anchor", default: 0),
-          atom.at("abbrev_anchor_len", default: 0),
-          label-width,
-        )
-        let label-height-units = measure(label).height / canvas-scale
-        let horizontal-padding = calc.max(
-          0.08 * molecule-scale,
-          font-size / canvas-scale * 0.16,
-        )
-        let thickness = canvas-scale * calc.max(
-          label-height-units + font-size / canvas-scale * 0.55,
-          configuration.atom-radius * molecule-scale * 1.7,
-        )
-        line(
-          (
-            center-x - label-width-units / 2 - horizontal-padding,
-            reference-position.at(1),
-          ),
-          (
-            center-x + label-width-units / 2 + horizontal-padding,
-            reference-position.at(1),
-          ),
-          stroke: (
-            paint: highlight-specification.fill,
-            thickness: thickness,
-            cap: "round",
-          ),
-        )
-      } else {
-        let radius = if highlight-specification.radius == auto {
-          configuration.atom-radius * molecule-scale
-        } else {
-          highlight-specification.radius
-        }
-        circle(
-          reference-position,
-          radius: radius,
-          fill: highlight-specification.fill,
-          stroke: highlight-specification.stroke,
-        )
+      pieces += _atom-highlight-pieces(reference, highlight-specification, placed-species-list, configuration)
+    }
+  }
+  pieces + _hydrogen-highlight-pieces(highlight-specification, references, placed-species-list, configuration)
+}
+
+// Highlights with `"merge"` (the default) and no stroke join one outline per
+// fill colour. Stroked highlights and `"stack"` draw each piece on its own.
+#let _highlight-overlap-mode(highlight-specification, default-overlap) = highlight-specification.at(
+  "overlap",
+  default: default-overlap,
+)
+
+#let _is-merged-highlight(highlight-specification, default-overlap) = (
+  highlight-specification.stroke == none
+    and _highlight-overlap-mode(highlight-specification, default-overlap) == "merge"
+)
+
+// Records which overlap mode a highlight belongs to, so a molecule's own setting
+// is kept when its highlights are drawn on a shared mechanism canvas.
+#let _with-highlight-overlap(annotation, overlap) = {
+  if type(annotation) == dictionary and annotation.at("__highlight__", default: false) {
+    return (..annotation, overlap: overlap)
+  }
+  annotation
+}
+
+// Invisible shape with the same extent as the piece's own stroke or disk
+// element. CeTZ sizes a canvas from visible elements, so the carrier keeps a
+// merged region from changing the canvas size and the layout around it.
+#let _bounds-carrier(piece) = {
+  import cetz.draw: *
+  if piece.kind == "capsule" {
+    return line(piece.start, piece.end, stroke: none)
+  }
+  circle(piece.centre, radius: piece.radius, fill: none, stroke: none)
+}
+
+// Visible element that is excluded from canvas bounds. Merged outlines use it
+// because Bezier control points would otherwise enlarge the canvas.
+#let _outline-without-bounds(region) = {
+  let region-element = if type(region) == array { region.first() } else { region }
+  return ((ctx => {
+    let drawn = region-element(ctx)
+    drawn.drawables = cetz.drawable.apply-tags(
+      drawn.drawables,
+      cetz.drawable.TAG.no-bounds,
+    )
+    drawn
+  }),)
+}
+
+// Paints the union of all merged highlights that share one fill as a single
+// compound path, so translucent colour is applied once wherever pieces overlap.
+#let _draw-merged-fill-region(paint, members, placed-species-list, configuration) = {
+  import cetz.draw: *
+  let outlines = ()
+  for member in members {
+    for piece in _highlight-region-pieces(member, placed-species-list, configuration) {
+      outlines += _piece-outline(piece, configuration)
+      _bounds-carrier(piece)
+    }
+  }
+  _outline-without-bounds(compound-path(outlines, fill: paint, stroke: none, fill-rule: "non-zero"))
+}
+
+// Draws highlights behind the structure. A fill colour's merged region is drawn
+// where that colour first appears, so overlaps between different colours follow
+// the order of the requests.
+#let _draw-highlight-layer(highlights, placed-species-list, configuration, default-overlap) = {
+  let drawn-fills = ()
+  for highlight-specification in highlights {
+    if not _is-merged-highlight(highlight-specification, default-overlap) {
+      for piece in _highlight-region-pieces(highlight-specification, placed-species-list, configuration) {
+        _stroke-piece(piece, highlight-specification.fill, highlight-specification.stroke)
       }
+      continue
     }
-  }
-  // Named functional groups carry the elements whose attached H belongs to
-  // the group. Only selected atoms expand, so bond-only requests keep their
-  // endpoint labels unshaded and recursive carbon context stays unselected.
-  let elements = highlight-specification.at("hydrogen-elements", default: ())
-  let parents = ()
-  for reference in references {
-    if reference.__ref__ == "atom" { parents.push((reference.species, reference.index)) }
-    else if reference.__ref__ == "bond" and highlight-specification.include-atoms {
-      parents.push((reference.species, reference.i))
-      parents.push((reference.species, reference.j))
-    }
-  }
-  for (species-index, atom-index) in parents.dedup() {
-    let placed-species = placed-species-list.at(species-index)
-    let atom = placed-species.layout.atoms.at(atom-index)
-    if atom.symbol not in elements { continue }
-    let molecule-scale = placed-species.at("mol-scale", default: 1.0)
-    let radius = if highlight-specification.radius == auto {
-      configuration.atom-radius * molecule-scale
-    } else { highlight-specification.radius }
-    let parent = _atom-position(placed-species, atom-index)
-    let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
-    for hydrogen in _highlight-hydrogens(placed-species, atom-index) {
-      line(parent, hydrogen.position, stroke: (
-        paint: highlight-specification.fill,
-        thickness: configuration.bond-thickness * molecule-scale,
-        cap: "round",
-      ))
-      // A capsule spans the whole H/Hn label, including a hydrogen subscript.
-      let half-span = calc.max(0.0, hydrogen.width / 2 - radius * 0.5)
-      line((hydrogen.position.at(0) - half-span, hydrogen.position.at(1)),
-           (hydrogen.position.at(0) + half-span, hydrogen.position.at(1)),
-        stroke: (paint: highlight-specification.fill,
-                 thickness: 2 * radius * canvas-scale, cap: "round"))
-    }
+    if highlight-specification.fill in drawn-fills { continue }
+    drawn-fills.push(highlight-specification.fill)
+    let members = highlights.filter(member => (
+      _is-merged-highlight(member, default-overlap)
+        and member.fill == highlight-specification.fill
+    ))
+    _draw-merged-fill-region(
+      highlight-specification.fill,
+      members,
+      placed-species-list,
+      configuration,
+    )
   }
 }
 
@@ -897,6 +1152,7 @@
 #let _annotation-configuration(canvas-scale, font-size, scale, bond-stroke: none) = (
   lp-offset: calc.max(0.1, font-size / canvas-scale * 0.6),
   atom-radius: calc.max(0.12, font-size / canvas-scale * 0.5),
+  canvas-scale: canvas-scale,
   bond-thickness: canvas-scale * 0.42,
   bond-trim: calc.max(0.42, font-size / canvas-scale * 0.75),
   arrow-thickness: if bond-stroke == none { 0.9pt * scale } else { bond-stroke },
