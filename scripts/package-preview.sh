@@ -63,9 +63,11 @@ done
 cp "$repo_root/plugin/typst_smiles_plugin.wasm" "$package_target/plugin/typst_smiles_plugin.wasm"
 
 found_readme_image=0
-for image in "$repo_root"/assets/readme/*.png; do
+for image in "$repo_root"/assets/readme/*.png "$repo_root"/assets/readme/examples/*.png; do
   if [ -f "$image" ]; then
-    cp "$image" "$package_target/assets/readme/"
+    image_relative=${image#"$repo_root/"}
+    mkdir -p "$(dirname -- "$package_target/$image_relative")"
+    cp "$image" "$package_target/$image_relative"
     found_readme_image=1
   fi
 done

@@ -14,20 +14,20 @@ source instead of copying diagrams from a separate editor.
 
 <table>
 <tr>
-  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/ciprofloxacin.typ"><img src="assets/readme/examples/ciprofloxacin.png" width="400"></a></td>
-  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/coumarin.typ"><img src="assets/readme/examples/coumarin.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/228d5c1fd04e2764568ddbcea6b0884e3b1568eb/assets/readme/examples/ciprofloxacin.typ"><img src="assets/readme/examples/ciprofloxacin.png" alt="Ciprofloxacin with shaded functional regions" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/228d5c1fd04e2764568ddbcea6b0884e3b1568eb/assets/readme/examples/coumarin.typ"><img src="assets/readme/examples/coumarin.png" alt="Cycle of four coumarin derivatives with highlighted groups" width="400"></a></td>
 </tr>
 <tr>
   <td>Ciprofloxacin, with each functional region shaded</td>
   <td>Coumarin scaffold evolution with highlighted pharmacophores</td>
 </tr>
 <tr>
-  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/watson-crick.typ"><img src="assets/readme/examples/watson-crick.png" width="400"></a></td>
-  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/main/assets/readme/examples/dark-bromination.typ"><img src="assets/readme/examples/dark-bromination.png" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/228d5c1fd04e2764568ddbcea6b0884e3b1568eb/assets/readme/examples/watson-crick.typ"><img src="assets/readme/examples/watson-crick.png" alt="Watson-Crick adenine-thymine base pair" width="400"></a></td>
+  <td><a href="https://github.com/GeronimoCastano/typed-smiles/blob/228d5c1fd04e2764568ddbcea6b0884e3b1568eb/assets/readme/examples/dark-bromination.typ"><img src="assets/readme/examples/dark-bromination.png" alt="Bromination and nitration of benzene on a dark card" width="400"></a></td>
 </tr>
 <tr>
-  <td>Watson–Crick A–T pair drawn in CeTZ with `smiles-cetz`</td>
-  <td>Bromination then nitration on a dark neon theme in Iosevka</td>
+  <td>Watson–Crick A–T pair drawn in CeTZ with <code>smiles-cetz</code></td>
+  <td>Bromination then nitration on a dark card with neon arrows and reagents</td>
 </tr>
 </table>
 
