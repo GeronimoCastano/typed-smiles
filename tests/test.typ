@@ -5274,3 +5274,114 @@ elements, so the acid OH is shaded by default and not when opted out.
      highlight-colors: (translucent-orange,),
    )],
 )
+
+#pagebreak()
+= Carbon hydrogens attached to the carbon symbol
+
+Displayed carbon hydrogens follow the heteroatom label layout: the bonds meet
+the C itself, a chain carbon stacks its hydrogens on the open side, and a
+terminal carbon hangs them off the side away from its bond.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*Ethanol, all H* \
+   #text(size: 8pt, `show-h: "all"`) \
+   #smiles("CCO", show-h: "all")],
+
+  [*Propane, all H* \
+   #text(size: 8pt, `show-h: "all"`) \
+   #smiles("CCC", show-h: "all")],
+
+  [*Selected CH2* \
+   #text(size: 8pt, `show-h: (1,)`) \
+   #smiles("CCCO", show-h: (1,))],
+
+  [*Isobutane, all H* \
+   #text(size: 8pt, `show-h: "all"`) \
+   #smiles("CC(C)C", show-h: "all")],
+
+  [*Rotated chain* \
+   #text(size: 8pt, `rotation: 90deg`) \
+   #smiles("CCCO", show-h: "all", rotation: 90deg)],
+
+  [*Ring CH and CH2* \
+   #text(size: 8pt, `show-h: "all"`) \
+   #smiles("C1CCC=CC1", show-h: "all")],
+
+  [*Carbanion lone pair* \
+   #text(size: 8pt, `lone-pairs: "dots"`) \
+   #smiles("C[CH2-]", show-h: "all", lone-pairs: "dots")],
+
+  [*Charged CH2 cation* \
+   #text(size: 8pt, `show-h: "all"`) \
+   #smiles("C[CH+]C", show-h: "all")],
+)
+
+Curly arrows aim at the carbon symbol and at its displayed hydrogens.
+
+#reaction(
+  mol("[OH-]", lone-pairs: "dots"),
+  mol("CC=O", show-h: (0,), show-indices: true, offset: (1.0, 0.0)),
+  arrow(from: lp(0, 0), to: atom(1, 0), bend: "right", color: blue),
+)
+
+#pagebreak()
+= Stacked hydrogen spacing and alignment
+
+A hydrogen stacked above or below its atom keeps a small visible gap from the
+symbol, and a count subscript above the symbol stays clear of it. The H sits
+directly over or under the symbol, with its count subscript trailing to the
+right. Shown at 2× so the gap is easy to inspect.
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1.5em,
+  align: center + horizon,
+
+  [*CH2 above* \
+   #text(size: 8pt, `CCC, show-h: "all"`) \
+   #smiles("CCC", show-h: "all", scale: 2)],
+
+  [*CH above* \
+   #text(size: 8pt, `CC(C)C, show-h: "all"`) \
+   #smiles("CC(C)C", show-h: "all", scale: 2)],
+
+  [*NH above* \
+   #text(size: 8pt, `CNC`) \
+   #smiles("CNC", scale: 2)],
+
+  [*NH2+ above* \
+   #text(size: 8pt, `C[NH2+]C`) \
+   #smiles("C[NH2+]C", scale: 2)],
+
+  [*NH2+ below, in a ring* \
+   #text(size: 8pt, `C1CC[NH2+]C1`) \
+   #smiles("C1CC[NH2+]C1", scale: 2)],
+
+  [*CH2 above and below* \
+   #text(size: 8pt, `show-h: (0, 3)`) \
+   #smiles("C1CCCCC1", show-h: (0, 3), scale: 2)],
+
+  [*NH below, pyrrole* \
+   #text(size: 8pt, `C1=CNC=C1`) \
+   #smiles("C1=CNC=C1", scale: 2)],
+
+  [*Large font* \
+   #text(size: 8pt, `font-size: 20pt`) \
+   #smiles("CCC", show-h: "all", font-size: 20pt)],
+
+  [*Indices on stacked H* \
+   #text(size: 8pt, `show-indices: true`) \
+   #smiles("C[NH2+]C", scale: 2, show-indices: true)],
+)
+
+Curly arrows and highlights aim at the stacked H letter itself.
+
+#reaction(
+  mol("[OH-]", lone-pairs: "dots"),
+  mol("C[NH2+]C", show-indices: true, offset: (1.0, 0.0)),
+  arrow(from: lp(0, 0), to: atom(1, 3), bend: "left", color: blue),
+)
