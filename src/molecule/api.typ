@@ -22,9 +22,12 @@
 #import "abbreviations.typ": _abbreviated-layout, _orient-abbreviation-labels
 #import "../styles.typ": _resolve-foreground-theme, _canvas-scale, _style-preset
 #import "rendering.typ": (
+  _abbreviation-fragment-geometry,
   _rendered-atom-position,
   _mirror-layout,
+  _translate-layout,
   _linearize-skeleton-layout,
+  _molecule-bounds,
   _draw-molecule,
 )
 #import "../mechanism/annotations.typ": (
@@ -91,8 +94,9 @@
 /// - abbreviate (none / "all" / str / array): Draw terminal groups from the
 ///   automatic catalogue ("tBu", "CO2Et", "CO2Me", "OAc", "NHAc", "SO3H",
 ///   "CF3", "NO2", "CO2H", "CO2-", "CN", "CHO", "OEt", "OMe", "Ac") as
-///   labels. Atom indices keep their meaning; atoms hidden inside a label
-///   cannot be referenced. A named group must occur in the molecule.
+///   labels. Formula fragments expose representative original indices, with
+///   gaps for merged atoms; skipped individual atoms cannot be referenced.
+///   A named group must occur in the molecule.
 ///   Default: none.
 /// - highlight-smarts (str / dictionary / array): Patterns or requests with
 ///   pattern, include-atoms (default: true), and include-hydrogens (default:
@@ -108,7 +112,7 @@
 /// - show-maps (bool): Label atoms that carry an OpenSMILES atom map, such as
 ///   the 7 in `[CH3:7]`, with ":7". Default: false.
 /// - undepicted-stereo ("error" / "omit"): What to do with written
-///   stereochemistry the drawing cannot show, such as octahedral `@OH` centers.
+///   stereochemistry the drawing cannot show, such as octahedral `@OH1` centers.
 ///   "error" reports it; "omit" draws the structure without it.
 ///   Default: "error".
 /// - ..annotations: Any number of `arrow()` / `highlight()` items referencing atoms of
@@ -151,15 +155,15 @@
     _smiles-option-names,
     hints: (highlight: _positional-highlight-hint),
   )
-  let (smiles-str, rotation, mirror) = if _is-aligned-molecule(smiles-str) {
+  let (smiles-str, rotation, mirror, alignment-offset) = if _is-aligned-molecule(smiles-str) {
     let aligned-drawing = _aligned-molecule-drawing(
       smiles-str,
       (rotation: rotation, mirror: mirror, show-h: show-h, abbreviate: abbreviate),
       "smiles",
     )
-    (aligned-drawing.smiles, aligned-drawing.options.rotation, aligned-drawing.options.mirror)
+    (aligned-drawing.smiles, aligned-drawing.options.rotation, aligned-drawing.options.mirror, aligned-drawing.at("offset", default: (0, 0)))
   } else {
-    (smiles-str, rotation, mirror)
+    (smiles-str, rotation, mirror, (0, 0))
   }
   _validate-positive-number(scale, "smiles scale")
   if bond-length != none {
@@ -187,7 +191,11 @@
   let preset = _style-preset(style)
   let color = if color == auto { if preset == none { true } else { preset.color } } else { color }
   if type(color) != bool {
-    panic("color must be auto or a bool")
+    _invalid-input(
+      "smiles color",
+      "expected auto or a boolean, got " + repr(color),
+      "Pass color: auto, true, or false.",
+    )
   }
   let (bond-length, font-size, bond-stroke, font) = if preset == none {
     (bond-length, font-size, bond-stroke, font)
@@ -201,7 +209,7 @@
 
   let (fg, theme) = _resolve-foreground-theme(fg, theme)
   let raw-layout = _abbreviated-layout(smiles-str, abbreviate, "smiles abbreviate")
-  let layout = _orient-abbreviation-labels(
+  let layout = _translate-layout(_orient-abbreviation-labels(
     _mirror-layout(
       if _normalize-show-h(show-h).skeleton {
         _linearize-skeleton-layout(raw-layout)
@@ -212,7 +220,7 @@
       rotation: rotation,
     ),
     rotation,
-  )
+  ), alignment-offset)
   let canvas-scale = _canvas-scale(scale, bond-length)
   let actual-font-size = if font-size == none { 11pt * scale } else { font-size }
   let annotation = _substructure-highlights(
@@ -222,22 +230,6 @@
     highlight-colors: highlight-colors,
     highlight-unmatched: highlight-unmatched,
   ) + annotations.pos()
-  let placed-species-list = ((
-    kind: "mol",
-    layout: layout,
-    mol-scale: 1.0,
-    rotation: rotation,
-    origin: (0, 0),
-    size: (layout.bbox_width, layout.bbox_height),
-    canvas-scale: canvas-scale,
-    actual-font-size: actual-font-size,
-    actual-bond-stroke: if bond-stroke == none { 0.9pt * scale } else { bond-stroke },
-    font: font,
-    show-h: show-h,
-    aromatic: aromatic,
-  ),)
-  let configuration = _annotation-configuration(canvas-scale, actual-font-size, scale, bond-stroke: bond-stroke)
-  let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
   _validate-molecule-options(
     layout,
     scale,
@@ -261,6 +253,41 @@
     undepicted-stereo: undepicted-stereo,
   )
   _validate-highlight-overlap(highlight-overlap, "smiles highlight-overlap")
+  let bounds-options = (
+    scale: scale,
+    font-size: font-size,
+    font: font,
+    show-h: show-h,
+    lone-pairs: lone-pairs,
+    atom-annotations: atom-annotations,
+  )
+  let bounds = _molecule-bounds(
+    layout,
+    rotation,
+    1.0,
+    layout.bbox_width,
+    layout.bbox_height,
+    options: bounds-options,
+    canvas-scale: canvas-scale,
+  )
+  let placed-species-list = ((
+    kind: "mol",
+    source: smiles-str,
+    layout: layout,
+    mol-scale: 1.0,
+    rotation: rotation,
+    origin: (0, 0),
+    size: (layout.bbox_width, layout.bbox_height),
+    bounds: bounds,
+    canvas-scale: canvas-scale,
+    actual-font-size: actual-font-size,
+    actual-bond-stroke: if bond-stroke == none { 0.9pt * scale } else { bond-stroke },
+    font: font,
+    show-h: show-h,
+    aromatic: aromatic,
+  ),)
+  let configuration = _annotation-configuration(canvas-scale, actual-font-size, scale, bond-stroke: bond-stroke)
+  let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
   _validate-annotations(annotation, placed-species-list, "smiles annotation")
 
   cetz.canvas(length: canvas-scale, {
@@ -336,10 +363,18 @@
   // Fit the drawing into the target height, but cap the scale so one bond
   // never exceeds most of that height: a flat, mostly horizontal molecule
   // measures almost no height and would otherwise blow up to fill it.
-  let canvas-unit = _canvas-scale(
-    args.named().at("scale", default: 1.0),
-    args.named().at("bond-length", default: none),
-  )
+  let drawing-options = args.named()
+  let molecule-scale = drawing-options.at("scale", default: 1.0)
+  let preset = _style-preset(drawing-options.at("style", default: "default"))
+  let requested-bond-length = drawing-options.at("bond-length", default: none)
+  let effective-bond-length = if requested-bond-length != none {
+    requested-bond-length
+  } else if preset != none {
+    preset.bond-length * molecule-scale
+  } else {
+    none
+  }
+  let canvas-unit = _canvas-scale(molecule-scale, effective-bond-length)
   let scale-factor = calc.min(
     target-height / measured-body.height,
     target-height * 0.9 / canvas-unit,
@@ -385,11 +420,18 @@
 /// -> none  (emits CeTZ draw elements)
 #let smiles-cetz(smiles-str, name: none, origin: (0, 0), fg: black, theme: "light", ..opts) = {
   import cetz.draw: *
-  let (smiles-str, options) = if _is-aligned-molecule(smiles-str) {
+  if opts.pos().len() > 0 {
+    _invalid-input(
+      "smiles-cetz positional options",
+      "received " + str(opts.pos().len()) + " positional annotation(s)",
+      "Pass drawing options by name; arrow() and highlight() annotations are supported by smiles().",
+    )
+  }
+  let (smiles-str, options, alignment-offset) = if _is-aligned-molecule(smiles-str) {
     let aligned-drawing = _aligned-molecule-drawing(smiles-str, opts.named(), "smiles-cetz")
-    (aligned-drawing.smiles, aligned-drawing.options)
+    (aligned-drawing.smiles, aligned-drawing.options, aligned-drawing.at("offset", default: (0, 0)))
   } else {
-    (smiles-str, opts.named())
+    (smiles-str, opts.named(), (0, 0))
   }
   if name != none and type(name) != str {
     _invalid-input(
@@ -430,7 +472,7 @@
     options.at("abbreviate", default: none),
     "smiles-cetz abbreviate",
   )
-  let layout = _orient-abbreviation-labels(
+  let layout = _translate-layout(_orient-abbreviation-labels(
     _mirror-layout(
       if _normalize-show-h(show-h).skeleton {
         _linearize-skeleton-layout(raw-layout)
@@ -441,7 +483,7 @@
       rotation: rotation,
     ),
     rotation,
-  )
+  ), alignment-offset)
   let allowed = (
     "scale", "font-size", "font", "bond-stroke", "color", "rotation",
     "show-h", "lone-pairs", "atom-colors", "show-indices", "aromatic",
@@ -482,9 +524,21 @@
   let font-size = options.at("font-size", default: none)
   let actual-font-size = if font-size == none { 11pt * molecule-scale } else { font-size }
   let bond-stroke = options.at("bond-stroke", default: none)
+  let bounds-options = drawing-options
+  bounds-options.insert("scale", molecule-scale)
+  let bounds = _molecule-bounds(
+    layout,
+    rotation,
+    1.0,
+    layout.bbox_width,
+    layout.bbox_height,
+    options: bounds-options,
+    canvas-scale: canvas-scale,
+  )
   let placed-species-list = ((
-    kind: "mol", layout: layout, mol-scale: 1.0, rotation: rotation,
+    kind: "mol", source: smiles-str, layout: layout, mol-scale: 1.0, rotation: rotation,
     origin: (0, 0), size: (layout.bbox_width, layout.bbox_height),
+    bounds: bounds,
     canvas-scale: canvas-scale, actual-font-size: actual-font-size,
     actual-bond-stroke: if bond-stroke == none { 0.9pt * molecule-scale } else { bond-stroke },
     font: drawing-options.at("font", default: "New Computer Modern"),
@@ -497,13 +551,12 @@
     _draw-molecule(layout, fg: fg, theme: theme, ..drawing-options)
     for atom-index in range(layout.atoms.len()) {
       let atom = layout.atoms.at(atom-index)
-      // Hidden abbreviation atoms get no anchor, so drawing that targets
-      // them fails instead of landing on the label.
-      if atom.at("contracted", default: false) { continue }
+      let fragment = _abbreviation-fragment-geometry(placed-species-list.first(), atom-index)
+      if atom.at("contracted", default: false) and fragment == none { continue }
       let atom-position = _rendered-atom-position(atom, rotation)
       anchor(
         "atom-" + str(atom-index),
-        (atom-position.x, atom-position.y),
+        if fragment == none { (atom-position.x, atom-position.y) } else { fragment.position },
       )
     }
     for bond-output in layout.bonds {

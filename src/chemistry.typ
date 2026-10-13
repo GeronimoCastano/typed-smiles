@@ -2,6 +2,7 @@
 
 #import "@preview/chemformula:0.1.3": ch
 #import "validation.typ": _invalid-input
+#import "molecule/label-fragments.typ": _prepare-abbreviation-fragments
 
 #let _smiles-plugin = plugin("../plugin/typst_smiles_plugin.wasm")
 
@@ -52,10 +53,10 @@
   if abbreviation-request == none {
     json(_smiles-plugin.layout(bytes(smiles-str)))
   } else {
-    json(_smiles-plugin.layout_abbreviated(
+    _prepare-abbreviation-fragments(json(_smiles-plugin.layout_abbreviated(
       bytes(smiles-str),
       bytes(abbreviation-request),
-    ))
+    )))
   }
 }
 

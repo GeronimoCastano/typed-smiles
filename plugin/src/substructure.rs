@@ -236,13 +236,18 @@ impl Parser<'_> {
                 self.pos += 1;
                 Ok(AtomQuery::Any)
             }
-            Some(b'a' | b'A') => {
+            Some(b'a' | b'A') if !self.starts_with_aromatic_two_letter_element() => {
                 let aromatic = self.peek() == Some(b'a');
                 self.pos += 1;
                 Ok(AtomQuery::Aromatic(aromatic))
             }
             _ => self.element(),
         }
+    }
+
+    fn starts_with_aromatic_two_letter_element(&self) -> bool {
+        self.input.get(self.pos..self.pos + 2) == Some(b"as")
+            || self.input.get(self.pos..self.pos + 2) == Some(b"se")
     }
 
     fn element(&mut self) -> Result<AtomQuery, String> {
@@ -681,6 +686,7 @@ mod tests {
         assert!(matches("C1=CC=CC=C1", "c").is_empty());
         assert_eq!(matches("c1ccccc1-c2ccccc2", "c-c").len(), 1);
         assert_eq!(matches("c1cc[nH]c1", "[nH1]").len(), 1);
+        assert!(matches("c1ccsc1", "[as]").is_empty());
     }
 
     #[test]

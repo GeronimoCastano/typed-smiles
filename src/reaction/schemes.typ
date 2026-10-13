@@ -22,11 +22,18 @@
   _abbreviated-layout,
   _orient-abbreviation-labels,
 )
-#import "../styles.typ": _resolve-foreground-theme
+#import "../styles.typ": (
+  _resolve-foreground-theme,
+  _style-preset,
+  _canvas-scale,
+  _resolve-molecule-appearance,
+  _resolve-molecule-bond-length,
+)
 #import "../molecule/rendering.typ": (
   _mirror-layout,
   _draw-molecule,
   _molecule-bounds,
+  _translate-layout,
 )
 #import "../mechanism/annotations.typ": (
   _validate-annotations,
@@ -153,11 +160,11 @@
       )
     }
   }
-  let (spec, options) = if _is-aligned-molecule(spec) {
+  let (spec, options, alignment-offset) = if _is-aligned-molecule(spec) {
     let aligned-drawing = _aligned-molecule-drawing(spec, opts.named(), "mol")
-    (aligned-drawing.smiles, aligned-drawing.options)
+    (aligned-drawing.smiles, aligned-drawing.options, aligned-drawing.offset)
   } else {
-    (spec, opts.named())
+    (spec, opts.named(), (0, 0))
   }
   let allowed-options = (
     "style", "scale", "bond-length", "font-size", "font", "bond-stroke",
@@ -218,6 +225,7 @@
     spec: spec,
     label: label,
     offset: offset,
+    alignment-offset: alignment-offset,
     annotations: annotations,
     opts: options,
   )
@@ -236,6 +244,28 @@
     smiles(molecule-item.spec, ..options)
   } else {
     molecule-item.spec
+  }
+  let preset = _style-preset(options.at("style", default: "default"))
+  let molecule-scale = options.at("scale", default: 1.0)
+  let effective-bond-length = options.at(
+    "bond-length",
+    default: if preset == none { none } else { preset.bond-length * molecule-scale },
+  )
+  let alignment-offset = molecule-item.at("alignment-offset", default: (0, 0))
+  let body = if alignment-offset == (0, 0) {
+    body
+  } else {
+    let canvas-unit = _canvas-scale(molecule-scale, effective-bond-length)
+    let rotation = options.at("rotation", default: 0deg)
+    let offset-x = alignment-offset.at(0) * calc.cos(rotation)
+      - alignment-offset.at(1) * calc.sin(rotation)
+    let offset-y = alignment-offset.at(0) * calc.sin(rotation)
+      + alignment-offset.at(1) * calc.cos(rotation)
+    move(
+      dx: offset-x * canvas-unit,
+      dy: -offset-y * canvas-unit,
+      body,
+    )
   }
   let rendered = if molecule-item.label == none {
     body
@@ -466,7 +496,7 @@
 ///    `rxn-arrow(dir: "right"|"left"|"down"|"up")` can wrap the scheme across the
 ///    page. `mol(offset:)` nudges content in page coordinates inside its grid cell.
 ///  - Mechanism: any curly `arrow()`/`highlight()`. Species are placed in one shared
-///    canvas (left to right, each nudged by its offset) so curly arrows can
+///    canvas (following flow, each nudged by its offset) so curly arrows can
 ///    reference atoms across species. References are `atom(s, i)`,
 ///    `bond(s, i, j)`, `lp(s, i)` and `species(k)`, where s/k count `mol()`/content items
 ///    in written order — including `mol()` items inside `rxn-arrow(above:/below:)`
@@ -475,7 +505,6 @@
 ///    `arrow()`/`highlight()` items inside `mol()` use local references. Reaction items
 ///    inside `brackets(..items)` stay on this same canvas and remain referenceable.
 ///
-
 /// - gap-h (length): Horizontal gap between grid items (scheme mode). Default: 1.5em.
 /// - gap-v (length): Vertical gap between grid items (scheme mode). Default: 1.5em.
 /// - scale (float): Uniform scale. In mechanism mode it sets the shared canvas
@@ -631,6 +660,7 @@
 
   if not mechanism {
     // ── Scheme (grid) path ──────────────────────────────────────────────────
+    steps = steps.map(item => if type(item) == str { mol(item) } else { item })
     // Phase 1: assign each item a (grid-row, grid-col) position.
     // Grid mapping: mol at (lr,lc) → grid (2*lr, 2*lc); arrows slot into gaps.
     let logical-row = 0
@@ -648,11 +678,20 @@
     for item in steps {
       if is-reaction-arrow(item) {
         let direction = item.at("dir", default: "right")
-        let (grid-row, grid-column) = if direction == "right" {
+        let base-is-horizontal = base-direction == "right" or base-direction == "left"
+        let arrow-is-horizontal = direction == "right" or direction == "left"
+        // Same-axis arrows occupy the next flow slot even when their head points
+        // backward; orthogonal arrows retain their explicit wrap direction.
+        let position-direction = if base-is-horizontal == arrow-is-horizontal {
+          base-direction
+        } else {
+          direction
+        }
+        let (grid-row, grid-column) = if position-direction == "right" {
           (2 * logical-row, 2 * logical-column + 1)
-        } else if direction == "left" {
+        } else if position-direction == "left" {
           (2 * logical-row, 2 * logical-column - 1)
-        } else if direction == "down" {
+        } else if position-direction == "down" {
           (2 * logical-row + 1, 2 * logical-column)
         } else {
           (2 * logical-row - 1, 2 * logical-column)
@@ -666,7 +705,7 @@
         let next-position = next-logical-position(
           logical-row,
           logical-column,
-          direction,
+          position-direction,
         )
         logical-row = next-position.at(0)
         logical-column = next-position.at(1)
@@ -806,14 +845,21 @@
       }
     }
 
-    let reaction-grid = grid(
-      columns: (auto,) * column-count,
-      rows: (auto,) * row-count,
-      column-gutter: gap-h / 2,
-      row-gutter:    gap-v / 2,
-      align: center + horizon,
-      ..flat-cells,
-    )
+    let reaction-grid = context {
+      let column-widths = range(column-count).map(grid-column => {
+        calc.max(..range(row-count).map(grid-row => (
+          measure(flat-cells.at(grid-row * column-count + grid-column)).width
+        )))
+      })
+      grid(
+        columns: column-widths,
+        rows: (auto,) * row-count,
+        column-gutter: gap-h / 2,
+        row-gutter:    gap-v / 2,
+        align: center + horizon,
+        ..flat-cells,
+      )
+    }
 
     let scaled = if scale == 1.0 {
       reaction-grid
@@ -857,24 +903,32 @@
           if molecule-scale <= 0 { panic("mol scale must be positive") }
           let molecule-rotation = molecule-item.opts.at("rotation", default: 0deg)
           let molecule-layout = _orient-abbreviation-labels(
-            _mirror-layout(
-              _abbreviated-layout(
-                molecule-item.spec,
-                molecule-item.opts.at("abbreviate", default: none),
-                "mol abbreviate",
+            _translate-layout(
+              _mirror-layout(
+                _abbreviated-layout(
+                  molecule-item.spec,
+                  molecule-item.opts.at("abbreviate", default: none),
+                  "mol abbreviate",
+                ),
+                molecule-item.opts.at("mirror", default: none),
+                rotation: molecule-rotation,
               ),
-              molecule-item.opts.at("mirror", default: none),
-              rotation: molecule-rotation,
+              molecule-item.at("alignment-offset", default: (0, 0)),
             ),
             molecule-rotation,
           )
-          let molecule-font-size = molecule-item.opts.at(
-            "font-size",
-            default: none,
+          let molecule-bond-length = _resolve-molecule-bond-length(
+            molecule-item.opts,
+            molecule-scale,
           )
-          let molecule-bond-stroke = molecule-item.opts.at(
-            "bond-stroke",
-            default: none,
+          let molecule-bond-factor = if molecule-bond-length == none {
+            1.0
+          } else {
+            molecule-bond-length / molecule-scale
+          }
+          let molecule-appearance = _resolve-molecule-appearance(
+            molecule-item.opts,
+            molecule-scale,
           )
           let rotation = molecule-item.opts.at("rotation", default: 0deg)
           // Measure the rotated/mirrored/scaled molecule the same way the grid
@@ -887,18 +941,35 @@
           if "show-indices" not in measurement-options {
             measurement-options.insert("show-indices", show-indices)
           }
+          if molecule-bond-length != none {
+            measurement-options.insert("bond-length", molecule-bond-length)
+          }
+          measurement-options.insert("font-size", molecule-appearance.font-size)
+          measurement-options.insert("bond-stroke", molecule-appearance.bond-stroke)
+          measurement-options.insert("font", molecule-appearance.font)
           let measured-molecule = measure(
             smiles(molecule-item.spec, ..measurement-options),
           )
           let bounds = _molecule-bounds(
             molecule-layout,
             rotation,
-            molecule-scale,
+            molecule-scale * molecule-bond-factor,
             measured-molecule.width / canvas-scale,
             measured-molecule.height / canvas-scale,
             options: measurement-options,
             canvas-scale: canvas-scale,
           )
+          let label-bounds = bounds
+          let label-half-width = if molecule-item.label == none {
+            0.0
+          } else {
+            measure(molecule-item.label).width / (2 * canvas-scale)
+          }
+          bounds.left = calc.max(bounds.left, label-half-width)
+          bounds.right = calc.max(bounds.right, label-half-width)
+          if molecule-item.label != none {
+            bounds.bottom += measure(molecule-item.label).height / canvas-scale + 0.34
+          }
           (
             kind: "mol-smiles",
             source: molecule-item.spec,
@@ -912,6 +983,7 @@
             bounds: bounds,
             size: (bounds.left + bounds.right, bounds.top + bounds.bottom),
             label: molecule-item.label,
+            label-bounds: label-bounds,
             annotations: _substructure-highlights(
               molecule-item.spec,
               highlight-smarts: molecule-item.opts.at("highlight-smarts", default: ()),
@@ -921,16 +993,8 @@
             ) + molecule-item.at("annotations", default: ()),
             opts: molecule-item.opts,
             canvas-scale: canvas-scale,
-            actual-font-size: if molecule-font-size == none {
-              11pt * the-scale * molecule-scale
-            } else {
-              molecule-font-size
-            },
-            actual-bond-stroke: if molecule-bond-stroke == none {
-              0.9pt * molecule-scale
-            } else {
-              molecule-bond-stroke
-            },
+            actual-font-size: molecule-appearance.font-size,
+            actual-bond-stroke: molecule-appearance.bond-stroke,
             font: molecule-item.opts.at(
               "font",
               default: "New Computer Modern",
@@ -938,11 +1002,32 @@
             show-h: molecule-item.opts.at("show-h", default: ()),
             aromatic: molecule-item.opts.at("aromatic", default: "kekule"),
             highlight-overlap: molecule-item.opts.at("highlight-overlap", default: highlight-overlap),
+            resolved-bond-length: molecule-bond-length,
+            bond-factor: molecule-bond-factor,
+            resolved-font-size: molecule-appearance.font-size,
+            resolved-bond-stroke: molecule-appearance.bond-stroke,
+            resolved-color: molecule-appearance.color,
+            resolved-font: molecule-appearance.font,
           )
         } else {
           let measured-content = measure(molecule-item.spec)
           let width = measured-content.width / canvas-scale
           let height = measured-content.height / canvas-scale
+          let label-half-width = if molecule-item.label == none {
+            0.0
+          } else {
+            measure(molecule-item.label).width / (2 * canvas-scale)
+          }
+          let bounds = (
+            left: calc.max(width / 2, label-half-width),
+            right: calc.max(width / 2, label-half-width),
+            bottom: height / 2,
+            top: height / 2,
+          )
+          let label-bounds = bounds
+          if molecule-item.label != none {
+            bounds.bottom += measure(molecule-item.label).height / canvas-scale + 0.34
+          }
           (
             kind: "content",
             source: molecule-item.spec,
@@ -952,14 +1037,10 @@
               molecule-item.offset.at(0),
               molecule-item.offset.at(1),
             ),
-            bounds: (
-              left: width / 2,
-              right: width / 2,
-              bottom: height / 2,
-              top: height / 2,
-            ),
-            size: (width, height),
+            bounds: bounds,
+            size: (bounds.left + bounds.right, bounds.top + bounds.bottom),
             label: molecule-item.label,
+            label-bounds: label-bounds,
             annotations: molecule-item.at("annotations", default: ()),
           )
         }
@@ -1031,6 +1112,9 @@
         )
       }
 
+      let horizontal-flow = flow == "right" or flow == "left"
+      let positive-flow = flow == "right" or flow == "up"
+
       for item in steps {
         if is-electron-arrow(item) or is-highlight(item) {
           annotations.push(item)
@@ -1061,23 +1145,39 @@
           if grouped-species.len() == 0 and grouped-arrows.len() == 0 {
             panic("transparent brackets require at least one visible reaction item")
           }
-          let bottom = 0.0
-          let top = 0.0
+          let bottom = none
+          let top = none
           for grouped-species-item in grouped-species {
+            let species-bottom = (
+              grouped-species-item.origin.at(1) - grouped-species-item.bounds.bottom
+            )
+            let species-top = (
+              grouped-species-item.origin.at(1) + grouped-species-item.bounds.top
+            )
             bottom = calc.min(
-              bottom,
-              grouped-species-item.origin.at(1) - grouped-species-item.bounds.bottom,
+              if bottom == none { species-bottom } else { bottom },
+              species-bottom,
             )
             top = calc.max(
-              top,
-              grouped-species-item.origin.at(1) + grouped-species-item.bounds.top,
+              if top == none { species-top } else { top },
+              species-top,
             )
           }
           for grouped-arrow in grouped-arrows {
             let arrow-height = measure(grouped-arrow.body).height / canvas-scale
-            bottom = calc.min(bottom, grouped-arrow.origin.at(1) - arrow-height / 2)
-            top = calc.max(top, grouped-arrow.origin.at(1) + arrow-height / 2)
+            let arrow-bottom = grouped-arrow.origin.at(1) - arrow-height / 2
+            let arrow-top = grouped-arrow.origin.at(1) + arrow-height / 2
+            bottom = calc.min(
+              if bottom == none { arrow-bottom } else { bottom },
+              arrow-bottom,
+            )
+            top = calc.max(
+              if top == none { arrow-top } else { top },
+              arrow-top,
+            )
           }
+          if bottom == none { bottom = 0.0 }
+          if top == none { top = 0.0 }
           let content-right = calc.max(
             bracket-start.left + bracket-start.tick + bracket-start.gap,
             layout-cursor - gap,
@@ -1158,7 +1258,7 @@
           }
           let arrow-width = measure(body).width / canvas-scale
           let arrow-height = measure(body).height / canvas-scale
-          if horizontal {
+          if horizontal and horizontal-flow {
             // Lifted species sit above/below the arrow inside a slot wide
             // enough for all three.
             let slot-width = calc.max(
@@ -1197,7 +1297,7 @@
               annotations = registered.annotations
             }
             layout-cursor += slot-width + gap
-          } else {
+          } else if not horizontal and horizontal-flow {
             // A vertical arrow shows `above` on its right and `below` on its left.
             let left-width = if lift-below == none { 0.0 } else { lift-below.size.at(0) + lift-clearance }
             let right-width = if lift-above == none { 0.0 } else { lift-above.size.at(0) + lift-clearance }
@@ -1228,6 +1328,55 @@
               annotations = registered.annotations
             }
             layout-cursor += left-width + arrow-width + right-width + gap
+          } else {
+            let flow-extent = if horizontal { arrow-width } else { arrow-height }
+            let center = if positive-flow {
+              layout-cursor + flow-extent / 2
+            } else {
+              -(layout-cursor + flow-extent / 2)
+            }
+            let origin = if horizontal-flow { (center, 0) } else { (0, center) }
+            reaction-arrow-items.push((body: body, origin: origin))
+            if horizontal {
+              if lift-above != none {
+                let registered = register-species(position-species(
+                  lift-above,
+                  center,
+                  arrow-height / 2 + lift-clearance + lift-above.bounds.bottom,
+                ), placed-species-list, annotations)
+                placed-species-list = registered.species-list
+                annotations = registered.annotations
+              }
+              if lift-below != none {
+                let registered = register-species(position-species(
+                  lift-below,
+                  center,
+                  -(arrow-height / 2 + lift-clearance + lift-below.bounds.top),
+                ), placed-species-list, annotations)
+                placed-species-list = registered.species-list
+                annotations = registered.annotations
+              }
+            } else {
+              if lift-above != none {
+                let registered = register-species(position-species(
+                  lift-above,
+                  center + arrow-width / 2 + lift-clearance + lift-above.bounds.left,
+                  0,
+                ), placed-species-list, annotations)
+                placed-species-list = registered.species-list
+                annotations = registered.annotations
+              }
+              if lift-below != none {
+                let registered = register-species(position-species(
+                  lift-below,
+                  center - arrow-width / 2 - lift-clearance - lift-below.bounds.right,
+                  0,
+                ), placed-species-list, annotations)
+                placed-species-list = registered.species-list
+                annotations = registered.annotations
+              }
+            }
+            layout-cursor += flow-extent + gap
           }
         } else {
           let molecule-item = if is-molecule-item(item) {
@@ -1238,14 +1387,38 @@
           let placed-species = build-placed-species(molecule-item)
           // Place the origin so the molecule's actual left edge lands at the
           // layout-cursor, then advance by its full rotated width plus the gap.
+          let species-origin = if horizontal-flow {
+            (
+              if positive-flow {
+                layout-cursor + placed-species.bounds.left
+              } else {
+                -(layout-cursor + placed-species.bounds.right)
+              },
+              0,
+            )
+          } else {
+            (
+              0,
+              if positive-flow {
+                layout-cursor + placed-species.bounds.bottom
+              } else {
+                -(layout-cursor + placed-species.bounds.top)
+              },
+            )
+          }
           let registered = register-species(position-species(
             placed-species,
-            layout-cursor + placed-species.bounds.left,
-            0,
+            species-origin.at(0),
+            species-origin.at(1),
           ), placed-species-list, annotations)
           placed-species-list = registered.species-list
           annotations = registered.annotations
-          layout-cursor += placed-species.bounds.left + placed-species.bounds.right + gap
+          let flow-extent = if horizontal-flow {
+            placed-species.bounds.left + placed-species.bounds.right
+          } else {
+            placed-species.bounds.bottom + placed-species.bounds.top
+          }
+          layout-cursor += flow-extent + gap
         }
       }
 
@@ -1308,6 +1481,9 @@
             group({
               translate((placed-species.origin.at(0), placed-species.origin.at(1)))
               if molecule-scale != 1.0 { scale(molecule-scale) }
+              if placed-species.bond-factor != 1.0 {
+                scale(placed-species.bond-factor)
+              }
               let (molecule-foreground, molecule-theme) = _resolve-foreground-theme(
                 placed-species.opts.at("fg", default: auto),
                 placed-species.opts.at("theme", default: auto),
@@ -1315,10 +1491,13 @@
               _draw-molecule(
                 placed-species.layout,
                 scale: the-scale * molecule-scale,
-                font-size: placed-species.opts.at("font-size", default: none),
-                font: placed-species.opts.at("font", default: "New Computer Modern"),
-                bond-stroke: placed-species.opts.at("bond-stroke", default: none),
-                color: placed-species.opts.at("color", default: true),
+                bond-length: if placed-species.resolved-bond-length == none {
+                  none
+                } else { placed-species.resolved-bond-length },
+                font-size: placed-species.resolved-font-size,
+                font: placed-species.resolved-font,
+                bond-stroke: placed-species.resolved-bond-stroke,
+                color: placed-species.resolved-color,
                 rotation: placed-species.rotation,
                 show-h: placed-species.opts.at("show-h", default: ()),
                 lone-pairs: placed-species.opts.at("lone-pairs", default: none),
@@ -1353,8 +1532,15 @@
 
         for placed-species in placed-species-list {
           if placed-species.label != none {
+            let label-bounds = placed-species.at(
+              "label-bounds",
+              default: placed-species.bounds,
+            )
             content(
-              (placed-species.origin.at(0), placed-species.origin.at(1) - placed-species.bounds.bottom - 0.34),
+              (
+                placed-species.origin.at(0),
+                placed-species.origin.at(1) - label-bounds.bottom - 0.34,
+              ),
               placed-species.label,
               anchor: "north",
             )

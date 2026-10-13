@@ -102,6 +102,8 @@ pub struct MoleculeAlignment {
     pub atoms: Vec<usize>,
     /// Maps this molecule's layout coordinates into the reference frame.
     pub transform: OrthogonalTransform,
+    /// Applied after `transform` to place coordinates in the reference frame.
+    pub translation: Vec2,
     pub reflected: bool,
     /// Largest distance, in bond lengths, between a corresponding atom and its
     /// reference atom after alignment.
@@ -123,6 +125,7 @@ struct CandidateFit {
     atoms: Vec<usize>,
     attachment_agreement: usize,
     transform: OrthogonalTransform,
+    translation: Vec2,
     root_mean_square_deviation: f64,
     deviation: f64,
 }
@@ -160,6 +163,7 @@ pub fn align_molecules(request: &AlignmentRequest) -> Result<Vec<MoleculeAlignme
                 return Ok(MoleculeAlignment {
                     atoms: reference_atoms.clone(),
                     transform: OrthogonalTransform::IDENTITY,
+                    translation: Vec2::default(),
                     reflected: false,
                     deviation: 0.0,
                 });
@@ -174,6 +178,7 @@ pub fn align_molecules(request: &AlignmentRequest) -> Result<Vec<MoleculeAlignme
             Ok(MoleculeAlignment {
                 atoms: best_fit.atoms,
                 transform: best_fit.transform,
+                translation: best_fit.translation,
                 reflected: best_fit.transform.is_reflection(),
                 deviation: best_fit.deviation,
             })
@@ -508,11 +513,20 @@ fn best_candidate_fit(
             transforms.push(best_reflected_rotation(&molecule_points, &reference_points));
         }
         for transform in transforms {
-            let deviations = overlay_deviations(transform, &molecule_points, &reference_points);
+            let moving_center = centroid(&molecule_points);
+            let reference_center = centroid(&reference_points);
+            let transformed_center = transform.apply(moving_center);
+            let translation = Vec2::new(
+                reference_center.x - transformed_center.x,
+                reference_center.y - transformed_center.y,
+            );
+            let deviations =
+                overlay_deviations(transform, translation, &molecule_points, &reference_points);
             fits.push(CandidateFit {
                 atoms: atoms.clone(),
                 attachment_agreement,
                 transform,
+                translation,
                 root_mean_square_deviation: root_mean_square(&deviations),
                 deviation: deviations.iter().copied().fold(0.0, f64::max),
             });
@@ -639,13 +653,20 @@ fn best_reflected_rotation(moving: &[Vec2], fixed: &[Vec2]) -> OrthogonalTransfo
 
 /// Distances between transformed moving points and fixed points once both
 /// centroids coincide.
-fn overlay_deviations(transform: OrthogonalTransform, moving: &[Vec2], fixed: &[Vec2]) -> Vec<f64> {
-    let moving = centered(moving);
-    let fixed = centered(fixed);
+fn overlay_deviations(
+    transform: OrthogonalTransform,
+    translation: Vec2,
+    moving: &[Vec2],
+    fixed: &[Vec2],
+) -> Vec<f64> {
     moving
         .iter()
-        .zip(&fixed)
-        .map(|(&moving_point, &fixed_point)| transform.apply(moving_point).distance_to(fixed_point))
+        .zip(fixed.iter())
+        .map(|(&moving_point, &fixed_point)| {
+            let transformed = transform.apply(moving_point);
+            Vec2::new(transformed.x + translation.x, transformed.y + translation.y)
+                .distance_to(fixed_point)
+        })
         .collect()
 }
 
@@ -679,9 +700,15 @@ mod tests {
             .iter()
             .map(|&atom| molecule.positions[atom])
             .collect();
-        centered(&points)
+        points
             .into_iter()
-            .map(|point| alignment.transform.apply(point))
+            .map(|point| {
+                let transformed = alignment.transform.apply(point);
+                Vec2::new(
+                    transformed.x + alignment.translation.x,
+                    transformed.y + alignment.translation.y,
+                )
+            })
             .collect()
     }
 
@@ -709,6 +736,26 @@ mod tests {
             "deviation {}",
             alignments[1].deviation
         );
+        let reference = aligned_positions(&alignment_request, &alignments[0], 0);
+        let molecule = aligned_positions(&alignment_request, &alignments[1], 1);
+        for (reference_point, molecule_point) in reference.iter().zip(&molecule) {
+            assert!(reference_point.distance_to(*molecule_point) < 1e-6);
+        }
+    }
+
+    #[test]
+    fn scaffold_alignment_translates_cores_into_the_reference_frame() {
+        let alignment_request = request(&["c1ccccc1", "Cc1ccccc1"], Some("c1ccccc1"));
+        let alignments = align_molecules(&alignment_request).unwrap();
+        assert!(
+            alignments[1]
+                .translation
+                .x
+                .hypot(alignments[1].translation.y)
+                > 0.1
+        );
+        assert!(alignments[1].deviation < 1e-6);
+
         let reference = aligned_positions(&alignment_request, &alignments[0], 0);
         let molecule = aligned_positions(&alignment_request, &alignments[1], 1);
         for (reference_point, molecule_point) in reference.iter().zip(&molecule) {

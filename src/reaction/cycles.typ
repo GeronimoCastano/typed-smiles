@@ -12,9 +12,13 @@
   _validate-offset,
 )
 #import "../molecule/abbreviations.typ": _abbreviated-layout, _orient-abbreviation-labels
-#import "../styles.typ": _resolve-foreground-theme
-#import "../molecule/rendering.typ": _mirror-layout, _draw-molecule
-#import "../molecule/api.typ": smiles, _typst-rotate
+#import "../styles.typ": (
+  _resolve-foreground-theme,
+  _resolve-molecule-appearance,
+  _resolve-molecule-bond-length,
+)
+#import "../molecule/rendering.typ": _mirror-layout, _draw-molecule, _translate-layout, _molecule-bounds
+#import "../molecule/api.typ": smiles, _typst-rotate, _typst-scale
 #import "schemes.typ": mol, reaction
 #import "../molecule/alignment.typ": _is-aligned-molecule
 
@@ -103,16 +107,38 @@
   if calc.cos(angle) < 0 { angle + 180deg } else { angle }
 }
 
-#let _cycle-label-rotation(rotation, midpoint-angle) = {
+#let _cycle-label-rotation(rotation, midpoint-angle, direction) = {
   if rotation == "straight" {
     0deg
   } else if rotation == "auto" {
-    _upright-angle(midpoint-angle)
+    _upright-angle(-(midpoint-angle + direction * 90deg))
   } else if type(rotation) == _angle-type {
     rotation
   } else {
     panic("step rotation must be \"straight\", \"auto\", or an angle")
   }
+}
+
+#let _cycle-reagent-angles(from-angle, to-angle, paired-reagents) = {
+  let span-angle = to-angle - from-angle
+  (
+    incoming: if paired-reagents { from-angle + span-angle * 0.25 } else {
+      from-angle + span-angle / 2
+    },
+    outgoing: if paired-reagents { from-angle + span-angle * 0.75 } else {
+      from-angle + span-angle / 2
+    },
+  )
+}
+
+#let _cycle-reagent-control(start, end, tangent, bend, incoming) = {
+  let bend-direction = if incoming { -1 } else { 1 }
+  (
+    (start.at(0) + end.at(0)) / 2
+      + tangent.at(0) * bend * bend-direction * 2,
+    (start.at(1) + end.at(1)) / 2
+      + tangent.at(1) * bend * bend-direction * 2,
+  )
 }
 
 /// Lays out a catalytic cycle: species arranged on a circle with arc arrows
@@ -132,8 +158,8 @@
 /// - start (angle): Angle of the first species (0deg is east, 90deg north).
 ///   Default: 90deg.
 /// - clockwise (bool): Travel direction around the ring. Default: true.
-/// - scale (float): Uniform scale; sets the canvas bond length. Default: 1.0.
-/// - reagent-scale (float): Scale of into/out reagents relative to `scale`.
+/// - scale (float): Uniform scale of species, arrows, and labels. Default: 1.0.
+/// - reagent-scale (float): Scale of into/out reagents relative to the cycle species.
 ///   Default: 0.8.
 /// - reagent-bend (float): Default curvature of into/out side arrows. `0`
 ///   is nearly radial. Default: 0.12.
@@ -246,8 +272,7 @@
 
   let species-count = species.len()
 
-  let canvas-scale = scale * 30pt
-  let molecule-scale = scale
+  let canvas-scale = 30pt
   let step-angle = 360deg / species-count
   let direction = if clockwise { -1 } else { 1 }
   let species-angle(index) = start + direction * index * step-angle
@@ -268,30 +293,108 @@
           opts: (:),
         )
       }
-      let (width, height, kind, payload) = if type(molecule-item.spec) == str {
+      let molecule-scale = molecule-item.opts.at("scale", default: 1.0)
+      let (
+        bounds,
+        molecule-bounds,
+        kind,
+        payload,
+        bond-scale,
+        resolved-bond-length,
+        stroke-units,
+      ) = if type(molecule-item.spec) == str {
+        let effective-bond-length = _resolve-molecule-bond-length(
+          molecule-item.opts,
+          molecule-scale,
+        )
+        let bond-scale = if effective-bond-length == none {
+          molecule-scale
+        } else {
+          effective-bond-length
+        }
         let molecule-rotation = molecule-item.opts.at("rotation", default: 0deg)
         let molecule-layout = _orient-abbreviation-labels(
-          _mirror-layout(
-            _abbreviated-layout(
-              molecule-item.spec,
-              molecule-item.opts.at("abbreviate", default: none),
-              "mol abbreviate",
+          _translate-layout(
+            _mirror-layout(
+              _abbreviated-layout(
+                molecule-item.spec,
+                molecule-item.opts.at("abbreviate", default: none),
+                "mol abbreviate",
+              ),
+              molecule-item.opts.at("mirror", default: none),
+              rotation: molecule-rotation,
             ),
-            molecule-item.opts.at("mirror", default: none),
-            rotation: molecule-rotation,
+            molecule-item.at("alignment-offset", default: (0, 0)),
           ),
           molecule-rotation,
         )
-        (molecule-layout.bbox_width, molecule-layout.bbox_height, "mol", molecule-layout)
+        let molecule-appearance = _resolve-molecule-appearance(
+          molecule-item.opts,
+          molecule-scale,
+        )
+        let measurement-options = molecule-item.opts
+        measurement-options.insert("scale", molecule-scale)
+        measurement-options.insert("font-size", molecule-appearance.font-size)
+        measurement-options.insert("font", molecule-appearance.font)
+        measurement-options.insert("bond-stroke", molecule-appearance.bond-stroke)
+        if effective-bond-length != none {
+          measurement-options.insert("bond-length", effective-bond-length)
+        }
+        let measured-molecule = measure(
+          smiles(molecule-item.spec, ..measurement-options),
+        )
+        let molecule-bounds = _molecule-bounds(
+          molecule-layout,
+          molecule-rotation,
+          bond-scale,
+          measured-molecule.width / canvas-scale,
+          measured-molecule.height / canvas-scale,
+          options: measurement-options,
+          canvas-scale: canvas-scale,
+        )
+        let bounds = molecule-bounds
+        if molecule-item.label != none {
+          let caption-size = measure(molecule-item.label)
+          bounds.left = calc.max(bounds.left, caption-size.width / (2 * canvas-scale))
+          bounds.right = calc.max(bounds.right, caption-size.width / (2 * canvas-scale))
+          bounds.bottom += caption-size.height / canvas-scale + 0.34
+        }
+        (
+          bounds,
+          molecule-bounds,
+          "mol",
+          molecule-layout,
+          bond-scale,
+          effective-bond-length,
+          molecule-appearance.bond-stroke / canvas-scale,
+        )
       } else {
         let measured-content = measure(molecule-item.spec)
+        let molecule-bounds = (
+          left: measured-content.width / (2 * canvas-scale),
+          right: measured-content.width / (2 * canvas-scale),
+          bottom: measured-content.height / (2 * canvas-scale),
+          top: measured-content.height / (2 * canvas-scale),
+        )
+        let bounds = molecule-bounds
+        if molecule-item.label != none {
+          let caption-size = measure(molecule-item.label)
+          bounds.left = calc.max(bounds.left, caption-size.width / (2 * canvas-scale))
+          bounds.right = calc.max(bounds.right, caption-size.width / (2 * canvas-scale))
+          bounds.bottom += caption-size.height / canvas-scale + 0.34
+        }
         (
-          measured-content.width / canvas-scale,
-          measured-content.height / canvas-scale,
+          bounds,
+          molecule-bounds,
           "content",
           molecule-item.spec,
+          1.0,
+          none,
+          0.0,
         )
       }
+      let width = bounds.left + bounds.right
+      let height = bounds.bottom + bounds.top
       maximum-diagonal = calc.max(
         maximum-diagonal,
         calc.sqrt(width * width + height * height),
@@ -300,8 +403,13 @@
         m: molecule-item,
         w: width,
         h: height,
+        bounds: bounds,
         kind: kind,
         payload: payload,
+        molecule-bounds: molecule-bounds,
+        resolved-bond-length: resolved-bond-length,
+        bond-scale: bond-scale,
+        stroke-units: stroke-units,
       ))
     }
 
@@ -326,25 +434,82 @@
       point.at(0) + offset.at(0),
       point.at(1) + offset.at(1),
     )
-    // Per-species angular clearance: an arc retreats from each molecule by that
-    // molecule's own reach in the tangential (arc-approach) direction, plus
-    // arc-gap. This keeps the visible gap uniform whether a wide molecule sits
-    // at the top (approached across its width) or the side (across its height).
-    let angular-clearance(index) = if cycle-radius > 0.01 {
+    // Angular clearance finds where the curved path leaves the rendered
+    // molecule bounds on the outgoing or incoming side of each species.
+    let angular-clearance(index, path-direction) = if cycle-radius > 0.01 {
       let placed-item = placed.at(index)
       let angle = species-angle(index)
-      let tangential-reach = (
-        placed-item.w / 2 * calc.abs(calc.sin(angle))
-          + placed-item.h / 2 * calc.abs(calc.cos(angle))
+      let stroke-clearance = calc.max(
+        placed-item.stroke-units / 2,
+        0.9pt / canvas-scale / 2,
       )
-      calc.min(
-        step-angle * 0.45,
-        calc.max(
-          0deg,
-          1.0rad * (tangential-reach + arc-gap) / cycle-radius,
-        ),
-      )
+      let margin = arc-gap + stroke-clearance + 0.16
+      let is-inside-visible-bounds(delta) = {
+        let path-angle = angle + path-direction * delta
+        let point = point-on-circle(path-angle, cycle-radius)
+        let center = point-on-circle(angle, cycle-radius)
+        let x = point.at(0) - center.at(0)
+        let y = point.at(1) - center.at(1)
+        (x >= -placed-item.bounds.left - margin
+          and x <= placed-item.bounds.right + margin
+          and y >= -placed-item.bounds.bottom - margin
+          and y <= placed-item.bounds.top + margin)
+      }
+      if not is-inside-visible-bounds(0deg) {
+        0deg
+      } else {
+        let maximum-angle = step-angle * 0.49
+        let lower-angle = 0deg
+        let upper-angle = none
+        for sample-index in range(1, 65) {
+          if upper-angle != none { continue }
+          let sample-angle = maximum-angle * sample-index / 64
+          if not is-inside-visible-bounds(sample-angle) {
+            upper-angle = sample-angle
+          } else {
+            lower-angle = sample-angle
+          }
+        }
+        if upper-angle == none {
+          _invalid-input(
+            "cycle radius",
+            repr(radius) + " leaves no clear arc after species " + str(index),
+            "Increase radius or reduce the species label size so an arc can clear the rendered bounds.",
+          )
+        }
+        for _ in range(12) {
+          let midpoint = (lower-angle + upper-angle) / 2
+          if is-inside-visible-bounds(midpoint) {
+            lower-angle = midpoint
+          } else {
+            upper-angle = midpoint
+          }
+        }
+        upper-angle
+      }
     } else { 0deg }
+    let outgoing-clearances = range(species-count).map(index => (
+      angular-clearance(index, direction)
+    ))
+    let incoming-clearances = range(species-count).map(index => (
+      angular-clearance(index, -direction)
+    ))
+    let visible-arc-lengths = range(species-count).map(step-index => {
+      let from-clearance = outgoing-clearances.at(step-index)
+      let to-clearance = incoming-clearances.at(
+        calc.rem(step-index + 1, species-count),
+      )
+      cycle-radius * (step-angle - from-clearance - to-clearance) / 1rad
+    })
+    for (step-index, visible-arc-length) in visible-arc-lengths.enumerate() {
+      if cycle-radius > 0.01 and visible-arc-length <= 0.16 + 0.9pt / canvas-scale {
+        _invalid-input(
+          "cycle radius",
+          repr(radius) + " leaves no visible arrow at step " + str(step-index),
+          "Increase radius or reduce the species label size to leave room for the arc arrow.",
+        )
+      }
+    }
 
     let canvas = cetz.canvas(length: canvas-scale, {
       import cetz.draw: *
@@ -354,14 +519,15 @@
         let from-species-angle = species-angle(step-index)
         let to-species-angle = species-angle(step-index + 1)
         let cycle-step = arc-steps.at(step-index)
+        let from-clearance = outgoing-clearances.at(step-index)
+        let to-clearance = incoming-clearances.at(
+          calc.rem(step-index + 1, species-count),
+        )
         let from-angle = (
-          from-species-angle + direction * angular-clearance(step-index)
+          from-species-angle + direction * from-clearance
         )
         let to-angle = (
-          to-species-angle
-            - direction * angular-clearance(
-              calc.rem(step-index + 1, species-count),
-            )
+          to-species-angle - direction * to-clearance
         )
         let segment-count = 24
         let points = range(segment-count + 1).map(segment-index => {
@@ -385,6 +551,14 @@
         } else {
           cycle-step.bend
         }
+        let paired-reagents = cycle-step.into != none and cycle-step.out != none
+        let reagent-angles = _cycle-reagent-angles(
+          from-angle,
+          to-angle,
+          paired-reagents,
+        )
+        let incoming-angle = reagent-angles.incoming
+        let outgoing-angle = reagent-angles.outgoing
         // Unit tangent along the arc's travel direction at its midpoint.
         let travel-direction = (
           direction * -calc.sin(midpoint-angle),
@@ -405,6 +579,7 @@
           let label-rotation = _cycle-label-rotation(
             cycle-step.rotation,
             midpoint-angle,
+            direction,
           )
           if label-rotation != 0deg {
             label-body = _typst-rotate(label-rotation, reflow: false, label-body)
@@ -423,10 +598,10 @@
         // arc, offset by its own measured extent so wide content (even a
         // nested reaction) clears the ring, then nudged by a per-step offset.
         // Pure: returns coords, draws nothing.
-        let reagent-metrics(specification, extra-offset) = {
+        let reagent-metrics(specification, extra-offset, attachment-angle) = {
           let body = _render-cycle-reagent(
             specification,
-            molecule-scale * reagent-scale,
+            reagent-scale,
           )
           if body == none {
             none
@@ -435,8 +610,8 @@
             let width = measured-body.width / canvas-scale
             let height = measured-body.height / canvas-scale
             let radial-half-extent = 0.5 * (
-              calc.abs(width * calc.cos(midpoint-angle))
-                + calc.abs(height * calc.sin(midpoint-angle))
+              calc.abs(width * calc.cos(attachment-angle))
+                + calc.abs(height * calc.sin(attachment-angle))
             )
             // Floor keeps small reagents at a fixed clearance; large content
             // (e.g. a nested reaction) is pushed out by its own extent.
@@ -446,7 +621,7 @@
             (
               body: body,
               center: offset-point(
-                point-on-circle(midpoint-angle, distance),
+                point-on-circle(attachment-angle, distance),
                 extra-offset,
               ),
               w: width,
@@ -509,9 +684,10 @@
         let incoming-reagent = reagent-metrics(
           cycle-step.into,
           cycle-step.into-offset,
+          incoming-angle,
         )
         if incoming-reagent != none {
-          let incoming-anchor = reagent-anchor-for(midpoint-angle)
+          let incoming-anchor = reagent-anchor-for(incoming-angle)
           let incoming-attachment = anchor-point(
             incoming-reagent.center,
             incoming-reagent.w,
@@ -526,24 +702,37 @@
           if cycle-step.merge {
             // Fuse smoothly into the main arc: the curve arrives tangent to the
             // arc with no arrowhead, so it reads as one continuous stroke.
-            let tip = point-on-circle(midpoint-angle, cycle-radius)
+            let tip = point-on-circle(incoming-angle, cycle-radius)
+            let tangent = (
+              direction * -calc.sin(incoming-angle),
+              direction * calc.cos(incoming-angle),
+            )
             bezier(
               incoming-attachment,
               tip,
               (
-                tip.at(0) - travel-direction.at(0) * 0.5,
-                tip.at(1) - travel-direction.at(1) * 0.5,
+                tip.at(0) - tangent.at(0) * 0.5,
+                tip.at(1) - tangent.at(1) * 0.5,
               ),
               stroke: 0.8pt + arrow-color,
             )
           } else {
+            let tip = point-on-circle(incoming-angle, cycle-radius)
+            let tangent = (
+              direction * -calc.sin(incoming-angle),
+              direction * calc.cos(incoming-angle),
+            )
+            let incoming-control = _cycle-reagent-control(
+              incoming-attachment,
+              tip,
+              tangent,
+              bend,
+              true,
+            )
             bezier(
               incoming-attachment,
-              point-on-circle(midpoint-angle, cycle-radius + 0.28),
-              point-on-circle(
-                midpoint-angle + direction * step-angle * bend,
-                cycle-radius + 1.05,
-              ),
+              tip,
+              incoming-control,
               mark: (end: ">", fill: arrow-color, size: 0.14),
               stroke: 0.8pt + arrow-color,
             )
@@ -555,9 +744,10 @@
         let outgoing-reagent = reagent-metrics(
           cycle-step.out,
           cycle-step.out-offset,
+          outgoing-angle,
         )
         if outgoing-reagent != none {
-          let outgoing-anchor = reagent-anchor-for(midpoint-angle)
+          let outgoing-anchor = reagent-anchor-for(outgoing-angle)
           let outgoing-attachment = anchor-point(
             outgoing-reagent.center,
             outgoing-reagent.w,
@@ -572,25 +762,38 @@
           if cycle-step.merge {
             // Peel off the arc tangentially, keeping the arrowhead on the
             // departing product.
-            let arc-point = point-on-circle(midpoint-angle, cycle-radius)
+            let arc-point = point-on-circle(outgoing-angle, cycle-radius)
+            let tangent = (
+              direction * -calc.sin(outgoing-angle),
+              direction * calc.cos(outgoing-angle),
+            )
             bezier(
               arc-point,
               outgoing-attachment,
               (
-                arc-point.at(0) + travel-direction.at(0) * 0.5,
-                arc-point.at(1) + travel-direction.at(1) * 0.5,
+                arc-point.at(0) + tangent.at(0) * 0.5,
+                arc-point.at(1) + tangent.at(1) * 0.5,
               ),
               mark: (end: ">", fill: arrow-color, size: 0.14),
               stroke: 0.8pt + arrow-color,
             )
           } else {
-            bezier(
-              point-on-circle(midpoint-angle, cycle-radius + 0.28),
+            let arc-point = point-on-circle(outgoing-angle, cycle-radius)
+            let tangent = (
+              direction * -calc.sin(outgoing-angle),
+              direction * calc.cos(outgoing-angle),
+            )
+            let outgoing-control = _cycle-reagent-control(
+              arc-point,
               outgoing-attachment,
-              point-on-circle(
-                midpoint-angle - direction * step-angle * bend,
-                cycle-radius + 1.05,
-              ),
+              tangent,
+              bend,
+              false,
+            )
+            bezier(
+              arc-point,
+              outgoing-attachment,
+              outgoing-control,
               mark: (end: ">", fill: arrow-color, size: 0.14),
               stroke: 0.8pt + arrow-color,
             )
@@ -608,6 +811,12 @@
         if placed-item.kind == "mol" {
           group({
             translate(center)
+            if placed-item.bond-scale != 1.0 { scale(placed-item.bond-scale) }
+            let molecule-scale = placed-item.m.opts.at("scale", default: 1.0)
+            let molecule-appearance = _resolve-molecule-appearance(
+              placed-item.m.opts,
+              molecule-scale,
+            )
             let (molecule-foreground, molecule-theme) = _resolve-foreground-theme(
               placed-item.m.opts.at("fg", default: auto),
               placed-item.m.opts.at("theme", default: auto),
@@ -615,13 +824,11 @@
             _draw-molecule(
               placed-item.payload,
               scale: molecule-scale,
-              font-size: placed-item.m.opts.at("font-size", default: none),
-              font: placed-item.m.opts.at(
-                "font",
-                default: "New Computer Modern",
-              ),
-              bond-stroke: placed-item.m.opts.at("bond-stroke", default: none),
-              color: placed-item.m.opts.at("color", default: true),
+              bond-length: placed-item.resolved-bond-length,
+              font-size: molecule-appearance.font-size,
+              font: molecule-appearance.font,
+              bond-stroke: molecule-appearance.bond-stroke,
+              color: molecule-appearance.color,
               rotation: placed-item.m.opts.at("rotation", default: 0deg),
               show-h: placed-item.m.opts.at("show-h", default: ()),
               lone-pairs: placed-item.m.opts.at("lone-pairs", default: none),
@@ -656,7 +863,7 @@
           content(
             (
               center.at(0),
-              center.at(1) - placed-item.h / 2 - 0.34,
+              center.at(1) - placed-item.molecule-bounds.bottom - 0.34,
             ),
             placed-item.m.label,
             anchor: "north",
@@ -665,6 +872,16 @@
       }
     })
 
-    block(breakable: breakable, canvas)
+    let scaled-canvas = if scale == 1.0 {
+      canvas
+    } else {
+      _typst-scale(
+        x: scale * 100%,
+        y: scale * 100%,
+        reflow: true,
+        canvas,
+      )
+    }
+    block(breakable: breakable, scaled-canvas)
   }
 }

@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-12",
+  "cases": 18,
+  "source": "charge-placement-comparison.typ",
+  "alternatives": {
+    "charge-beside-element.png": "Experimental charge placement east of the heavy-element glyph; actual displayed electron pairs retained. For vertical stacks this uses element half width + label gap + charge half width, at element center height.",
+    "charge-beside-hydrogen.png": "Earlier uniform placement beside every stacked H/count; retained for historical comparison and superseded by conditional placement."
+  },
+  "outcome": "Both uniform policies were superseded: prefer a clear position near the charged heavy element, and fall back alongside the combined H/element label only when atom-centered positions are crowded.",
+  "current_cases": 24,
+  "current_source": "../audit-charge-placement-2026-10-12.typ"
+}

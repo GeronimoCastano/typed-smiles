@@ -5,7 +5,8 @@ cargo build \
   --manifest-path "$project_root/plugin/Cargo.toml" \
   --target wasm32-unknown-unknown \
   --release
-built_plugin="$project_root/plugin/target/wasm32-unknown-unknown/release/typst_smiles_plugin.wasm"
+target_directory="$(cargo metadata --manifest-path "$project_root/plugin/Cargo.toml" --format-version 1 --no-deps | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
+built_plugin="$target_directory/wasm32-unknown-unknown/release/typst_smiles_plugin.wasm"
 bundled_plugin="$project_root/plugin/typst_smiles_plugin.wasm"
 cp "$built_plugin" "$bundled_plugin"
 plugin_size="$(du -h "$bundled_plugin" | cut -f1)"

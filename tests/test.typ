@@ -85,7 +85,7 @@
    #smiles("[N+](C)(C)(C)C")],
 
   [*Nitro group* \
-   #text(size: 8pt, `[N+](=O)[O-]`) \
+   #text(size: 8pt, `C[N+](=O)[O-]`) \
    #smiles("C[N+](=O)[O-]")],
 )
 
@@ -255,13 +255,13 @@ wedge and hash bonds are bicolored by atom like plain bonds.
   align: center + horizon,
   stroke: 0.4pt + rgb("#d8d8d8"),
 
-  [*Vertical OH (up)*],
-  [*Vertical #ce("NH2") (down)*],
+  [*Rotated OH*],
+  [*Rotated #ce("NH2")*],
   [*Bicolor wedge to OH*],
   [*Bicolor hash to #ce("NH2")*],
 
-  [#text(size: 8pt, [`CO` (vertical)]) \ #smiles("CO", bond-length: 1.1, rotation: 120deg)],
-  [#text(size: 8pt, [`CN` (steep)]) \ #smiles("CN", bond-length: 1.1, rotation: -60deg)],
+  [#text(size: 8pt, [`CO` (rotated)]) \ #smiles("CO", bond-length: 1.1, rotation: 120deg)],
+  [#text(size: 8pt, [`CN` (rotated)]) \ #smiles("CN", bond-length: 1.1, rotation: -60deg)],
   [#text(size: 8pt, `C!wO`) \ #smiles("C!wO", bond-length: 1.3, rotation: 60deg)],
   [#text(size: 8pt, `C!hN`) \ #smiles("C!hN", bond-length: 1.3, rotation: -60deg)],
 )
@@ -758,7 +758,7 @@ Standard SMILES bonding rules apply around it.
 
 = Reaction Scale and Page-Break Behaviour
 
-*L-DOPA synthesis (default scale):*
+*Protected DOPA synthesis (default scale):*
 
 #align(center)[
   #reaction(
@@ -768,12 +768,12 @@ Standard SMILES bonding rules apply around it.
     rxn-arrow(above : [1.#ce("Ac2O") \ 2.#ce("H2O")]),
     smiles("OC(=O)C({NHAc})=CC1=CC(OC)=C({AcO})C=C1"),
     rxn-arrow(dir : "down", above : [1. Ligand, Rh#upper("(I)")-Salz / #ce("H2") \ 2. #ce("H+")]),
-    mol(smiles("OC(=O)C(!hN)CC1=CC(OC)=C({AcO})C=C1"), label : [*L-DOPA Parkinsonsmittel*])
+    mol(smiles("OC(=O)C(!hN)CC1=CC(OC)=C({AcO})C=C1"), label : [*Protected DOPA derivative*])
   )
 ]
 
 #v(1.5em)
-*L-DOPA synthesis (scale: 0.7 — entire scheme shrinks uniformly):*
+*Protected DOPA synthesis (scale: 0.7 — entire scheme shrinks uniformly):*
 
 #align(center)[
   #reaction(
@@ -784,7 +784,7 @@ Standard SMILES bonding rules apply around it.
     rxn-arrow(above : [1.#ce("Ac2O") \ 2.#ce("H2O")]),
     smiles("OC(=O)C({NHAc})=CC1=CC(OC)=C({AcO})C=C1"),
     rxn-arrow(dir : "down", above : [1. Ligand, Rh#upper("(I)")-Salz / #ce("H2") \ 2. #ce("H+")]),
-    mol(smiles("OC(=O)C(!hN)CC1=CC(OC)=C({AcO})C=C1"), label : [*L-DOPA Parkinsonsmittel*])
+    mol(smiles("OC(=O)C(!hN)CC1=CC(OC)=C({AcO})C=C1"), label : [*Protected DOPA derivative*])
   )
 ]
 
@@ -1090,8 +1090,8 @@ A development aid: stamp each atom's writing-order index, then reference it in
      show-indices: true,
    )],
 
-  [*Chiral H highlight* \
-   #text(size: 8pt, `N[C@@H](C)C(=O)O, H atom 6`) \
+  [*Amine H highlight* \
+   #text(size: 8pt, `N[C@@H](C)C(=O)O, amine H atom 6`) \
    #smiles(
      "N[C@@H](C)C(=O)O",
      lone-pairs: "dots",
@@ -2376,7 +2376,7 @@ own circle.
    #smiles("c1ccccc1", aromatic: "circle")],
   [*Naphthalene* \ #text(size: 8pt, `c1ccc2ccccc2c1`) \
    #smiles("c1ccc2ccccc2c1", aromatic: "circle", scale: 0.9)],
-  [*Pyridine* \ #text(size: 8pt, `Cc1ccncc1`) \
+  [*4-Methylpyridine* \ #text(size: 8pt, `Cc1ccncc1`) \
    #smiles("Cc1ccncc1", aromatic: "circle")],
 
   [*Only aromatic ring circled* \ #text(size: 8pt, `c1ccc2CCCc2c1`) \
@@ -2805,7 +2805,7 @@ polygon opening away from the shared atom, instead of unravelling into a chain.
 
   [*1,6-dioxaspiro[4.4]nonane* \ #text(size: 8pt, `CC[C@H](O1)CC[C@@]12CCCO2`) \
    #smiles("CC[C@H](O1)CC[C@@]12CCCO2", scale: 0.95)],
-  [*Spiro[4.5] carbocycle* \ #text(size: 8pt, `C1CCC2(CC1)CCCCC2`) \
+  [*Spiro[5.5] carbocycle* \ #text(size: 8pt, `C1CCC2(CC1)CCCCC2`) \
    #smiles("C1CCC2(CC1)CCCCC2", scale: 0.95)],
 )
 
@@ -3200,7 +3200,7 @@ renders inside the label slot (with its own per-molecule options).
   #reaction(
     mol("C=C"),
     rxn-arrow(above: mol("BrBr", scale: 0.7), below: [CCl#sub[4]]),
-    mol("BrC(Br)C"),
+    mol("BrCCBr"),
   )
 ]
 
@@ -3231,7 +3231,7 @@ any other species.
   #reaction(
     mol("C=C"),
     rxn-arrow(above: mol("BrBr", scale: 0.8), below: [CCl#sub[4]]),
-    mol("BrC(Br)C"),
+    mol("BrCCBr"),
     arrow(from: bond(0, 0, 1), to: atom(1, 0), color: red),
     arrow(from: atom(1, 0), to: atom(1, 1), color: red, bend: "right"),
   )
@@ -5385,3 +5385,669 @@ Curly arrows and highlights aim at the stacked H letter itself.
   mol("C[NH2+]C", show-indices: true, offset: (1.0, 0.0)),
   arrow(from: lp(0, 0), to: atom(1, 3), bend: "left", color: blue),
 )
+
+
+#pagebreak()
+= Audit: reference and documentation examples (S38, S57)
+
+#grid(
+  columns: (1fr, 1fr), gutter: 1em, align: center,
+  [*Vicinal dibromide product* \ #smiles("BrCCBr")],
+  [*Amine hydrogen reference* \ #smiles("N[C@@H](C)C(=O)O", show-indices: true,
+    highlight(atom(6), fill: rgb("#FFE45C")))],
+)
+
+
+#pagebreak()
+= Audit: scaffold translation (S04)
+
+#let audit-aligned-rings = align-molecules(("c1ccccc1", "Cc1ccccc1"), scaffold: "c1ccccc1")
+#assert(audit-aligned-rings.at(1).offset != (0, 0))
+#assert(audit-aligned-rings.at(1).deviation < 0.000001)
+#context cetz.canvas(length: 40pt, {
+  smiles-cetz(audit-aligned-rings.at(0), color: false, fg: blue, bond-stroke: 2pt)
+  smiles-cetz(audit-aligned-rings.at(1), color: false, fg: red, bond-stroke: 0.6pt)
+})
+
+The red substituted ring overlays the blue reference ring.
+
+#pagebreak()
+= Chemistry audit regression tests
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Trisubstituted E alkene* \
+   #text(size: 8pt, `CC/C=C(C)/CC`) \
+   #smiles("CC/C=C(C)/CC", scale: 1.5)],
+
+  [*Aryl substituents on a marked alkene* \
+   #text(size: 7pt, `directional stereo with two aryl groups`) \
+   #smiles("CC/C(=C(\\c1ccccc1)c1ccc(OCCN(C)C)cc1)c1ccccc1", scale: 1.0)],
+
+  [*Folded explicit hydrogen with remaining carbon hydrogens* \
+   #text(size: 8pt, `C([H])F, show-h: "all"`) \
+   #smiles("C([H])F", show-h: "all", scale: 1.5)],
+
+  [*Sodium acetate in written fragment order* \
+   #text(size: 8pt, `CC(=O)[O-].[Na+]`) \
+   #smiles("CC(=O)[O-].[Na+]", scale: 1.5)],
+)
+
+Fluoromethane formula: #mol-formula("C([H])F").
+
+#pagebreak()
+= Crowded branch overlap regressions
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.5em,
+  align: center,
+
+  [*Sulfone branches* \
+   #text(size: 7pt, `CC(C)(C)c1cc(C)ccc1S(C)(=O)=O`) \
+   #smiles("CC(C)(C)c1cc(C)ccc1S(C)(=O)=O", scale: 1.3)],
+)
+
+#pagebreak()
+= Scheme, canvas, and grid audit regressions
+
+The following cases keep left-pointing reaction arrows in their own grid cells,
+carry vertical reaction flow through mechanism canvases, and size content from
+its labels and active molecule style.
+
+#align(center, reaction(
+  mol("CCO"), rxn-arrow(above: [first]),
+  mol("CC=O"), rxn-arrow(dir: "left", above: [second]), mol("CC(=O)O"),
+))
+
+#align(center, reaction(
+  flow: "down",
+  mol("CCO", arrow(from: bond(0, 0, 1), to: atom(1, 2))),
+  rxn-arrow(above: [oxidation]),
+  mol("CC=O"),
+))
+
+#align(center, cycle(
+  mol("CC(=O)O"),
+  step(label: [esterify], into: ce("EtOH"), out: ce("H2O")),
+  mol("CC(=O)OCC"),
+  step(label: [hydrolysis], into: ce("H2O"), out: ce("EtOH")),
+))
+
+#align(center, cycle(
+  mol("CCO"), step(label: [coordination], rotation: "auto", into: [L]),
+  mol("CC=O"), step(label: [release], rotation: "auto", out: [P]),
+))
+
+#align(center, reaction(
+  mol("CCO", style: "acs", bond-length: 0.65),
+  rxn-arrow(above: [oxidation]),
+  mol("CC=O", style: "acs", bond-length: 0.65),
+  arrow(from: bond(0, 0, 1), to: atom(1, 2)),
+))
+
+#align(center, reaction(
+  "CCO", rxn-arrow(above: [oxidation]), "CC=O",
+))
+
+#align(center, reaction(
+  mol("CCO", arrow(from: bond(0, 0, 1), to: atom(0, 2))),
+  rxn-arrow(above: mol("CC=O", label: [acetaldehyde])),
+  mol("CC(=O)O"),
+))
+
+#align(center, reaction(
+  mol("CC", label: [first long label text]),
+  mol("CC", label: [second long label text]),
+  arrow(from: atom(0, 0), to: atom(1, 0)),
+))
+
+#box(width: 230pt)[
+  #reaction(
+    mol("CCO"), rxn-arrow(above: [oxidation]), mol("CC=O"),
+    rxn-arrow(above: [workup]), mol("CC(=O)O"),
+  )
+]
+
+#grid(columns: (1fr, 1fr), gutter: 1em, align: center,
+  [*grid offset* #molecule-grid(mol([H₂O], offset: (1, 0)), columns: 1)],
+  [*inline preset* #smiles-inline("CCO", style: "acs")],
+)
+
+#align(center, cycle(
+  mol("CCO"), step(label: [top-left], rotation: "auto"),
+  mol("CC=O"), step(label: [top-right], rotation: "auto"),
+  mol("CC(=O)O"), step(label: [bottom-right], rotation: "auto"),
+  mol("CCOC"), step(label: [bottom-left], rotation: "auto"),
+))
+
+#reaction(
+  brackets(mol("CCO", offset: (0, 2)), sup: [‡]),
+  rxn-arrow(),
+  mol("CC=O"),
+)
+
+#reaction(
+  mol("CCO"),
+  rxn-arrow(dir: "down", above: [wrap]),
+  mol("CC=O"),
+  rxn-arrow(above: [continue]),
+  mol("CC(=O)O"),
+)
+
+#align(center, cycle(
+  mol("CCO", style: "acs", bond-length: 0.65),
+  step(label: [oxidation]),
+  mol("CC=O", style: "acs", bond-length: 0.65),
+  step(label: [reduction]),
+))
+
+
+#pagebreak()
+= Audit: crowded polycycle carbonyl (S06)
+
+#align(center, smiles("CC1=C2C(C(=O)C3(C(CC4C(C3C(C(C2(C)C)(CC1OC(=O)C(C(C5=CC=CC=C5)NC(=O)C6=CC=CC=C6)O)O)OC(=O)C7=CC=CC=C7)(CO4)OC(=O)C)O)C)OC(=O)C", scale: 0.85))
+
+= Aligned molecule offsets in reactions and cycles
+
+#let aligned-offset-series = align-molecules(
+  ("CC(=O)c1ccccc1", "CC(O)c1ccccc1"),
+  scaffold: "c1ccccc1",
+)
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1em,
+  align: center + horizon,
+  reaction(
+    mol(aligned-offset-series.at(0)),
+    rxn-arrow(above: [reduction]),
+    mol(aligned-offset-series.at(1)),
+    arrow(from: atom(0, 2), to: atom(1, 2)),
+  ),
+  cycle(
+    scale: 0.7,
+    mol(aligned-offset-series.at(0), style: "acs", scale: 0.6),
+    step(label: [reduction]),
+    mol(aligned-offset-series.at(1), style: "acs", scale: 0.6),
+    step(label: [oxidation]),
+  ),
+)
+
+= Reaction preset sizing across render paths
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1em,
+  align: center + horizon,
+  [*Scheme* #reaction(
+    mol("CC(=O)O", style: "acs", bond-length: 0.65, scale: 0.7),
+    rxn-arrow(above: [step]),
+    mol("CCO", style: "acs", bond-length: 0.65, scale: 0.7),
+  )],
+  [*Mechanism* #reaction(
+    mol("CC(=O)O", style: "acs", bond-length: 0.65, scale: 0.7),
+    rxn-arrow(above: [step]),
+    mol("CCO", style: "acs", bond-length: 0.65, scale: 0.7),
+    arrow(from: bond(0, 0, 1), to: atom(1, 2)),
+  )],
+  [*Cycle* #cycle(
+    scale: 0.7,
+    mol("CC(=O)O", style: "acs", bond-length: 0.65, scale: 0.7),
+    step(label: [step]),
+    mol("CCO", style: "acs", bond-length: 0.65, scale: 0.7),
+    step(label: [step]),
+  )],
+)
+
+= Explicit preset defaults in reaction renderers
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1em,
+  align: center + horizon,
+  reaction(
+    scale: 0.8,
+    mol("CCO", style: "acs", bond-length: none, font-size: none, bond-stroke: none, font: auto, color: auto, scale: 0.7),
+    rxn-arrow(),
+    mol("CC=O", style: "acs", scale: 0.7),
+  ),
+  cycle(
+    scale: 0.8,
+    mol("CCO", style: "acs", bond-length: none, font-size: none, bond-stroke: none, font: auto, color: auto, scale: 0.7),
+    step(label: [oxidation]),
+    mol("CC=O", style: "acs", scale: 0.7),
+    step(label: [reduction]),
+  ),
+)
+
+= Uniform molecular font and stroke scaling
+
+#let sizing-probe = mol("CO", style: "acs", bond-length: 0.65, scale: 0.7)
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1em,
+  align: center + horizon,
+  [*Scheme* #reaction(sizing-probe, rxn-arrow(), sizing-probe)],
+  [*Mechanism* #reaction(
+    sizing-probe,
+    rxn-arrow(),
+    sizing-probe,
+    arrow(from: atom(0, 0), to: atom(1, 1)),
+  )],
+)
+#align(center, [*Cycle* #cycle(
+  radius: 2,
+  sizing-probe,
+  step(label: [step]),
+  sizing-probe,
+  step(label: [step]),
+)])
+#align(center, [*Scheme ×2* #reaction(scale: 2, sizing-probe, rxn-arrow(), sizing-probe)])
+#align(center, [*Mechanism ×2* #reaction(
+  scale: 2,
+  sizing-probe,
+  rxn-arrow(),
+  sizing-probe,
+  arrow(from: atom(0, 0), to: atom(1, 1)),
+)])
+#align(center, [*Cycle ×2* #cycle(
+  scale: 2,
+  radius: 2,
+  sizing-probe,
+  step(label: [step]),
+  sizing-probe,
+  step(label: [step]),
+)])
+
+#pagebreak()
+= Molecule labels and reference geometry regressions
+
+Forced wedge styles, Unicode abbreviations, explicit bracket-carbon
+hydrogens, isolated atoms, and atom references use the same visible glyphs as
+the molecular drawing.
+
+#grid(columns: (1fr, 1fr, 1fr), gutter: 1.5em, align: center + horizon,
+  [*Forced wedge* \ #smiles("C!wN", scale: 1.4) \ #smiles("C!hN", scale: 1.4)],
+  [*Forced wedge mirrors* \ #smiles("C!wN", scale: 1.4, mirror: "horizontal") \ #smiles("C!hN", scale: 1.4, mirror: "vertical")],
+  [*Unicode groups* \ #smiles("C{NH₂}") \ #smiles("C{CO₂H}") \ #smiles("C{αMe}")],
+  [*Bracket carbon H* \ #smiles("CC[CH2+]") \ #smiles("[13CH3]C(=O)O")],
+  [*Lone atom labels* \ #smiles("[C]") \ #smiles("[C].[C]") \ #smiles("O", show-indices: true, highlight(atom(0)))],
+  [*Methane reference* \ #smiles("C", scale: 1.5, show-indices: true, highlight(atom(0)))],
+  [*Hydrogen-first reference* \ #smiles("O", scale: 1.5, show-indices: true, highlight(atom(0)))],
+)
+
+Skeleton hydrogens stay on the open side of the heavy-atom framework, and
+lone-pair arrows use the displayed electron-pair positions.
+
+#grid(columns: (1fr, 1fr, 1fr), gutter: 1.5em, align: center + horizon,
+  [*Cyclohexane* \ #smiles("C1CCCCC1", show-h: "skeleton", scale: 1.15)],
+  [*Linear amine* \ #smiles("CNC", show-h: "skeleton", scale: 1.15)],
+  [*Ring amine pair* \ #smiles("N", show-h: "skeleton", lone-pairs: "dots", scale: 1.8)],
+  [*OH lone-pair arrow* \ #smiles("CCO", lone-pairs: "dots", arrow(from: lp(2), to: atom(1)), scale: 1.4)],
+  [*Oxonium charge* \ #smiles("C[OH+]C", lone-pairs: "dots", scale: 1.8)],
+)
+
+Curved arrows attach to the visible bond or abbreviation glyph, and scale and
+offset settings keep their endpoints beside the intended feature.
+
+#grid(columns: (1fr, 1fr, 1fr), gutter: 1.5em, align: center + horizon,
+  [*Arrowhead scale* \ #smiles("CC", scale: 0.7, arrow(from: atom(0), to: atom(1), bend: none, head-length: 0.5, head-width: 0.3)) \ #smiles("CC", scale: 1.8, arrow(from: atom(0), to: atom(1), bend: none, head-length: 0.5, head-width: 0.3))],
+  [*Offset bond highlight* \ #smiles("CC(=O)NCC", highlight(bond(1, 3, offset: (0, 0.6)), include-atoms: false))],
+  [*Anchored label arrow* \ #smiles("C{>PPh3|P|lp=1}CC", scale: 1.3, arrow(from: atom(0), to: atom(1), bend: none))],
+  [*Conjugated bond source* \ #smiles("C=CC=O", scale: 1.3, arrow(from: bond(0, 1), to: atom(3), bend: "left"))],
+  [*Skeleton H reference* \ #smiles("CCO", show-h: "skeleton", show-indices: true, highlight(atom(3)))],
+  [*Thick junction* \ #smiles("C1=CC=CC=C1", bond-stroke: 4pt, scale: 2)],
+)
+
+Species references use measured, rotated molecule bounds; show-indices badges
+remain centered on the atom and hydrogen glyphs.
+
+#reaction(
+  mol("CCO", rotation: 90deg),
+  rxn-arrow(),
+  mol("CC=O"),
+  arrow(from: species(0), to: species(1), bend: none),
+  show-indices: true,
+)
+
+#pagebreak()
+= Heteroatom index badge placement
+
+Indices for labelled heteroatoms remain centered on their glyphs in ordinary
+molecules and reaction grids.
+
+#reaction(
+  scale: 2,
+  show-indices: true,
+  mol("CCO"),
+  rxn-arrow(),
+  mol("CC=O"),
+)
+
+#pagebreak()
+= Skeleton hydrogen direction coverage
+
+Carbon hydrogen labels point away from cyclic frameworks, and collinear
+heteroatom neighbors leave a separate slot for N–H.
+
+#grid(columns: (1fr, 1fr, 1fr), gutter: 1.5em, align: center + horizon,
+  [*Cyclobutane* \ #smiles("C1CCC1", show-h: "skeleton", scale: 1.4)],
+  [*Cyclohexane* \ #smiles("C1CCCCC1", show-h: "skeleton", scale: 1.2)],
+  [*Tetrahydrofuran* \ #smiles("C1CCOC1", show-h: "skeleton", scale: 1.2)],
+  [*Branched chain* \ #smiles("CC(C)O", show-h: "skeleton", scale: 1.2)],
+  [*CNC* \ #smiles("CNC", show-h: "skeleton", scale: 1.4)],
+  [*CCNCC* \ #smiles("CCNCC", show-h: "skeleton", scale: 1.2)],
+)
+
+#pagebreak()
+= Skeleton annotation clearance
+
+The annotation sits in open space beside the atom and its displayed hydrogens.
+
+#align(center)[#smiles(
+  "CC(=O)NC",
+  show-h: "skeleton",
+  atom-annotations: ((3, [skel]),),
+  scale: 1.1,
+)]
+
+#pagebreak()
+= Hydrogen-first halide lone-pair geometry
+
+Lone pairs and their references remain on the open side of hydrogen-first
+halide labels.
+
+#grid(columns: (1fr, 1fr), gutter: 2em, align: center + horizon,
+  [*HCl* \ #smiles("Cl", lone-pairs: "dots", arrow(from: lp(0), to: atom(0)), scale: 1.8)],
+  [*HF* \ #smiles("F", lone-pairs: "dots", arrow(from: lp(0), to: atom(0)), scale: 1.8)],
+)
+
+
+#pagebreak()
+= Audit: aligned grid offsets (S04)
+
+#molecule-grid(columns: 2, scaffold: "c1ccccc1", mol("c1ccccc1", label: [reference]), mol("Cc1ccccc1", label: [substituted]))
+
+= Lifted species captions stay below their molecule
+
+#align(center, reaction(
+  mol("CCO", arrow(from: bond(0, 0, 1), to: atom(0, 2))),
+  rxn-arrow(above: mol("CC=O", label: [acetaldehyde])),
+  mol("CC(=O)O"),
+))
+
+#pagebreak()
+= Explicit carbon hydrogen visibility
+
+Uncharged stereochemical carbons retain skeletal notation; charged and isotope
+labels preserve bracket hydrogen counts, and explicit show-h requests remain
+available.
+
+#grid(columns: (1fr, 1fr), gutter: 2em, align: center + horizon,
+  [*Alanine, skeletal* \ #smiles(molecules.alanine, scale: 1.3, show-indices: true, highlight(atom(1)))],
+  [*Alanine, show all* \ #smiles(molecules.alanine, scale: 1.3, show-h: "all")],
+  [*Charged bracket carbon* \ #smiles("CC[CH2+]", scale: 1.3)],
+  [*Isotopic bracket carbon* \ #smiles("[13CH3]C(=O)O", scale: 1.3)],
+)
+
+#import "../src/reaction/cycles.typ": _cycle-label-rotation
+
+= Auto cycle labels follow diagonal arc tangents
+
+#assert.eq(_cycle-label-rotation("auto", 45deg, -1), 45deg)
+#assert.eq(_cycle-label-rotation("auto", -45deg, 1), -45deg)
+#assert.eq(_cycle-label-rotation(30deg, 45deg, -1), 30deg)
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1em,
+  align: center,
+  [*Clockwise* #cycle(
+    clockwise: true,
+    start: 90deg,
+    radius: 2,
+    mol(box(inset: 2pt)[A]), step(label: [addition], rotation: "auto"),
+    mol(box(inset: 2pt)[B]), step(label: [insertion], rotation: "auto"),
+    mol(box(inset: 2pt)[C]), step(label: [elimination], rotation: "auto"),
+    mol(box(inset: 2pt)[D]), step(label: [release], rotation: "auto"),
+  )],
+  [*Counterclockwise* #cycle(
+    clockwise: false,
+    start: 90deg,
+    radius: 2,
+    mol(box(inset: 2pt)[A]), step(label: [addition], rotation: "auto"),
+    mol(box(inset: 2pt)[B]), step(label: [insertion], rotation: "auto"),
+    mol(box(inset: 2pt)[C]), step(label: [elimination], rotation: "auto"),
+    mol(box(inset: 2pt)[D]), step(label: [release], rotation: "auto"),
+  )],
+)
+
+
+#pagebreak()
+= Centered atom indices and thick bond strokes
+
+#grid(columns: (1fr, 1fr), gutter: 2em, align: center + horizon,
+  [*Alanine indices* \ #smiles(molecules.alanine, scale: 1.5, show-indices: true, highlight(atom(6)))],
+  [*Hydride indices* \ #smiles("Cl", scale: 1.5, show-indices: true)],
+  [*Thick aromatic strokes* \ #smiles("c1ccccc1", bond-stroke: 3pt, scale: 1.6)],
+  [*Thick chain strokes* \ #smiles("CC(C)=CC", bond-stroke: 3pt, scale: 1.6)],
+)
+
+#pagebreak()
+= Sulfone oxo groups oppose across the carbon backbone
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 2em,
+  align: center,
+  [*Dimethyl sulfone* \
+   #text(size: 7pt, `CS(C)(=O)=O`) \
+   #smiles("CS(C)(=O)=O", scale: 2)],
+  [*Aryl sulfone with ortho tert-butyl* \
+   #text(size: 6pt, `CC(C)(C)c1cc(C)ccc1S(C)(=O)=O`) \
+   #smiles("CC(C)(C)c1cc(C)ccc1S(C)(=O)=O", scale: 1.4)],
+)
+
+#pagebreak()
+= Collinear skeleton hydrogens under transforms
+
+Hydrogens on the straight-chain diol stay perpendicular to the carbon backbone
+under rotation and reflection; bent and ring systems retain outward placement.
+
+#grid(columns: (1fr, 1fr), gutter: 2em, align: center + horizon,
+  [*OCCO* \ #smiles("OCCO", show-h: "skeleton", scale: 1.3)],
+  [*OCCO, 45°* \ #smiles("OCCO", show-h: "skeleton", rotation: 45deg, scale: 1.3)],
+  [*OCCO, horizontal mirror* \ #smiles("OCCO", show-h: "skeleton", mirror: "horizontal", scale: 1.3)],
+  [*OCCO, vertical mirror* \ #smiles("OCCO", show-h: "skeleton", mirror: "vertical", scale: 1.3)],
+  [*Cyclohexane* \ #smiles("C1CCCCC1", show-h: "skeleton", scale: 1.1)],
+  [*THF* \ #smiles("C1CCOC1", show-h: "skeleton", scale: 1.1)],
+)
+
+#pagebreak()
+= Lone-pair glyph-edge spacing
+
+Lone pairs keep the previous single-letter fluorine spacing. Wider halide
+labels retain the same gap from their measured edge, with matching lp() arrows.
+
+#grid(columns: (1fr, 1fr, 1fr), gutter: 1.5em, align: center + horizon,
+  [*CF, dots* \ #smiles("CF", lone-pairs: "dots", arrow(from: lp(1), to: atom(0)), scale: 1.4)],
+  [*CCl, dots* \ #smiles("CCl", lone-pairs: "dots", arrow(from: lp(1), to: atom(0)), scale: 1.4)],
+  [*CBr, lines* \ #smiles("CBr", lone-pairs: "lines", arrow(from: lp(1), to: atom(0)), scale: 1.4)],
+  [*Cl, 18 pt* \ #smiles("Cl", lone-pairs: "dots", arrow(from: lp(0), to: atom(0)), font-size: 18pt, mirror: "horizontal")],
+  [*Br, horizontal mirror* \ #smiles("Br", lone-pairs: "lines", arrow(from: lp(0), to: atom(0)), mirror: "horizontal", scale: 1.5)],
+  [*HF, vertical mirror* \ #smiles("F", lone-pairs: "dots", arrow(from: lp(0), to: atom(0)), mirror: "vertical", font-size: 18pt)],
+)
+
+#pagebreak()
+= Isotope glyph anchors and isolated hydride highlights
+
+Isotope labels keep the element glyph on its structural position through
+rotation and reflection. Lone-atom highlights and index badges stay centered on
+the visible heavy atom glyph.
+
+#grid(columns: (1fr, 1fr, 1fr), gutter: 1.2em, row-gutter: 1.5em, align: center + horizon,
+  [*13C acid, 0°* \ #smiles("[13CH3]C(=O)O", show-indices: true, highlight(atom(0)))],
+  [*13C acid, 90°* \ #smiles("[13CH3]C(=O)O", rotation: 90deg, show-indices: true, highlight(atom(0)))],
+  [*13C acid, 45°* \ #smiles("[13CH3]C(=O)O", rotation: 45deg, show-indices: true, highlight(atom(0)))],
+  [*13C acid, mirrored* \ #smiles("[13CH3]C(=O)O", mirror: "horizontal", show-indices: true, highlight(atom(0)))],
+  [*13C branch* \ #smiles("[13C](C)(C)C", show-indices: true, highlight(atom(0)))],
+  [*13C branch, rotated* \ #smiles("[13C](C)(C)C", rotation: 90deg, mirror: "vertical", show-indices: true, highlight(atom(0)))],
+  [*H₂O* \ #smiles("O", show-indices: true, highlight(atom(0), include-hydrogens: false))],
+  [*HF* \ #smiles("F", show-indices: true, highlight(atom(0)))],
+  [*HCl* \ #smiles("Cl", show-indices: true, highlight(atom(0)))],
+  [*Methane* \ #smiles("C", show-indices: true, highlight(atom(0)))],
+  [*13CH₄* \ #smiles("[13CH4]", show-indices: true, highlight(atom(0)))],
+)
+
+#pagebreak()
+= Terminal isotope bonds without overlays
+
+The bond endpoint meets the carbon glyph while the isotope remains a raised
+prefix when the molecule turns or reflects.
+
+#grid(columns: (1fr, 1fr), gutter: 2em, row-gutter: 2em, align: center + horizon,
+  [*0°* \ #smiles("[13CH3]C(=O)O", scale: 1.8)],
+  [*90°* \ #smiles("[13CH3]C(=O)O", rotation: 90deg, scale: 1.8)],
+  [*45°* \ #smiles("[13CH3]C(=O)O", rotation: 45deg, scale: 1.8)],
+  [*Mirror* \ #smiles("[13CH3]C(=O)O", mirror: "horizontal", scale: 1.8)],
+)
+
+#include "isotope-glyph-anchors.typ"
+
+#import "../src/reaction/cycles.typ": _cycle-reagent-angles, _cycle-reagent-control
+
+= Cycle arcs clear molecular labels and paired reagents follow the arc
+
+#let clockwise-reagent-angles = _cycle-reagent-angles(80deg, -80deg, true)
+#assert(calc.abs((clockwise-reagent-angles.incoming - 40deg) / 1deg) < 0.001)
+#assert(calc.abs((clockwise-reagent-angles.outgoing + 40deg) / 1deg) < 0.001)
+#let counterclockwise-reagent-angles = _cycle-reagent-angles(-80deg, 80deg, true)
+#assert(calc.abs((counterclockwise-reagent-angles.incoming + 40deg) / 1deg) < 0.001)
+#assert(calc.abs((counterclockwise-reagent-angles.outgoing - 40deg) / 1deg) < 0.001)
+#let single-reagent-angles = _cycle-reagent-angles(80deg, -80deg, false)
+#assert.eq(single-reagent-angles.incoming, 0deg)
+#assert.eq(single-reagent-angles.outgoing, 0deg)
+#let incoming-control = _cycle-reagent-control((0, 2), (0, 0), (1, 0), 0.12, true)
+#let outgoing-control = _cycle-reagent-control((0, 0), (0, 2), (1, 0), 0.12, false)
+#assert(incoming-control.at(0) < 0)
+#assert(outgoing-control.at(0) > 0)
+#let radial-control = _cycle-reagent-control((0, 2), (0, 0), (1, 0), 0, true)
+#assert.eq(radial-control, (0, 1))
+
+#pagebreak()
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1.2em,
+  align: center,
+  [*Automatic radius clears terminal OH* #cycle(
+    mol("CCO"), step(label: [top-left], rotation: "auto"),
+    mol("CC=O"), step(label: [top-right], rotation: "auto"),
+    mol("CC(=O)O"), step(label: [bottom-right], rotation: "auto"),
+    mol("CCOCC"), step(label: [bottom-left], rotation: "auto"),
+  )],
+  [*Long rotated acid, preset and scale* #cycle(
+    clockwise: false,
+    start: 25deg,
+    scale: 0.8,
+    mol("CCO", style: "acs", scale: 1.2), step(label: [top-left], rotation: "auto"),
+    mol("CC=O", style: "acs", scale: 1.2), step(label: [top-right], rotation: "auto"),
+    mol("CC(=O)CCCC(=O)O", style: "acs", rotation: 31deg, scale: 1.2), step(label: [bottom-right], rotation: "auto"),
+    mol("CCOCC", style: "acs", scale: 1.2), step(label: [bottom-left], rotation: "auto"),
+  )],
+)
+
+#pagebreak()
+= Paired incoming and outgoing reagents
+
+#cycle(
+  mol("CC(=O)O"),
+  step(label: [esterify], into: ce("EtOH"), out: ce("H2O")),
+  mol("CC(=O)OCC"),
+  step(label: [hydrolysis], into: ce("H2O"), out: ce("EtOH")),
+)
+
+#pagebreak()
+= Counterclockwise with merging and nested content
+
+#cycle(
+  clockwise: false,
+  start: 15deg,
+  radius: 3.2,
+  mol("CC(=O)O"),
+  step(label: [esterify], into: ce("EtOH"), merge: true, bend: 0.08, into-offset: (0.1, 0.1)),
+  mol("CCO"),
+  step(out: reaction(mol("CCO"), rxn-arrow(), mol("CC=O")), bend: 0, out-offset: (-0.2, 0.1)),
+  mol("CC(=O)OCC"), step(),
+  mol("CC=O"), step(),
+)
+#pagebreak()
+= Stereochemical hydrogen atom references
+
+The displayed wedge or hash hydrogen has its own stable index. Its badge and
+references stay on the hydrogen through molecular transforms, while the
+stereocenter keeps its existing index and badge.
+
+#grid(columns: (1fr, 1fr, 1fr), gutter: 1.2em, row-gutter: 1.5em, align: center + horizon,
+  [*Stereo center* \ #smiles("C1C[P@H]2CCC1C2", show-indices: true, highlight(atom(2), include-hydrogens: false))],
+  [*Stereo H only* \ #smiles("C1C[P@H]2CCC1C2", show-indices: true, highlight(atom(7)))],
+  [*Default H highlight* \ #smiles("C1C[P@H]2CCC1C2", show-indices: true, highlight(atom(2)))],
+  [*Arrow to H* \ #smiles("C1C[P@H]2CCC1C2", arrow(from: atom(2), to: atom(7)))],
+  [*Arrow from stereo bond* \ #smiles("C1C[P@H]2CCC1C2", arrow(from: bond(2, 7), to: atom(7)))],
+  [*Hydrogen override* \ #smiles("C1C[P@H]2CCC1C2", atom-colors: (H: blue), show-indices: true)],
+  [*Rotation and mirror* \ #smiles("C1C[P@H]2CCC1C2", rotation: 45deg, mirror: "horizontal", show-indices: true, highlight(atom(7)))],
+  [*Skeleton hydrogens* \ #smiles("C1C[P@H]2CCC1C2", show-h: "skeleton", show-indices: true, highlight(atom(7)))],
+  [*Color override* \ #smiles("C1C[P@H]2CCC1C2", color: false, fg: purple, atom-colors: (H: red), show-indices: true)],
+)
+
+#include "stereo-hydrogen-references.typ"
+
+#include "stacked-charge-placement.typ"
+
+#include "stacked-charge-preference.typ"
+
+#include "charge-rotation-sweep.typ"
+
+#include "charge-rotation-sweep-without-pairs.typ"
+
+#include "charged-hydrogen-count-rotation-sweeps.typ"
+
+#include "double-charge-rotation-sweeps.typ"
+
+#include "alanine-hydrogen-highlight.typ"
+
+#pagebreak()
+= Stereo hydrogen bond colors
+#grid(columns: (1fr, 1fr), gutter: 20pt,
+  [*Hashed P–H* \ #smiles("C1C[P@H]2CCC1C2", scale: 1.5)],
+  [*Solid P–H* \ #smiles("C1C[P@@H]2CCC1C2", scale: 1.5)],
+  [*Mirrored and rotated* \ #smiles("C1C[P@H]2CCC1C2", rotation: 45deg, mirror: "horizontal", scale: 1.5)],
+  [*Hydrogen color override* \ #smiles("C1C[P@H]2CCC1C2", atom-colors: (H: blue), scale: 1.5)],
+  [*Monochrome* \ #smiles("C1C[P@@H]2CCC1C2", color: false, fg: purple, scale: 1.5)],
+)
+
+#pagebreak()
+#include "abbreviation-fragments.typ"
+
+#pagebreak()
+= Abbreviation badges centered on element glyphs
+#grid(columns: (1fr, 1fr), gutter: 16pt,
+  [*NO₂* \ #smiles("C[N+](=O)[O-]", abbreviate: "NO2", show-indices: true, scale: 2)],
+  [*CO₂H* \ #smiles("CC(=O)O", abbreviate: "CO2H", show-indices: true, scale: 2)],
+  [*Reversed CO₂H* \ #smiles("CC(=O)O", abbreviate: "CO2H", rotation: 180deg, show-indices: true, scale: 2)],
+  [*Ordinary OH* \ #smiles("CCO", show-indices: true, scale: 2)],
+)
+
+#pagebreak()
+= Element badges independent of subscript bounds
+#grid(columns: (1fr, 1fr), gutter: 16pt,
+  [*NO₂* \ #smiles("C[N+](=O)[O-]", abbreviate: "NO2", show-indices: true, scale: 2)],
+  [*CF₃* \ #smiles("CC(F)(F)F", abbreviate: "CF3", show-indices: true, scale: 2)],
+  [*Reversed CO₂H* \ #smiles("CC(=O)O", abbreviate: "CO2H", rotation: 180deg, show-indices: true, scale: 2)],
+  [*Ordinary OH* \ #smiles("CCO", show-indices: true, scale: 2)],
+)
+
+#pagebreak()
+#include "inline-hydrogen-arrow-clearance.typ"

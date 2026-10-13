@@ -1,6 +1,4 @@
-/// Parses the body of a `{label}` abbreviation: the displayed text with an
-/// optional `>` attachment marker, an optional color or element style, and
-/// the named `lp=N` and `offset=(x,y)` rendering modifiers.
+//! Inline abbreviation labels with attachment markers and rendering modifiers.
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AbbreviationLabel {

@@ -574,10 +574,22 @@ pub(crate) fn layout_with_abbreviations(
     definitions: &[&'static GroupDefinition],
 ) -> Result<LayoutOutput, String> {
     let groups = select_groups(molecule, definitions);
+    if groups.is_empty() {
+        let source_indices: Vec<usize> = (0..molecule.n_atoms()).collect();
+        return compute_layout_naming_atoms(molecule, &source_indices);
+    }
     let kept_atoms = kept_atom_indices(molecule, &groups);
     let display_molecule = contracted_molecule(molecule, &groups, &kept_atoms)?;
     let display_layout = compute_layout_naming_atoms(&display_molecule, &kept_atoms)?;
-    expand_to_original_atoms(molecule, &groups, &kept_atoms, display_layout)
+    let source_indices: Vec<usize> = (0..molecule.n_atoms()).collect();
+    let source_layout = compute_layout_naming_atoms(molecule, &source_indices)?;
+    expand_to_original_atoms(
+        molecule,
+        &groups,
+        &kept_atoms,
+        display_layout,
+        source_layout,
+    )
 }
 
 fn kept_atom_indices(molecule: &MoleculeGraph, groups: &[GroupMatch]) -> Vec<usize> {
@@ -630,6 +642,7 @@ fn label_atom(definition: &GroupDefinition, attachment_atom: &Atom) -> Result<At
         aromatic: false,
         hcount: 0,
         has_explicit_h: true,
+        has_bracket_hydrogen_count: true,
         isotope: None,
         charge: 0,
         chirality: AtomChirality::None,
@@ -661,16 +674,30 @@ fn expand_to_original_atoms(
     groups: &[GroupMatch],
     kept_atoms: &[usize],
     display_layout: LayoutOutput,
+    source_layout: LayoutOutput,
 ) -> Result<LayoutOutput, String> {
     let original_count = molecule.n_atoms();
     let kept_count = kept_atoms.len();
-    let original_index = |display_index: usize| {
-        if display_index < kept_count {
-            kept_atoms[display_index]
-        } else {
-            original_count + (display_index - kept_count)
-        }
-    };
+    let mut original_indices = kept_atoms.to_vec();
+    for display_index in kept_count..display_layout.atoms.len() {
+        let parent = display_layout
+            .bonds
+            .iter()
+            .find(|bond| bond.virtual_bond && bond.to == display_index)
+            .ok_or_else(|| format!("display hydrogen {display_index} has no parent"))?;
+        let source_hydrogen = source_layout
+            .bonds
+            .iter()
+            .find(|bond| {
+                bond.virtual_bond
+                    && bond.from == kept_atoms[parent.from]
+                    && source_layout.atoms[bond.to].stereo_virtual_h
+                        == display_layout.atoms[display_index].stereo_virtual_h
+            })
+            .ok_or_else(|| format!("display hydrogen {display_index} has no source identity"))?;
+        original_indices.push(source_hydrogen.to);
+    }
+    let original_index = |display_index: usize| original_indices[display_index];
 
     let mut display_index_of = vec![None; original_count];
     for (display_index, &atom_index) in kept_atoms.iter().enumerate() {
@@ -704,11 +731,29 @@ fn expand_to_original_atoms(
         };
         atoms.push(atom_output);
     }
-    atoms.extend(display_layout.atoms[kept_count..].iter().cloned());
+    for source_index in original_count..source_layout.atoms.len() {
+        let source_parent = source_layout
+            .bonds
+            .iter()
+            .find(|bond| bond.virtual_bond && bond.to == source_index)
+            .ok_or_else(|| format!("hydrogen {source_index} has no parent"))?
+            .from;
+        let display_hydrogen = (kept_count..display_layout.atoms.len())
+            .find(|&index| original_index(index) == source_index);
+        let mut hydrogen = display_hydrogen
+            .map(|index| display_layout.atoms[index].clone())
+            .unwrap_or_else(|| source_layout.atoms[source_index].clone());
+        if let Some(group_index) = group_of[source_parent] {
+            hydrogen.contracted = true;
+            hydrogen.abbreviation_group = Some(group_index);
+            hydrogen.pos = atoms[groups[group_index].attachment_atom].pos;
+        }
+        atoms.push(hydrogen);
+    }
 
     let bonds = display_layout
         .bonds
-        .into_iter()
+        .iter()
         .map(|bond_output| {
             let from = original_index(bond_output.from);
             let to = original_index(bond_output.to);
@@ -717,7 +762,7 @@ fn expand_to_original_atoms(
                 from,
                 to,
                 stereo_tip,
-                ..bond_output
+                ..bond_output.clone()
             }
         })
         .collect();
@@ -731,10 +776,18 @@ fn expand_to_original_atoms(
         })
         .collect();
 
-    let abbreviation_groups = groups
+    let mut abbreviation_groups = groups
         .iter()
         .map(|group| group_output(molecule, group))
         .collect::<Result<Vec<_>, String>>()?;
+
+    for (hydrogen_index, hydrogen) in atoms.iter().enumerate().skip(original_count) {
+        if let Some(group_index) = hydrogen.abbreviation_group {
+            abbreviation_groups[group_index]
+                .hydrogens
+                .push(hydrogen_index);
+        }
+    }
 
     Ok(LayoutOutput {
         atoms,
@@ -756,6 +809,7 @@ fn contracted_atom_output(
         symbol: atom.symbol.clone(),
         pos: label_position,
         hcount: atom.hcount,
+        has_bracket_hydrogen_count: atom.has_bracket_hydrogen_count,
         implicit_h: implicit_h_count(molecule, atom_index),
         charge: atom.charge,
         isotope: atom.isotope.unwrap_or(0),
@@ -772,6 +826,7 @@ fn contracted_atom_output(
         stereo_h: "none".to_string(),
         stereo_h_dir: crate::render::Vec2::default(),
         virtual_h: false,
+        stereo_virtual_h: false,
         contracted: true,
         abbreviation_group: Some(group_index),
     }
@@ -786,6 +841,7 @@ fn group_output(
         attachment_atom: group.attachment_atom,
         external_atom: group.external_atom,
         atoms: group.atoms.clone(),
+        hydrogens: Vec::new(),
         bonds: group
             .bonds
             .iter()
@@ -913,6 +969,23 @@ mod tests {
         assert_eq!(layout_output.atoms[1].abbreviation_group, Some(0));
         assert_eq!(layout_output.atoms[1].abbrev, "OMe");
         assert_eq!(layout_output.atoms[1].abbrev_style, "O");
+    }
+
+    #[test]
+    fn carboxyl_abbreviation_keeps_both_hydrogen_identities() {
+        let smiles = "OC(=O)c1ccc(O)cc1";
+        let expanded = layout_native(smiles).unwrap();
+        let abbreviated = abbreviated(smiles, "CO2H");
+        assert_eq!(abbreviated.atoms.len(), expanded.atoms.len());
+        assert_eq!(abbreviated.abbreviation_groups[0].hydrogens, [10]);
+        assert!(abbreviated.atoms[10].virtual_h);
+        assert!(abbreviated.atoms[10].contracted);
+        assert!(abbreviated.atoms[11].virtual_h);
+        assert!(!abbreviated.atoms[11].contracted);
+        assert!(abbreviated
+            .bonds
+            .iter()
+            .any(|bond| bond.virtual_bond && bond.from == 7 && bond.to == 11));
     }
 
     #[test]

@@ -65,7 +65,11 @@
   } else if theme == "light" or theme == "dark" {
     theme
   } else {
-    panic("theme must be auto, \"light\", or \"dark\"")
+    _invalid-input(
+      "smiles theme",
+      "unsupported value " + repr(theme),
+      "Use auto, \"light\", or \"dark\".",
+    )
   }
   (resolved-fg, resolved-theme)
 }
@@ -100,6 +104,63 @@
   } else if style == "wiley" {
     (bond-length: 17.0 / 30, font-size: 12pt, bond-stroke: 0.7pt, font: _sans-stack, color: false)
   } else {
-    panic("style must be \"default\", \"acs\", \"rsc\", \"nature\", or \"wiley\"")
+    _invalid-input(
+      "smiles style",
+      "unsupported value " + repr(style),
+      "Use \"default\", \"acs\", \"rsc\", \"nature\", or \"wiley\".",
+    )
+  }
+}
+
+// Resolve typography and palette defaults in final molecule units. Geometry
+// transforms in reaction canvases do not scale text or stroke widths.
+#let _resolve-molecule-appearance(options, molecule-scale) = {
+  let preset = _style-preset(options.at("style", default: "default"))
+  let requested-font-size = options.at("font-size", default: none)
+  let requested-bond-stroke = options.at("bond-stroke", default: none)
+  let requested-font = options.at("font", default: auto)
+  let requested-color = options.at("color", default: auto)
+  let font-size = if requested-font-size != none {
+    requested-font-size
+  } else if preset == none {
+    11pt * molecule-scale
+  } else {
+    preset.font-size * molecule-scale
+  }
+  let bond-stroke = if requested-bond-stroke != none {
+    requested-bond-stroke
+  } else if preset == none {
+    0.9pt * molecule-scale
+  } else {
+    preset.bond-stroke * molecule-scale
+  }
+  (
+    preset: preset,
+    font-size: font-size,
+    bond-stroke: bond-stroke,
+    font: if requested-font != auto {
+      requested-font
+    } else if preset == none {
+      "New Computer Modern"
+    } else {
+      preset.font
+    },
+    color: if requested-color != auto {
+      requested-color
+    } else if preset == none {
+      true
+    } else {
+      preset.color
+    },
+  )
+}
+
+#let _resolve-molecule-bond-length(options, molecule-scale) = {
+  let requested-bond-length = options.at("bond-length", default: none)
+  if requested-bond-length != none {
+    requested-bond-length
+  } else {
+    let preset = _style-preset(options.at("style", default: "default"))
+    if preset == none { none } else { preset.bond-length * molecule-scale }
   }
 }

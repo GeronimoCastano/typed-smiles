@@ -195,7 +195,7 @@ impl SmilesReader {
 
         if let Some(parent_atom) = preceding_atom {
             if self.should_fold_hydrogen(&atom, parent_atom, pending_bond.as_ref()) {
-                self.builder.fold_hydrogen_into(parent_atom);
+                self.builder.fold_hydrogen_into(parent_atom)?;
                 return Ok(());
             }
         }
@@ -628,6 +628,7 @@ impl SmilesReader {
         atom.chirality = chirality;
         atom.hcount = hydrogen_count;
         atom.has_explicit_h = true;
+        atom.has_bracket_hydrogen_count = true;
         atom.charge = charge;
         atom.atom_map = atom_map;
         Ok(atom)
@@ -1219,9 +1220,18 @@ mod tests {
         ] {
             let folded_molecule = parse_molecule(folded).expect(folded);
             let implicit_molecule = parse_molecule(implicit).expect(implicit);
+            let folded_center = folded_molecule
+                .atoms
+                .iter()
+                .find(|atom| atom.chirality.is_tetrahedral())
+                .expect("folded form has one tetrahedral center");
+            let implicit_center = implicit_molecule
+                .atoms
+                .iter()
+                .find(|atom| atom.chirality.is_tetrahedral())
+                .expect("implicit form has one tetrahedral center");
             assert_eq!(
-                folded_molecule.atoms[folded_molecule.atoms.len() - 4].chirality,
-                implicit_molecule.atoms[implicit_molecule.atoms.len() - 4].chirality,
+                folded_center.chirality, implicit_center.chirality,
                 "{folded} vs {implicit}"
             );
         }

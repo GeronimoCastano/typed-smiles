@@ -1112,6 +1112,16 @@
       "layout": "clean"
     },
     {
+      "category": "crowded-fused",
+      "name": "paclitaxel-like-benzoate",
+      "smiles": "CC1=C2C(C(=O)C3(C(CC4C(C3C(C(C2(C)C)(CC1OC(=O)C(C(C5=CC=CC=C5)NC(=O)C6=CC=CC=C6)O)O)OC(=O)C7=CC=CC=C7)(CO4)OC(=O)C)O)C)OC(=O)C",
+      "expect": "accept",
+      "note": "A crowded benzoate carbonyl is separated from its phenyl ipso carbon; other close contacts remain in this highly constrained 2D layout.",
+      "minimum_clearance": 0.45,
+      "rdkit": "accept",
+      "layout": "crossing-bonds,overlapping-atoms"
+    },
+    {
       "category": "stereo-tetrahedral",
       "name": "trans-decalin",
       "smiles": "[C@@H]12CCCC[C@H]1CCCC2",

@@ -275,6 +275,14 @@ call site. See @sec-library for every entry.]
     atom-colors: (:),
     show-indices: false,
     abbreviate: none,
+    highlight-smarts: (),
+    highlight-groups: (),
+    highlight-colors: auto,
+    highlight-unmatched: "error",
+    highlight-overlap: "merge",
+    show-maps: false,
+    undepicted-stereo: "error",
+    ..annotations
   )
   ```
 ]
@@ -308,6 +316,13 @@ call site. See @sec-library for every entry.]
   [#c("abbreviate")], [`none` / `"all"` / `str` / `array`], [`none`], [Draw catalogue terminal groups (#c("\"tBu\""), #c("\"CO2Et\""), #c("\"CO2Me\""), #c("\"OAc\""), #c("\"NHAc\""), #c("\"SO3H\""), #c("\"CF3\""), #c("\"NO2\""), #c("\"CO2H\""), #c("\"CO2-\""), #c("\"CN\""), #c("\"CHO\""), #c("\"OEt\""), #c("\"OMe\""), #c("\"Ac\"")) as labels. See @sec-auto-abbrev.],
   [#c("show-maps")], [`bool`], [`false`], [Label atoms carrying an atom map such as #c("[CH3:7]") with #c(":7"). See @sec-atom-maps.],
   [#c("undepicted-stereo")], [`"error"` / `"omit"`], [`"error"`], [Report written stereochemistry the drawing cannot show, or draw the structure without it. See @sec-undepicted-stereo.],
+  [#c("show-indices")], [`bool`], [`false`], [Show writing-order atom indices for references.],
+  [#c("highlight-smarts")], [`str` / `dictionary` / `array`], [`()`], [SMARTS patterns to shade; see @sec-mech.],
+  [#c("highlight-groups")], [`str` / `dictionary` / `array`], [`()`], [Named functional groups to shade; see @sec-mech.],
+  [#c("highlight-colors")], [`auto` / `array`], [`auto`], [Palette for substructure highlights.],
+  [#c("highlight-unmatched")], [`"error"` / `"ignore"`], [`"error"`], [Policy for a pattern or group absent from the molecule.],
+  [#c("highlight-overlap")], [`"merge"` / `"stack"`], [`"merge"`], [Merge overlapping highlight pieces by color or paint each piece separately.],
+  [#c("..annotations")], [`arrow()` / `highlight()`], [—], [Positional annotations on this molecule.],
 )
 
 #note[#c("scale") sizes everything together. Use #c("bond-length"),
@@ -518,7 +533,7 @@ Wedges and hashes change orientation as needed.]
 == #raw("show-h")
 
 #demo[
-  Hydrogens on heteroatoms are shown by default; carbon hydrogens are hidden.
+  Hydrogens on heteroatoms are shown by default; implicit carbon hydrogens are hidden.
   #c("show-h") selects carbon hydrogens without needing a trailing comma for one
   atom: use an integer for one atom, an array for several atoms, or #c("\"all\"")
   for every implicit hydrogen. Use #c("\"skeleton\"") to draw every hydrogen
@@ -528,7 +543,8 @@ Wedges and hashes change orientation as needed.]
   spread in the displayed 2D schematic. Rings, branches, unsaturated paths,
   and stereochemical paths retain the normal heavy-atom layout. Ordinary
   molecule placement is unchanged. With the default color mode, element labels
-  and bonds use the CPK palette and explicit skeleton hydrogens are gray. Use
+  and bonds use the CPK palette; explicit skeleton and stereochemical H labels
+  are gray unless #c("atom-colors: (H: color)") overrides them. Use
   #c("show-indices: true") to read off the indices while writing.
 
   #example(```typ
@@ -782,7 +798,7 @@ so you can restyle individual maps.]
 == Default display
 
 #demo[
-  Heteroatom hydrogens are shown by default; carbon hydrogens are hidden for a
+  Heteroatom hydrogens are shown by default; implicit carbon hydrogens are hidden for a
   clean skeleton. #c("show-h: \"all\"") labels carbon hydrogens as well.
 
   #example(```typ
@@ -798,8 +814,10 @@ so you can restyle individual maps.]
   #c("C([H])([H])[H]")) is folded into its neighbor's hydrogen count, exactly
   like an implicit hydrogen. Carbon-bound hydrogens stay hidden and heteroatom
   hydrogens are still labeled, so a fully hydrogen-suppressed SMILES depicts the
-  same as its skeletal form. Hydrogen counts written inside a single bracket,
-  such as #c("[OH-]") or #c("[NH4+]"), are unaffected and still shown.
+  same as its skeletal form. Hydrogen counts written inside a single bracket are shown on heteroatoms,
+  such as #c("[OH-]") or #c("[NH4+]"), and on labeled isotope or charged carbons.
+  Neutral carbon hydrogens follow the skeletal convention; request them with
+  #c("show-h") when needed.
 
   #example(```typ
   #smiles("C([H])([H])([H])[H]") \
@@ -1115,7 +1133,7 @@ Color is resolved in this order for each atom or label:
 + The default CPK palette.
 
 #note[`color: false` is a hard override that sits above all of the above. When
-it is set, every atom and label renders in black regardless of any `atom-colors`
+it is set, every atom and label uses the foreground #c("fg") regardless of any `atom-colors`
 entries or inline styles. If you want a mostly-monochrome diagram with one or
 two highlighted groups, keep or set `color: true` and put everything else in
 `atom-colors`.]
@@ -1357,16 +1375,25 @@ label reads away from the molecule; when its bond leaves toward the right after
 ]
 
 #demo[
-  *References.* Atom indices are unchanged by contraction, and a label carries
-  the index of its attachment atom: #c("atom(i)") highlights or targets the
-  whole label, and #c("show-indices") stamps it there. Atoms hidden inside a
-  label cannot be referenced — an #c("arrow()"), #c("highlight()"),
-  #c("atom-annotations"), #c("bond-customizations"), or #c("show-h") entry that
-  addresses one is an error, and so is a #c("highlight-smarts") or
-  #c("highlight-groups") match that covers one. Remove the group from
-  #c("abbreviate") to address its atoms. Labels show no hydrogens or lone pairs.
+  *References.* Formula abbreviations such as CO#sub[2]H, SO#sub[3]H,
+  CF#sub[3], NO#sub[2], and CN expose one representative original index per
+  displayed element fragment. An O#sub[2] or F#sub[3] fragment has one badge,
+  and #c("highlight(atom(i))") covers the element and its subscript.
+  The H fragment retains its original hydrogen index. Shorthand labels such
+  as OMe remain single selectable groups at their attachment atom's index.
+
+  *Warning: visible indices can have gaps.* Abbreviation reduces the number
+  of displayed fragments. Indices represented by another fragment are skipped
+  so that the remaining atom mappings stay intact. For #c("CC(=O)O"), CO#sub[2]H
+  displays C at index 1, O#sub[2] at 2, and H at 4; index 3 has no separate badge.
+  Use #c("show-indices: true") to inspect the selectable indices. A skipped
+  atom cannot be targeted individually: remove the group from #c("abbreviate")
+  to address it. Internal bonds and lone pairs remain unavailable, and
+  #c("show-h") and #c("atom-annotations") entries for hidden atoms are rejected.
+
 
   #example(```typ
+  #smiles("CC(=O)O", abbreviate: "CO2H", show-indices: true, highlight(atom(2)))
   #smiles(
     "COc1ccc(cc1)[N+](=O)[O-]",
     abbreviate: "all",
@@ -1381,7 +1408,7 @@ label reads away from the molecule; when its bond leaves toward the right after
 the drawing. #c("atom-colors") keys such as #c("\"{OMe}\"") color an automatic
 label in both reading directions. #c("mol()"), #c("smiles-inline()"), and
 #c("smiles-cetz()") accept #c("abbreviate") too; #c("smiles-cetz()") registers
-no #c("atom-<i>") anchor for hidden atoms.]
+anchors for selectable formula fragments, but no #c("atom-<i>") anchor for skipped atoms.]
 
 // ═════════════════════════════════════════════════════════════════════════════
 = Chemical formulas: #raw("ce()")
@@ -1416,7 +1443,7 @@ no #c("atom-<i>") anchor for hidden atoms.]
 
 #demo[
   #c("mol-weight(smiles)") returns the molecular weight in g/mol as a plain
-  #c("float"): the sum of IUPAC standard atomic weights over every atom,
+  #c("float"): the sum of rounded atomic weights from the element table over every atom,
   including implicit and explicit hydrogens. Round it for display with
   #c("calc.round").
 
@@ -1571,7 +1598,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
     rxn-arrow(below: [-#ce("H+")]),
     mol("C1=C(N2CCCC2)CCCC1"),
   )
-  ```)
+  ```, side: false)
 ]
 
 == #raw("rxn-arrow()")
@@ -1626,7 +1653,7 @@ scaling; #c("auto") matches the default 0.9pt SMILES bond stroke.
   #reaction(
     mol("C=C"),
     rxn-arrow(above: mol("BrBr", scale: 0.7), below: [CCl#sub[4]]),
-    mol("BrC(Br)C"),
+    mol("BrCCBr"),
   )
   ```, side: false)
 ]
@@ -1859,6 +1886,11 @@ arrow-label content, and annotations are not counted.
   the heavy-atom and H badges are centered on their rendered label glyphs. Charge
   marks are excluded from the atom center, so #c("atom(0)") in #c("[O-]") points
   to the O glyph rather than the combined #c("O-") label.
+
+  A displayed stereochemical H has its own atom index. When a new index is
+  needed, it follows the existing atom and virtual-H indices; existing indices
+  remain unchanged. #c("show-indices: true") reveals it; use #c("atom(i)") to
+  target the H or #c("bond(parent, i)") to reference its wedge/hash bond.
 ]
 
 === Counting species
@@ -2075,35 +2107,16 @@ highlight results.
 
   #example(```typ
   #smiles(
-    "N1CCN(CC1)C(C(F)=C2)=CC(=C2C4=O)N(C3CC3)C=C4C(=O)O",
-    highlight((bond(0, 5), bond(5, 4), bond(4, 3), bond(3, 6), bond(6, 10), bond(10, 11), bond(11, 15), bond(15, 19), bond(19, 20), bond(20, 21), bond(21, 23)), fill: rgb(150, 191, 13), include-atoms: true),
-    highlight((bond(15, 16), bond(16, 18), bond(18, 17), bond(17, 16)), fill: rgb(242, 148, 1), include-atoms: true),
-    highlight((bond(3, 2), bond(2, 1), bond(1, 0)), fill: rgb(137, 199, 168), include-atoms: true),
-    highlight((bond(6, 7), bond(7, 8), bond(7, 9), bond(9, 12)), fill: rgb(201, 143, 75), include-atoms: true),
-    highlight((bond(11, 12), bond(12, 13), bond(13, 20), bond(13, 14)), fill: rgb(236, 119, 137), include-atoms: true),
-    highlight((bond(21, 22)), fill: rgb(0, 134, 203), include-atoms: true),
-    color: false,
-    rotation: 90deg,
-    bond-stroke: 0.8pt,
-    scale: 0.5,
-  )
-  #smiles(
     "CC(=O)O",
-    highlight((atom(0), atom(2), atom(3), atom(4)), fill: rgb("#BBE1FA")),
+    highlight((atom(2), atom(3)), fill: rgb("#BBE1FA")),
+    arrow(from: bond(1, 2), to: atom(2)),
   )
-  #smiles(
-    "CC(=O)OC",
-    highlight((bond(2, 1)), include-atoms:true, fill: rgb("#FFCAD4")),
-  )
+  #h(1em)
   #smiles(
     "CCOCC",
-    highlight(
-      (bond(0, 1), bond(1, 2), bond(2, 3)),
-      fill: rgb("#BBE1FA"),
-      include-atoms: true,
-    ),
+    highlight((bond(0, 1), bond(1, 2)), fill: rgb("#FFCAD4")),
   )
-  ```)
+  ```, side: false)
 ]
 
 #demo[
@@ -2238,7 +2251,7 @@ highlight results.
   #reaction(
     mol("C=C"),
     rxn-arrow(above: mol("BrBr", scale: 0.8), below: [CCl#sub[4]]),
-    mol("BrC(Br)C"),
+    mol("BrCCBr"),
     arrow(from: bond(0, 0, 1), to: atom(1, 0), color: red),
     arrow(from: atom(1, 0), to: atom(1, 1), color: red, bend: "right"),
   )
@@ -2265,7 +2278,7 @@ highlight results.
       sup: [+],
     ),
     arrow(from: atom(0, 0), to: atom(1, 0)),
-    arrow(from: atom(2, 0), to: atom(0, 0), bend: "right"),
+    arrow(from: atom(0, 0), to: atom(2, 0), bend: "right"),
   )
   ```, side: false)
 ]
@@ -2330,8 +2343,7 @@ of the center of the whole branch.
 #note[#c("radius") defaults to #c("auto"), which fits the species without
 overlap; set it explicitly for a tighter or looser ring. #c("start") is the
 angle of the first species (#c("90deg") is the top) and #c("clockwise") the
-travel direction. #c("scale") sets the canvas bond length as in
-#c("reaction()"). #c("arc-gap") tunes how close the arc arrows sit to the
+travel direction. #c("scale") uniformly resizes species, arrows, and labels together. #c("arc-gap") tunes how close the arc arrows sit to the
 species (in bond-length units beyond each molecule's radius; smaller or even
 negative brings them closer). #c("reagent-bend") sets the default curvature of
 into/out side arrows; #c("step(bend:)") overrides one step, and #c("bend: 0")
@@ -2369,7 +2381,7 @@ one shared bond length.
 #demo[
   #c("align-molecules(molecules, scaffold:, atoms:, reference:, rotation:, mirror:, allow-reflection:)")
   takes an array of SMILES strings and returns one *aligned molecule* per
-  input. Each molecule is turned — and mirrored when that fits better — so
+  input. Each molecule is turned, optionally mirrored, and shifted so
   its scaffold lies over the reference molecule's scaffold. Pass an aligned
   molecule anywhere a SMILES string is accepted: #c("smiles()"),
   #c("smiles-inline()"), #c("smiles-cetz()"), #c("mol()"), #c("reaction()"),
@@ -2457,12 +2469,12 @@ atoms are needed.
 
 === What alignment changes
 
-Alignment only rotates or mirrors each molecule's own layout; it does not
+Alignment rotates, optionally mirrors, and translates each molecule's own layout; it does not
 redraw the scaffold. Ring cores are drawn identically by the layout engine
 and therefore coincide, but a chain scaffold drawn with a different zigzag
 in two molecules keeps a residual mismatch. Each aligned molecule reports it
 as #c("deviation"): the largest distance, in bond lengths, between a scaffold
-atom and its reference atom. Its #c("atoms") field lists the molecule's
+atom and its reference atom. Its #c("offset") field gives the translation before the final rotation. Its #c("atoms") field lists the molecule's
 scaffold atoms in scaffold order, ready for #c("highlight()") references.
 
 A mirrored molecule exchanges wedges and hashes, so the depicted
@@ -2576,7 +2588,7 @@ parameter.
 
 - R/S and E/Z descriptors are not available; #c("@")/#c("@@") and directional
   bonds control the depiction only.
-- Trigonal-bipyramidal (#c("@TB")), octahedral (#c("@OH")), and allene
+- Trigonal-bipyramidal (#c("@TB1")–#c("@TB20")), octahedral (#c("@OH1")–#c("@OH30")), and allene
   (#c("@AL")) stereochemistry is not drawn; by default it is reported as an
   error (see @sec-undepicted-stereo).
 - Trans double bonds in rings of fewer than nine atoms, and some chelate rings
@@ -2642,7 +2654,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("[CH3:7]")], [Atom map 7 on a bracket atom; shown with #c("show-maps: true").],
   [#c("@") / #c("@@")], [Tetrahedral anticlockwise / clockwise.],
   [#c("@SP1")–#c("@SP3")], [Square planar (U / 4 / Z shape), depicted exactly.],
-  [#c("@TB") #c("@OH") #c("@AL")], [Extended stereo: not drawn; an error unless #c("undepicted-stereo: \"omit\"").],
+  [#c("@TB1–20") #c("@OH1–30") #c("@AL1–2")], [Extended stereo: not drawn; an error unless #c("undepicted-stereo: \"omit\"").],
   [#c("$")], [Quadruple bond (four parallel lines).],
   [#c("/") #c("\\")], [Double-bond cis/trans geometry.],
   [#c("!c")], [Repeat the preceding acyclic-chain turn instead of alternating the zigzag.],
@@ -2666,7 +2678,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("scale")], [`1.0`], [Balanced size of everything.],
   [#c("bond-length")], [`none`], [Bond length only (`1.0` is 30 pt).],
   [#c("font-size")], [`none`], [Atom-label size only.],
-  [#c("font")], [`"New Computer Modern"`], [Atom-label font.],
+  [#c("font")], [`auto`], [Atom-label font from the journal preset, or "New Computer Modern".],
   [#c("bond-stroke")], [`none`], [Bond width only.],
   [#c("color")], [`auto`], [CPK colors for #c("\"default\"")\; monochrome for journal presets.],
   [#c("fg")], [`auto`], [Foreground for bonds/carbon labels; `auto` inherits the text color.],
@@ -2725,48 +2737,53 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("stroke")], [`auto`], [Shaft width before scaling; #c("auto") matches a default 0.9pt molecule bond.],
 )
 
+#let reference-signature(signature) = text(size: 8pt, raw(signature.replace(", ", ",\n  "), block: true))
+
 == Data helpers
 
 #table(
-  columns: (auto, 1fr), inset: 6.5pt,
+  columns: (1.1fr, 1fr), inset: 6.5pt,
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
-  [#c("mol-formula(smiles)")], [Hill-ordered molecular formula content; errors on wildcards, abbreviations, and isotopes.],
-  [#c("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float")\; errors on wildcards, abbreviations, and isotopes.],
-  [#c("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],
-  [#c("smiles-cetz(smiles, name:, origin:, fg:, theme:, ..opts)")], [Molecule as CeTZ elements with #c("atom-<i>") / #c("bond-<i>-<j>") / #c("center") anchors.],
-  [#c("molecules.<name>")], [Bundled SMILES string for a common molecule (@sec-library); #c("molecules.at(\"name\")") for computed names.],
-  [#c("substructure-matches(smiles, pattern)")], [Array of #c("(atoms:, bonds:)") index dictionaries for every SMARTS match; #c("()") when absent.],
-  [#c("functional-groups.<name>")], [SMARTS definition behind each #c("highlight-groups") name.],
+  [#reference-signature("mol-formula(smiles)")], [Hill-ordered molecular formula content; errors on wildcards, abbreviations, and isotopes.],
+  [#reference-signature("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float")\; errors on wildcards, abbreviations, and isotopes.],
+  [#reference-signature("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],
+  [#reference-signature("smiles-cetz(smiles, name:, origin:, fg:, theme:, ..opts)")], [Molecule as CeTZ elements with #c("atom-<i>") / #c("bond-<i>-<j>") / #c("center") anchors.],
+  [#reference-signature("molecules.<name>")], [Bundled SMILES string for a common molecule (@sec-library); #c("molecules.at(\"name\")") for computed names.],
+  [#reference-signature("substructure-matches(smiles, pattern)")], [Array of #c("(atoms:, bonds:)") index dictionaries for every SMARTS match; #c("()") when absent.],
+  [#reference-signature("functional-groups.<name>")], [SMARTS definition behind each #c("highlight-groups") name.],
 )
 
 == Mechanism helpers
 
 #table(
-  columns: (auto, 1fr), inset: 6.5pt,
+  columns: (1.1fr, 1fr), inset: 6.5pt,
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
-  [#c("mol(spec, ..annotations, label:, offset:, ..opts)")], [Reaction item; string or aligned #c("spec") has addressable atoms; positional arrows/highlights use local references; #c("offset") nudges in page coordinates; per-molecule #c("scale") also works in mechanism mode.],
-  [#c("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
-  [#c("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
-  [#c("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
-  [#c("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, head-length:, head-width:, style:)")], [Curly electron-pushing arrow (default #c("color: black")); #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("head-length") / #c("head-width") size the tip; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
-  [#c("highlight(ref, fill:, stroke:, radius:, include-atoms:, include-hydrogens:)")], [Shade one atom/bond reference or an array of references, and the displayed H of selected heteroatoms.],
-  [#c("brackets(body, sup:, sub:)")], [Square brackets around content; inside #c("reaction()"), accepts reference-transparent reaction items too.],
+  [#reference-signature("mol(spec, ..annotations, label:, offset:, ..opts)")], [Reaction item; string or aligned #c("spec") has addressable atoms; positional arrows/highlights use local references; #c("offset") nudges in page coordinates; per-molecule #c("scale") also works in mechanism mode.],
+  [#reference-signature("cycle(..items, radius:, start:, clockwise:, scale:, reagent-bend:, arc-gap:)")], [Catalytic cycle: species on a ring with arc arrows.],
+  [#reference-signature("step(label:, into:, out:, bend:, merge:, rotation:, *-offset:)")], [A cycle arc: transformation label, reagent in/out, side-arrow bend, tangential merge, label rotation, and per-piece offsets.],
+  [#reference-signature("atom / bond / lp / species")], [Atom-index references (optional #c("offset:")).],
+  [#reference-signature("arrow(from:, to:, label:, color:, stroke:, bend:, angle:, half:, heads:, head-length:, head-width:, style:)")], [Curly electron-pushing arrow (default #c("color: black")); #c("stroke: auto") matches molecule bonds and scales with the drawing; #c("head-length") / #c("head-width") size the tip; #c("heads") is #c("\"end\"") / #c("\"both\"") / #c("\"none\""), #c("style") is #c("\"solid\"") / #c("\"dashed\"") / #c("\"wavy\"").],
+  [#reference-signature("highlight(ref, fill:, stroke:, radius:, include-atoms:, include-hydrogens:)")], [Shade one atom/bond reference or an array of references, and the displayed H of selected heteroatoms.],
+  [#reference-signature("brackets(body, sup:, sub:)")], [Square brackets around content; inside #c("reaction()"), accepts reference-transparent reaction items too.],
 )
 
 == Molecule series
 
+#block(breakable: false, [
 #table(
-  columns: (auto, 1fr), inset: 6.5pt,
+  columns: (1.1fr, 1fr), inset: 6.5pt,
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
-  [#c("align-molecules(molecules, scaffold:, atoms:, reference:, rotation:, mirror:, allow-reflection:)")], [Array of aligned molecules whose shared scaffold keeps the reference's orientation; fields #c("smiles"), #c("rotation"), #c("mirror"), #c("atoms"), #c("deviation").],
-  [#c("molecule-grid(columns:, scale:, bond-length:, sizing:, scaffold:, column-gutter:, row-gutter:, label-gap:, breakable:, ..items)")], [Compound grid at one shared bond length with row-aligned captions.],
+  [#reference-signature("align-molecules(molecules, scaffold:, atoms:, reference:, rotation:, mirror:, allow-reflection:)")], [Array of aligned molecules whose shared scaffold keeps the reference's orientation; fields #c("smiles"), #c("rotation"), #c("mirror"), #c("atoms"), #c("deviation").],
+  [#reference-signature("molecule-grid(columns:, scale:, bond-length:, sizing:, scaffold:, column-gutter:, row-gutter:, label-gap:, breakable:, ..items)")], [Compound grid at one shared bond length with row-aligned captions.],
 )
+
+])
 
 == Label color names
 

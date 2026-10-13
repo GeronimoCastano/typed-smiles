@@ -175,17 +175,24 @@ explicit bonds.
 Heteroatom hydrogens are shown by default; carbon hydrogens stay implicit.
 Use `show-h: "all"` for carbon hydrogens, `[NH3]` bracket syntax for
 explicit hydrogens, and `{label}` / `{label|style}` for custom group labels.
+Neutral carbon hydrogens, including counts written in brackets for
+stereochemistry, remain suppressed in skeletal diagrams. Use `show-h` to
+display them; isotope and charged carbon labels retain written H counts.
+
 Use `show-h: "skeleton"` to draw every hydrogen as a separate `H` atom with
 its own single bond, turning the molecule into a fully explicit 2D skeleton.
 `rotation` and `mirror` transform the entire skeleton, including H positions and
 their bonds, while atom labels stay upright.
 Eligible unbranched heavy-atom chains become straight rows, with carbon-bound
-hydrogens using clean horizontal/vertical displayed-formula directions. Lone
+hydrogens using clear displayed-formula directions; ring CH₂ pairs point
+outward into the open space. Lone
 pairs influence non-carbon angles, so water remains bent and three-bond
 centers are evenly spread in the 2D schematic. Rings, branches, unsaturated
 paths, and stereochemical paths retain the normal heavy-atom layout. The
 ordinary molecule layout is unchanged. In the default color mode, element
 labels and bonds use the CPK palette and explicit skeleton hydrogens are gray.
+Displayed stereochemical H labels use the same gray by default; an `H` entry in
+`atom-colors` overrides both.
 Use `>` inside a custom label to choose the attachment glyph, e.g. `{>PPh3}`.
 For the cleanest result, rotate the molecule so the bond approaches the chosen
 glyph roughly perpendicular to the written label.
@@ -272,11 +279,19 @@ that bond leaves to the right (MeO, F₃C).
 
 ![Automatic abbreviation examples](assets/readme/abbreviations.png)
 
-- Atom indices do not change. A label carries its attachment atom's index, so
-  `atom(i)` on that atom highlights or targets the label. Referencing an atom
-  hidden inside a label — through arrows, highlights, `atom-annotations`,
-  `bond-customizations`, `show-h`, or a `highlight-smarts`/`highlight-groups`
-  match — is an error; remove the group from `abbreviate` to address it.
+- Formula abbreviations such as CO₂H, SO₃H, CF₃, NO₂, and CN expose one
+  index per displayed element fragment. A repeated element such as O₂ or F₃
+  uses one representative original atom index; highlighting it covers the
+  element and its subscript. The displayed H retains its original hydrogen index.
+- **Index gaps:** abbreviations contain fewer displayed fragments than the
+  expanded structure. Some indices therefore have no badge, preserving the
+  original mappings of the remaining atoms. For `CC(=O)O`, abbreviated CO₂H
+  displays C → 1, O₂ → 2, H → 4; oxygen index 3 is skipped.
+  Enable `show-indices: true` to see the selectable representative indices.
+- Shorthand labels such as Me, OMe, and Ph remain single selectable groups,
+  using their attachment atom's index. An atom hidden without a representative
+  badge cannot be referenced; expand the group to select that individual atom.
+  Internal bonds and lone pairs remain unavailable in abbreviated groups.
 - Groups carrying an isotope, an atom map, a stereo mark, an unexpected
   charge, a bracket hydrogen count, or a `{label}` stay expanded. Stereocenters next to a label
   keep their configuration.
@@ -363,7 +378,7 @@ or any `#RRGGBB` hex code. See the documentation for the full color reference.
 
 ![Color override examples](assets/readme/colors.png)
 
-> **Note:** `color: false` is a hard override — it makes everything black
+> **Note:** `color: false` is a hard override — it makes everything use the foreground (`fg`)
 > regardless of any `atom-colors` entries or inline label styles.
 > To selectively highlight a group in an otherwise black-and-white diagram,
 > set `color: true` and drive everything through `atom-colors`.
@@ -565,6 +580,8 @@ offset endpoints: `(rel: (dx, dy), to: "A.atom-0")`. Here is a Watson–Crick
 A–T base pair with its two hydrogen bonds nudged off the atom centers:
 
 ```typst
+#import "@preview/cetz:0.5.2"
+
 #align(center, context cetz.canvas(length: 30pt, {
   import cetz.draw: *
 
@@ -609,8 +626,8 @@ and formulas.
 ## Molecular weights
 
 `mol-weight(smiles)` returns the molecular weight in g/mol as a float — the
-sum of IUPAC standard atomic weights over every atom, including implicit and
-explicit hydrogens. Dot-separated fragments (salts, hydrates) are summed
+sum of the rounded atomic weights in the element table over every atom,
+including implicit and explicit hydrogens. Dot-separated fragments (salts, hydrates) are summed
 together.
 
 ```typst
@@ -720,6 +737,10 @@ writing-order index (0-based), so the SMILES string is never modified — pass
 Species indices count every `mol()` and every content item in written order,
 including a plain `[+]` between reagents; arrows and their labels are not
 counted.
+Displayed wedge/hash hydrogens have their own atom index. When a new index is
+needed, it follows the existing atom and virtual-H indices; existing indices
+keep their numbers. `show-indices: true` reveals it; use `atom(i)` to target the
+H or `bond(parent, i)` to reference its stereochemical bond.
 On large mechanisms, `reaction(show-indices: true)` applies that overlay to all
 string `mol("...")` molecules in the reaction, with per-molecule opt-out via
 `mol("...", show-indices: false)`.
@@ -800,7 +821,7 @@ before `below`), so curly arrows can connect it to any other species:
 #reaction(
   mol("C=C"),
   rxn-arrow(above: mol("BrBr", scale: 0.8), below: [CCl#sub[4]]),
-  mol("BrC(Br)C"),
+  mol("BrCCBr"),
   arrow(from: bond(0, 0, 1), to: atom(1, 0), color: red),
   arrow(from: atom(1, 0), to: atom(1, 1), color: red, bend: "right"),
 )
@@ -808,7 +829,8 @@ before `below`), so curly arrows can connect it to any other species:
 
 ## Catalytic cycles
 
-`cycle` arranges species on a circle with arc arrows between them. Items
+`cycle` arranges species on a circle with arc arrows between them. `scale`
+uniformly resizes the complete cycle, including species, arrows, and labels. Items
 alternate species and `step()`s, like `reaction()` alternates molecules and
 arrows, but the sequence closes into a ring. `step(label:)` names a
 transformation, `step(into:)` adds a reagent merging in, and `step(out:)` a
@@ -820,31 +842,33 @@ or an angle), and `label-offset:`/`into-offset:`/`out-offset:` nudge pieces like
 a `mol` offset.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": cycle, step, mol, ce
+#import "@preview/typed-smiles:0.13.0": smiles, ce, rxn-arrow, mol, reaction, cycle, step
 
-#let cplx(body) = box(inset: 2pt, body)
-
-#cycle(
-  radius: 4.3,
-  reagent-bend: 0.06,
-  mol(cplx(ce("RhCl(PPh3)3"))),
-  step(label: ce("-PPh3 + S")),
-  mol(cplx(ce("RhCl(PPh3)2S"))),
-  step(label: [oxidative addition], into: ce("H2"), bend: 0.02),
-  mol(cplx(ce("RhH2Cl(PPh3)2"))),
-  step(label: [coordination], into: ce("RHC=CH2"), rotation: "auto"),
-  mol(cplx(ce("RhH2Cl(PPh3)2(\"alkene\")"))),
-  step(label: [migratory insertion]),
-  mol(cplx(ce("RhHCl(CH2CH2R)(PPh3)2"))),
-  step(label: [reductive elimination], out: ce("RCH2CH3"), bend: 0.03),
-)
+#align(center)[
+  #reaction(
+    flow : "down",
+    mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)(!w{>PPh3})"), offset: (0.5, 0)),
+    rxn-arrow(above : [#ce("PPh3") solvent (S)]),
+    cycle(
+      radius : 6.0,
+      mol(smiles("{Rh}(!w{S | S})(!h{>PPh3})(!hCl)(!w{>PPh3})")),
+      step(label : [#text(size : 6pt)[oxidative addition]], label-offset : (0.3, 0.5), into : [#ce("H2")], rotation : "auto", merge : true),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!w{H})")),
+      step(into : [#smiles("C=C")], merge : true),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({})({H})({H})")),
+      step(label : [#text(size : 6pt)[migratory insertion]], label-offset: (0, 0.5), rotation : "auto"),
+      mol(smiles("{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!wCC{H})", rotation : -90deg)),
+      step(label : [#text(size : 6pt)[reductive elimination]], label-offset:  (-0.5, 0.5), out : [#smiles("{H}CC{H}")], merge:true, rotation : "auto")
+    )
+  )
+]
 ```
 
 ![Wilkinson-style catalytic cycle with vertical entry](assets/readme/cycle-wilkinson.png)
 
 ## Aligned molecule series
 
-`align-molecules` orients a series of molecules so a shared scaffold keeps the
+`align-molecules` rotates, optionally mirrors, and translates a series so a shared scaffold keeps the
 reference molecule's orientation, which makes before/after reactions and
 compound series comparable at a glance. Pass the results wherever a SMILES
 string is accepted: `smiles()`, `mol()`, `reaction()`, `cycle()`,
@@ -940,7 +964,7 @@ with three neighbors and a lone pair, such as sulfoxides (`C[S@](=O)c1ccccc1`)
 and phosphines, are drawn with wedges too.
 
 Some written stereochemistry cannot be drawn faithfully: trigonal-bipyramidal
-(`@TB`), octahedral (`@OH`), and allene (`@AL`) centers, `@` on an atom that is
+(`@TB1`–`@TB20`), octahedral (`@OH1`–`@OH30`), and allene (`@AL1`/`@AL2`) centers, `@` on an atom that is
 not a stereocenter (`[C@H2]`), and geometry the layout cannot place, such as a
 trans double bond in an eight-membered ring. These are errors by default, so a
 figure never drops stereochemistry silently. Pass `undepicted-stereo: "omit"`
@@ -1023,7 +1047,7 @@ SMILES string extensions:
 | `!d` | Force a dashed bond on the next single bond |
 | `!c` | Repeat the preceding turn instead of alternating the zigzag |
 | `!c!w`, `!c!h`, `!c!s`, `!c!d` | Curl while applying a single-bond drawing style |
-| `!c=`, `!c#` | Curl into a double or triple bond |
+| `!c=` | Curl into a double bond |
 
 ### `#reaction(gap-h, gap-v, scale, breakable, show-indices, flow, fit, …items)`
 
@@ -1207,7 +1231,7 @@ Current limitations:
 - `@`/`@@` and `/`/`\` stereochemistry is depicted but R/S and E/Z descriptors are not computed.
 - Square-planar `@SP1`–`@SP3` centers are depicted exactly (the geometry is
   planar); quadruple bonds (`$`) render as four parallel lines.
-- Trigonal-bipyramidal (`@TB`), octahedral (`@OH`), and allene (`@AL`)
+- Trigonal-bipyramidal (`@TB1`–`@TB20`), octahedral (`@OH1`–`@OH30`), and allene (`@AL1`/`@AL2`)
   stereochemistry is not drawn and is reported unless
   `undepicted-stereo: "omit"` is set.
 - A trans double bond (`/` and `\` markers) inside a ring needs a ring of at

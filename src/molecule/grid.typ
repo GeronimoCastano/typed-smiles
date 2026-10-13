@@ -73,19 +73,30 @@
 }
 
 #let _grid-molecule-body(molecule-item, scale, bond-length) = {
-  if type(molecule-item.spec) != str { return molecule-item.spec }
-  let body = smiles(
-    molecule-item.spec,
-    ..molecule-item.annotations,
-    ..molecule-item.opts,
-    scale: scale,
-    bond-length: bond-length,
+  let body = if type(molecule-item.spec) == str {
+    smiles(
+      molecule-item.spec,
+      ..molecule-item.annotations,
+      ..molecule-item.opts,
+      scale: scale,
+      bond-length: bond-length,
+    )
+  } else {
+    molecule-item.spec
+  }
+  let alignment-offset = molecule-item.at("alignment-offset", default: (0, 0))
+  let rotation = molecule-item.opts.at("rotation", default: 0deg)
+  let page-offset = (
+    molecule-item.offset.at(0) + alignment-offset.at(0) * calc.cos(rotation)
+      - alignment-offset.at(1) * calc.sin(rotation),
+    molecule-item.offset.at(1) + alignment-offset.at(0) * calc.sin(rotation)
+      + alignment-offset.at(1) * calc.cos(rotation),
   )
-  if molecule-item.offset == (0, 0) { return body }
+  if page-offset == (0, 0) { return body }
   let canvas-unit = 30pt * bond-length
   move(
-    dx: molecule-item.offset.at(0) * canvas-unit,
-    dy: -molecule-item.offset.at(1) * canvas-unit,
+    dx: page-offset.at(0) * canvas-unit,
+    dy: -page-offset.at(1) * canvas-unit,
     body,
   )
 }

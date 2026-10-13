@@ -82,13 +82,13 @@
 
 /// Orients a series of molecules so a shared scaffold overlays the reference
 /// molecule's scaffold. Each molecule keeps its own computed layout and is only
-/// rotated, or rotated and mirrored; the scaffold geometry itself is not
+/// rotated, optionally mirrored, and translated; the scaffold geometry itself is not
 /// changed, so cores coincide exactly only when they were drawn identically.
 ///
 /// Returns one aligned molecule per input. Pass an aligned molecule wherever
 /// a SMILES string is accepted: `smiles()`, `smiles-inline()`, `smiles-cetz()`,
 /// `mol()`, `reaction()`, `cycle()`, and `molecule-grid()`. Its fields
-/// `smiles`, `rotation`, `mirror`, `atoms` (molecule atoms in scaffold order),
+/// `smiles`, `rotation`, `mirror`, `offset`, `atoms` (molecule atoms in scaffold order),
 /// and `deviation` (largest scaffold-atom mismatch in bond lengths) can be read.
 ///
 /// - molecules (array): Two or more SMILES strings.
@@ -191,12 +191,25 @@
       _multiply-transforms(reference-page-transform, _layout-normalization),
       _multiply-transforms(alignment.transform, _layout-normalization),
     )
+    let orientation = _rotation-and-mirror(page-transform)
+    let reference-transform = _multiply-transforms(reference-page-transform, _layout-normalization)
+    let translation = alignment.translation
+    let page-offset = (
+      reference-transform.xx * translation.x + reference-transform.xy * translation.y,
+      reference-transform.yx * translation.x + reference-transform.yy * translation.y,
+    )
+    let inverse-rotation = _rotation-transform(-orientation.rotation)
+    let layout-offset = (
+      inverse-rotation.xx * page-offset.at(0) + inverse-rotation.xy * page-offset.at(1),
+      inverse-rotation.yx * page-offset.at(0) + inverse-rotation.yy * page-offset.at(1),
+    )
     (
       __aligned_molecule__: true,
       smiles: molecule,
+      offset: layout-offset,
       atoms: alignment.atoms,
       deviation: calc.round(alignment.deviation, digits: 6),
-      .._rotation-and-mirror(page-transform),
+      ..orientation,
     )
   })
 }
@@ -241,5 +254,5 @@
   let drawing-options = options
   drawing-options.insert("rotation", aligned-molecule.rotation)
   drawing-options.insert("mirror", aligned-molecule.mirror)
-  (smiles: aligned-molecule.smiles, options: drawing-options)
+  (smiles: aligned-molecule.smiles, options: drawing-options, offset: aligned-molecule.at("offset", default: (0, 0)))
 }

@@ -16,3 +16,7 @@ PACKAGING.md
 
 # macOS metadata
 .DS_Store
+
+# Local scratch files and Python caches
+tmp/
+__pycache__/

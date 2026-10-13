@@ -8,13 +8,14 @@ trap 'rm -rf "$temporary_directory"' EXIT
 expect_error() {
   local case_name="$1"
   local expected_message="$2"
+  local source_file="${3:-$project_root/tests/errors.typ}"
   local output_file="$temporary_directory/$case_name.txt"
   local pdf_file="$temporary_directory/$case_name.pdf"
 
   if typst compile \
     --root "$project_root" \
     --input "case=$case_name" \
-    "$project_root/tests/errors.typ" \
+    "$source_file" \
     "$pdf_file" \
     >"$output_file" 2>&1
   then
@@ -34,12 +35,14 @@ expect_error "unclosed-label" "unclosed custom label"
 expect_error "missing-arrow-endpoints" "arrow from is invalid"
 expect_error "species-out-of-range" "rxn-arrow() itself does not count as a species"
 expect_error "atom-out-of-range" "atom index is invalid"
+expect_error "stereo-hydrogen-index-out-of-range" "atom index is invalid"
 expect_error "missing-bond" "are not joined by a visible bond"
 expect_error "missing-lone-pair" "has no addressable lone pairs"
 expect_error "pair-out-of-range" "pair index is invalid"
 expect_error "opaque-atom-reference" "opaque content and has no addressable atoms"
 expect_error "ignored-annotation" "expected arrow() or highlight()"
 expect_error "show-h-out-of-range" "show-h atom index is invalid"
+expect_error "show-stereo-hydrogen-index" "already displayed stereochemical hydrogen"
 expect_error "mol-formula-wrong-type" "mol-formula SMILES expression is invalid"
 expect_error "mol-formula-empty" "mol-formula SMILES expression is invalid"
 expect_error "mol-formula-wildcard" "wildcard atom"
@@ -89,6 +92,7 @@ expect_error "undepicted-ring-trans" "cannot place its \`/\` and"
 expect_error "undepicted-stereo-policy" "undepicted-stereo is invalid"
 expect_error "show-maps-type" "show-maps"
 expect_error "trans-double-bond-in-small-ring" "a flat drawing can show a trans ring double bond only in a ring of at least 9 atoms"
+expect_error "cycle-radius-no-visible-arc" "leaves no clear arc after species 0"
 
 expect_error "align-not-array" "align-molecules molecules is invalid"
 expect_error "align-single-molecule" "expected an array of at least two SMILES strings"
@@ -167,7 +171,6 @@ expect_error "opaque-species-listing" 'species 1 (content [+]) is opaque content
 expect_error "opaque-species-listing" 'Species with atoms: 0 = mol(\"CCO\"), 2 = mol(\"CCN\").'
 expect_error "curl-without-reference-turn" "as in C=CC!c=C"
 
-echo "All editor-visible validation cases passed."
 
 expect_error "highlight-overlap-value" "smiles highlight-overlap is invalid"
 expect_error "highlight-overlap-type" "smiles highlight-overlap is invalid"
@@ -184,3 +187,29 @@ expect_error "smiles-unknown-named-option" "Accepted options: style, scale"
 expect_error "mol-named-highlight" "Pass highlight(...) positionally, or use highlight-smarts / highlight-groups."
 expect_error "reaction-unknown-named-option" "reaction option"
 expect_error "cetz-named-highlight" "highlight() is not accepted by smiles-cetz()"
+
+expect_error "audit-scale-zero" "smiles scale is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-bond-length-zero" "smiles bond-length is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-font-size-zero" "smiles font-size is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-bond-stroke-zero" "smiles bond-stroke is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-rotation-type" "smiles rotation is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-lone-pairs-value" "lone-pairs is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-atom-colors-type" "atom-colors is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-index-type" "show-indices is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-font-type" "smiles font is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-foreground-type" "foreground is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-aromatic-value" "aromatic is invalid" "$project_root/tests/audit-invalid-options.typ"
+expect_error "audit-opacity-type" "opacity is invalid" "$project_root/tests/audit-invalid-options.typ"
+
+expect_error "smiles-reference-wrong-species" 'Species by index: 0 = mol(\"CCO\").'
+expect_error "cetz-positional-annotation" "smiles-cetz positional options is invalid"
+expect_error "invalid-theme" 'smiles theme is invalid: unsupported value \"x\"'
+expect_error "invalid-style" 'smiles style is invalid: unsupported value \"x\"'
+expect_error "invalid-color-type" 'smiles color is invalid: expected auto or a boolean, got \"false\"'
+expect_error "invalid-mirror" 'smiles mirror is invalid: unsupported value \"diagonal\"'
+
+expect_error "audit-folded-hydrogen-overflow" "exceeds the supported maximum of 255" "$project_root/tests/audit-invalid-options.typ"
+
+expect_error "abbreviate-skipped-oxygen" "Reference the displayed representative atom 2"
+
+echo "All editor-visible validation cases passed."

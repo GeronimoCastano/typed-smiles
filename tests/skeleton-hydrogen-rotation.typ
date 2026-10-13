@@ -1,6 +1,6 @@
 #import "../src/lib.typ": smiles, smiles-inline, smiles-cetz
 #import "../src/chemistry.typ": _compute-layout
-#import "../src/molecule/rendering.typ": _mirror-layout, _linearize-skeleton-layout, _skeleton-hydrogen-directions, _rendered-atom-position
+#import "../src/molecule/rendering.typ": _mirror-layout, _linearize-skeleton-layout, _skeleton-hydrogen-directions, _rendered-atom-position, _lone-pair-center-distance
 #import "@preview/cetz:0.5.2"
 
 #set text(font: "New Computer Modern", size: 11pt)
@@ -43,9 +43,54 @@
   }
 }
 
-// Preserve the established unrotated CH2 and water geometry.
+// Keep carbon hydrogens on the open side, with a perpendicular pair when the
+// two heavy neighbors are collinear.
 #let diol = _mirror-layout(_linearize-skeleton-layout(_compute-layout("OCCO")), none)
-#assert.eq(_skeleton-hydrogen-directions(diol, 1, 2), ((x: 0.0, y: 1.0), (x: 0.0, y: -1.0)))
+#let diol-hydrogens = _skeleton-hydrogen-directions(diol, 1, 2)
+#assert.eq(diol-hydrogens.len(), 2)
+#let diol-neighbor-indices = diol.bonds.filter(bond => not bond.at("virtual_bond", default: false) and (bond.from == 1 or bond.to == 1)).map(bond => if bond.from == 1 { bond.to } else { bond.from })
+#assert.eq(diol-neighbor-indices.len(), 2)
+#let diol-center = diol.atoms.at(1).pos
+#let diol-neighbor-directions = diol-neighbor-indices.map(index => {
+  let neighbor = diol.atoms.at(index).pos
+  let dx = neighbor.x - diol-center.x
+  let dy = neighbor.y - diol-center.y
+  let length = calc.sqrt(dx * dx + dy * dy)
+  (x: dx / length, y: dy / length)
+})
+#assert(calc.abs(
+  diol-neighbor-directions.first().x * diol-neighbor-directions.last().x
+    + diol-neighbor-directions.first().y * diol-neighbor-directions.last().y
+    + 1
+) < 0.000001)
+#assert(calc.abs(
+  diol-hydrogens.first().x * diol-hydrogens.last().x
+    + diol-hydrogens.first().y * diol-hydrogens.last().y
+    + 1
+) < 0.000001)
+#for hydrogen-direction in diol-hydrogens {
+  assert(calc.abs(
+    hydrogen-direction.x * diol-neighbor-directions.first().x
+      + hydrogen-direction.y * diol-neighbor-directions.first().y
+  ) < 0.000001)
+}
+
+#context {
+  let base-distance = calc.max(0.1, 11pt / 30pt * 0.6)
+  let direction = (x: 1.0, y: 0.0)
+  let f-distance = _lone-pair-center-distance(
+    (symbol: "F",), direction, base-distance, 11pt, 30pt, "New Computer Modern",
+  )
+  assert(calc.abs(f-distance - base-distance) < 0.000001)
+  let f-width = measure(text(size: 11pt, font: "New Computer Modern", "F")).width
+  let cl-width = measure(text(size: 11pt, font: "New Computer Modern", "Cl")).width
+  let cl-distance = _lone-pair-center-distance(
+    (symbol: "Cl",), direction, base-distance, 11pt, 30pt, "New Computer Modern",
+  )
+  assert(calc.abs(
+    cl-distance - base-distance - (cl-width - f-width) / (2 * 30pt)
+  ) < 0.000001)
+}
 #let water = _mirror-layout(_compute-layout("O"), none)
 #let water-directions = _skeleton-hydrogen-directions(water, 0, 2)
 #assert(calc.abs(water-directions.first().x * water-directions.last().x + water-directions.first().y * water-directions.last().y - calc.cos(104.5deg)) < 0.000001)

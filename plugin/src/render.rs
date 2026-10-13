@@ -7,6 +7,10 @@ pub struct AtomOutput {
     pub pos: Vec2,
     /// Explicit hydrogen count (shown as subscript when greater than zero).
     pub hcount: u8,
+    /// True when `hcount` came from a bracket atom's written hydrogen count.
+    /// Folded standalone hydrogen atoms leave this false.
+    #[serde(default)]
+    pub has_bracket_hydrogen_count: bool,
     /// Computed implicit hydrogen count (shown only when requested).
     #[serde(default)]
     pub implicit_h: u8,
@@ -55,11 +59,13 @@ pub struct AtomOutput {
     /// Unit direction from this atom toward the rendered stereochemical hydrogen.
     #[serde(default)]
     pub stereo_h_dir: Vec2,
-    /// True for H atoms synthesized from bracket hcount to make them addressable
-    /// via atom() references. The Typst renderer skips drawing these atoms and their
-    /// bonds; they only appear in show-indices overlays and arrow endpoints.
+    /// True for generated H atoms exposed through atom() references. The renderer
+    /// skips drawing ordinary generated atoms; their labels are part of the parent.
     #[serde(default)]
     pub virtual_h: bool,
+    /// True when this generated atom represents a separately drawn stereo H.
+    #[serde(default)]
+    pub stereo_virtual_h: bool,
     /// True for an atom hidden inside an automatic abbreviation label. Its
     /// position is the label's position; the renderer never draws it.
     #[serde(default)]
@@ -127,6 +133,9 @@ pub struct AbbreviationGroupOutput {
     pub external_atom: usize,
     /// Every atom the label stands for, including the attachment atom, ascending.
     pub atoms: Vec<usize>,
+    /// Original virtual hydrogen indices represented inside this label.
+    #[serde(default)]
+    pub hydrogens: Vec<usize>,
     /// Bonds hidden inside the label, as atom-index pairs.
     pub bonds: Vec<[usize; 2]>,
     /// Label read with the rest of the molecule on its left, e.g. "OMe".

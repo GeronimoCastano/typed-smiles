@@ -1,0 +1,993 @@
+{
+  "date": "2026-10-12",
+  "repository": "typed-smiles",
+  "counts": {
+    "solved": 44,
+    "partial": 6,
+    "open": 6,
+    "deferred": 3,
+    "intended": 2,
+    "reverted": 2,
+    "unconfirmed": 1
+  },
+  "findings": [
+    {
+      "id": "S01",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Marked trisubstituted alkenes could reflect the marked branch into an occupied sibling slot, changing the drawn E/Z geometry.",
+      "fix": "When reflection collides with its sibling root, reflect the disjoint sibling subtree too; this preserves the marked side while keeping both substituents visible.",
+      "remaining": [],
+      "repro": "#smiles(\"CC/C=C(C)/CC\")",
+      "current_repro": null,
+      "verification": "['marked_trisubstituted_alkene_keeps_both_substituents_visible', 'trans_alkene_substituents_are_opposite']",
+      "image": "research/audit-current/S01.png",
+      "caption": "Verified current Typed-smiles output for S01",
+      "extra_images": []
+    },
+    {
+      "id": "S02",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Directional alkene placement could put a whole ring branch exactly over its sibling.",
+      "fix": "Same shared sibling-slot correction as S01; test includes two aryl substituents.",
+      "remaining": [],
+      "repro": "#smiles(\"CC/C(=C(\\\\c1ccccc1)c1ccc(OCCN(C)C)cc1)c1ccccc1\")",
+      "current_repro": null,
+      "verification": "['marked_alkene_with_two_ring_substituents_keeps_them_separate', 'every_molecule_in_test_typ_has_no_overlapping_atoms']",
+      "image": "research/audit-current/S02.png",
+      "caption": "Verified current Typed-smiles output for S02",
+      "extra_images": []
+    },
+    {
+      "id": "S03",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Forced depiction styles preserve their requested default wedge/hash; an explicit horizontal or vertical mirror flips the depiction once.",
+      "fix": "Mirror handling distinguishes the built-in coordinate normalization from a user-requested reflection.",
+      "remaining": [],
+      "repro": "#smiles(\"C!wN\", scale: 1.6)\n#smiles(\"C!hN\", scale: 1.6)",
+      "current_repro": null,
+      "verification": "['tests/test.typ: forced wedge and forced wedge mirrors']",
+      "image": "research/audit-current/S03.png",
+      "caption": "Verified current Typed-smiles output for S03",
+      "extra_images": []
+    },
+    {
+      "id": "S04",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "mol() retains the aligned drawing offset, and reaction mechanism/cycle layouts translate molecular geometry in the pre-rotation layout frame before orientation is applied.",
+      "fix": "Apply rotation/reflection and centroid translation in aligned molecules, CeTZ overlays, grids, reactions, and cycles.",
+      "remaining": [],
+      "repro": "#let aligned = align-molecules((\"c1ccccc1\", \"Cc1ccccc1\"), scaffold: \"c1ccccc1\")\n#context cetz.canvas(length: 40pt, {\n  smiles-cetz(aligned.at(0), color: false, fg: blue, bond-stroke: 2pt)\n  smiles-cetz(aligned.at(1), color: false, fg: red, bond-stroke: 0.6pt)\n})",
+      "current_repro": null,
+      "verification": "tests/test.typ: aligned molecules passed through mol() in a reaction mechanism and cycle; research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S04.png",
+      "caption": "Verified current Typed-smiles output for S04",
+      "extra_images": []
+    },
+    {
+      "id": "S05",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Duplicate sulfone oxo positions were a bug. Spreading the two oxygens on the same side still gave a poor depiction.",
+      "fix": "Unconstrained exocyclic sulfone centers now place the carbon substituents across a backbone and the two terminal oxo bonds on opposite sides. Curl/directional constraints and ring sulfur are preserved.",
+      "remaining": [],
+      "repro": "#smiles(\"CC(C)(C)c1cc(C)ccc1S(C)(=O)=O\")",
+      "current_repro": null,
+      "verification": "Five equivalent sulfone inputs, opposite-side geometry, unit bond lengths, curl preservation, native suite and RDKit drawing checks.",
+      "image": "research/audit-current/S05.png",
+      "caption": "Verified current Typed-smiles output for S05",
+      "extra_images": []
+    },
+    {
+      "id": "S06",
+      "classification": "Bug",
+      "resolution": "partial",
+      "reason": "In the paclitaxel-like repro, carbonyl oxygen 43 coincided with phenyl ipso carbon 44.",
+      "fix": "The same unconstrained-branch overlap reduction separates that oxygen and carbon while retaining unit bond lengths; other close contacts remain in this very crowded molecule.",
+      "remaining": [
+        "The fixture records the remaining crossing/close-contact layout class and a 0.45 minimum-clearance floor; this is still a real layout-quality limitation, not an exemption."
+      ],
+      "repro": "#smiles(\"CC1=C2C(C(=O)C3(C(CC4C(C3C(C(C2(C)C)(CC1OC(=O)C(C(C5=CC=CC=C5)NC(=O)C6=CC=CC=C6)O)O)OC(=O)C7=CC=CC=C7)(CO4)OC(=O)C)O)C)OC(=O)C\")",
+      "current_repro": null,
+      "verification": "['overlapping_multiple_bond_branches_move_without_changing_bond_lengths', 'crowded-fused/paclitaxel-like-benzoate', 'every_molecule_in_test_typ_has_no_overlapping_atoms']",
+      "image": "research/audit-current/S06.png",
+      "caption": "Verified current Typed-smiles output for S06",
+      "extra_images": []
+    },
+    {
+      "id": "S07",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Folding a standalone [H] into an atom caused the parent to lose its remaining implicit hydrogens and formula mass.",
+      "fix": "Track bracket hydrogen counts separately from folded standalone hydrogen atoms; subtract folded hcount when computing remaining implicit H.",
+      "remaining": [],
+      "repro": "#smiles(\"C([H])F\", show-h: \"all\"); #mol-formula(\"C([H])F\")",
+      "current_repro": null,
+      "verification": "['folded_hydrogen_keeps_the_parents_remaining_implicit_hydrogens', 'bracket_hydrogen_counts_are_marked_for_the_renderer', 'folded_hydrogens_keep_the_written_configuration']",
+      "image": "research/audit-current/S07.png",
+      "caption": "Verified current Typed-smiles output for S07",
+      "extra_images": []
+    },
+    {
+      "id": "S08",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Lone-pair reference positions now use the same placed pairs as molecule drawing, including OH/NH inline labels.",
+      "fix": "Shared pair placement accounts for the stacked/inline H region and uses matching pair offsets for rendering and references.",
+      "remaining": [],
+      "repro": "#smiles(\"CCO\", lone-pairs: \"dots\", arrow(from: lp(2), to: atom(1)))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: OH lone-pair arrow', 'tests/check-errors.sh', 'tests/test.typ: hydrogen-first HCl/HF lone-pair arrows']",
+      "image": "research/audit-current/S08.png",
+      "caption": "Verified current Typed-smiles output for S08",
+      "extra_images": []
+    },
+    {
+      "id": "S09",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Isolated H-first hydrides need the heavy-element glyph as their reference center. The renderer and reference code had diverged after label placement changed.",
+      "fix": "Shared element-glyph geometry centers hydride references, highlights and index markers on O/halogen, while virtual H references follow their own displayed glyphs.",
+      "remaining": [],
+      "repro": "#smiles(\"O\", scale: 2, show-indices: true, highlight(atom(0), include-hydrogens: false))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: hydrogen-first reference']",
+      "image": "research/audit-current/S09.png",
+      "caption": "The oxygen-only highlight and atom index are centered on the O glyph in H2O.",
+      "extra_images": []
+    },
+    {
+      "id": "S10",
+      "classification": "Compilation/indexing bugs; highlight default intended",
+      "resolution": "solved",
+      "reason": "The original helper-call crash was a bug, and a displayed stereo H also lacked an addressable index. Highlighting the H with its heteroatom follows the documented include-hydrogens: auto default.",
+      "fix": "Corrected the rotation helper and added addressable displayed stereo hydrogens without changing structural indices. Stereo H colors match skeleton H. Pass include-hydrogens: false to highlight phosphorus alone.",
+      "remaining": [],
+      "repro": "#smiles(\"C1C[P@H]2CCC1C2\", show-indices: true, highlight(atom(2)))",
+      "current_repro": "#smiles(\"C1C[P@H]2CCC1C2\", show-indices: true, highlight(atom(2), include-hydrogens: false))",
+      "verification": "['tests/test.typ: stereocentre highlights']",
+      "image": "research/audit-current/S10.png",
+      "caption": "Phosphorus-only highlight with a separate stereo H index; use include-hydrogens: false to leave H unshaded.",
+      "extra_images": []
+    },
+    {
+      "id": "S11",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Same-axis reverse arrows now occupy the next flow slot, while orthogonal explicit arrows retain their row/column wrap behavior.",
+      "fix": "Scheme placement separates arrow head direction from the logical position advance when both directions share an axis.",
+      "remaining": [],
+      "repro": "#reaction(ce(\"A\"), rxn-arrow(above: [a]), ce(\"B\"), rxn-arrow(dir: \"left\", above: [b]), ce(\"C\"))",
+      "current_repro": null,
+      "verification": "tests/test.typ: reverse arrow sequence and down-wrap/right-continuation sequence; research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S11.png",
+      "caption": "Verified current Typed-smiles output for S11",
+      "extra_images": []
+    },
+    {
+      "id": "S12",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Mechanism species and reaction arrows now advance along reaction(flow:)\u2019s axis, including default vertical arrows.",
+      "fix": "Canvas placement uses flow-axis extents and direction signs for species and arrows; orthogonal arrows retain their side slots and referenceable lifted species.",
+      "remaining": [],
+      "repro": "#reaction(flow: \"down\", mol(\"CCO\", arrow(from: bond(0, 0, 1), to: atom(1, 2))), rxn-arrow(above: [oxidation]), mol(\"CC=O\"))",
+      "current_repro": null,
+      "verification": "tests/test.typ: vertical mechanism case; research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S12.png",
+      "caption": "Verified current Typed-smiles output for S12",
+      "extra_images": []
+    },
+    {
+      "id": "S13",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Paired reagent labels need separate attachment regions along the cycle arc; splitting the labels around one midpoint created crossing side arrows.",
+      "fix": "Incoming reagents attach near the arc start and outgoing products near its end, with small bends following the local cycle travel direction.",
+      "remaining": [],
+      "repro": "#cycle(mol(\"CC(=O)O\"), step(label: [esterify], into: ce(\"EtOH\"), out: ce(\"H2O\")), mol(\"CC(=O)OCC\"), step(label: [hydrolysis], into: ce(\"H2O\"), out: ce(\"EtOH\")))",
+      "current_repro": null,
+      "verification": "tests/test.typ: paired into/out cycle step; research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S13.png",
+      "caption": "Incoming and outgoing reagents occupy different parts of the arc without crossing or reversal.",
+      "extra_images": []
+    },
+    {
+      "id": "S14",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Reaction grid columns now use measured natural item widths, so narrow containers no longer collapse the inter-item gaps around full-sized molecules.",
+      "fix": "Measure each grid column inside context and assign its maximum cell width; fit: \"width\" can still shrink the completed scheme.",
+      "remaining": [],
+      "repro": "#box(width: 230pt)[#reaction(mol(\"CCO\"), rxn-arrow(above: [oxidation]), mol(\"CC=O\"), rxn-arrow(above: [workup]), mol(\"CC(=O)O\"))]",
+      "current_repro": null,
+      "verification": "tests/test.typ and research/audit-schemes-evidence.typ: 230pt container case",
+      "image": "research/audit-current/S14.png",
+      "caption": "Verified current Typed-smiles output for S14",
+      "extra_images": []
+    },
+    {
+      "id": "S15",
+      "classification": "Documentation/example bug",
+      "resolution": "solved",
+      "reason": "Confirmed guide layout bug: unrestricted code-column width left no usable purpose column.",
+      "fix": "Bound reference table columns and wrap signatures at argument separators.",
+      "remaining": [],
+      "repro": "typst compile --root . docs/documentation.typ docs/documentation.pdf",
+      "current_repro": null,
+      "verification": "['guide compile and visual inspection']",
+      "image": "research/audit-current/S15-88.png",
+      "caption": "Verified guide layout and current API reference for S15",
+      "extra_images": [
+        "research/audit-current/S15-series-89.png"
+      ]
+    },
+    {
+      "id": "S16",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Unicode abbreviations render without walking UTF-8 bytes as character indices.",
+      "fix": "Abbreviation parsing iterates Unicode string clusters.",
+      "remaining": [],
+      "repro": "#smiles(\"C{NH\u2082}\")\n#smiles(\"C{CO\u2082H}\")\n#smiles(\"C{\u03b1Me}\")",
+      "current_repro": null,
+      "verification": "['tests/test.typ: NH\u2082, CO\u2082H, \u03b1Me']",
+      "image": "research/audit-current/S16.png",
+      "caption": "Verified current Typed-smiles output for S16",
+      "extra_images": []
+    },
+    {
+      "id": "S17",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Confirmed collision between separately placed charges and displayed lone pairs. Atom-centered placement is preferred whenever a clear position exists; the H side is only a fallback.",
+      "fix": "Charges first use a clear position beside the charged heavy atom. Displayed H/count labels and the actual drawn lone-pair directions participate in clearance; crowded cases fall back to the outside of the combined label. Drawing and measured bounds share this selection.",
+      "remaining": [],
+      "repro": "#smiles(\"C[OH+]C\", lone-pairs: \"dots\", scale: 4)",
+      "current_repro": null,
+      "verification": "tests/stacked-charge-placement.typ and appended charge-priority section: atom-first controls, crowded-label fallback, rotations, mirrors and measured bounds",
+      "image": "research/audit-current/S17.png",
+      "caption": "Current S17: atom-centered placement is preferred; the displayed lone pair requires the combined-label fallback in this example.",
+      "extra_images": []
+    },
+    {
+      "id": "S18",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Ring CH2 hydrogen collisions were a bug. Applying that outward-pair rule to collinear chain centers created a regression.",
+      "fix": "Straight-chain CH2 pairs are perpendicular to the heavy-atom axis and transform rigidly under rotation and mirrors; bent and cyclic centers retain their outward pair.",
+      "remaining": [],
+      "repro": "#smiles(\"OCCO\", show-h: \"skeleton\")\n#smiles(\"OCCO\", show-h: \"skeleton\", rotation: 45deg)\n#smiles(\"OCCO\", show-h: \"skeleton\", rotation: 45deg, mirror: \"horizontal\")\n#smiles(\"C1CCCCC1\", show-h: \"skeleton\")",
+      "current_repro": null,
+      "verification": "['tests/skeleton-hydrogen-rotation.typ', 'tests/test.typ: cyclohexane', 'tests/test.typ: skeleton hydrogen direction coverage']",
+      "image": "research/audit-current/S18.png",
+      "caption": "Perpendicular straight-chain hydrogens under rotation and reflection, with outward ring placement retained.",
+      "extra_images": []
+    },
+    {
+      "id": "S19",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "CNC and CCNCC N\u2013H labels use a free side when the two heavy-atom neighbors are collinear.",
+      "fix": "A perpendicular fallback replaces a zero-sum direction.",
+      "remaining": [],
+      "repro": "#smiles(\"CNC\", show-h: \"skeleton\")\n#smiles(\"CCNCC\", show-h: \"skeleton\")",
+      "current_repro": null,
+      "verification": "['tests/test.typ: linear amine', 'tests/test.typ: CNC and CCNCC']",
+      "image": "research/audit-current/S19.png",
+      "caption": "Verified current Typed-smiles output for S19",
+      "extra_images": []
+    },
+    {
+      "id": "S20",
+      "classification": "Mixed: labeled-H bugs / intended skeletal convention",
+      "resolution": "solved",
+      "reason": "Charged [CH2+] and isotopic [13CH3] carbons retain their bracket H labels. Neutral bracket carbon H remains hidden by default, including stereogenic [C@H], preserving ordinary skeletal notation; show-h all, per-atom show-h, and skeleton mode expose carbon hydrogens.",
+      "fix": "Show written H counts on charged/isotopic carbon labels and explicit show-h selections; preserve neutral skeletal carbon suppression and document that convention. Isotope prefixes are measured separately from the bare element so bonds, highlights and markers align with C through rotation and reflection.",
+      "remaining": [],
+      "repro": "#smiles(molecules.alanine, show-indices: true, highlight(atom(1)))\n#smiles(molecules.alanine, show-h: \"all\")\n#smiles(\"CC[CH2+]\")\n#smiles(\"[13CH3]C(=O)O\")",
+      "current_repro": null,
+      "verification": "['tests/test.typ: explicit carbon hydrogen visibility (alanine skeletal/show-all, charged carbon, isotope)', 'tests/test.typ: bracket carbon H', 'tests/skeleton-hydrogen-rotation.typ']",
+      "image": "research/audit-current/S20.png",
+      "caption": "Bracket-H conventions preserved; isotope C bonds align with the carbon glyph rather than the raised isotope prefix.",
+      "extra_images": []
+    },
+    {
+      "id": "S21",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "The Typst x normalization reversed the raw component placement, putting later dot-separated fragments first on the page.",
+      "fix": "Place raw disconnected components in reverse order so displayed writing order matches the SMILES.",
+      "remaining": [],
+      "repro": "#smiles(\"CC(=O)[O-].[Na+]\")",
+      "current_repro": null,
+      "verification": "['salt_fragments_are_disconnected_and_ordered', 'three_fragments']",
+      "image": "research/audit-current/S21.png",
+      "caption": "Verified current Typed-smiles output for S21",
+      "extra_images": []
+    },
+    {
+      "id": "S22",
+      "classification": "Reference and displayed-fragment behavior",
+      "resolution": "solved",
+      "reason": "Abbreviation removed virtual hydrogen identities and could shift a source reference onto a different hydrogen. Formula labels also exposed only their attachment badge.",
+      "fix": "Retain original hydrogen identities; expose representative C, O\u2082, and H fragments with stable indices and documented gaps. Skipped individual atoms require expanding the group.",
+      "remaining": [],
+      "repro": "#smiles(\"OC(=O)c1ccc(O)cc1\", abbreviate: \"CO2H\", show-indices: true, highlight(atom(10)))",
+      "current_repro": null,
+      "verification": "Rust source-hydrogen identity regression; fragment indices (1, 2, 4), O\u2082 bounds and four rotations; skipped-index diagnostic and full visual examples.",
+      "caption": "CO\u2082H fragments retain original indices; atom 10 selects the acid hydrogen.",
+      "image": "research/audit-current/S22.png",
+      "extra_images": []
+    },
+    {
+      "id": "S23",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Curly-arrowhead scale no longer receives the molecule transform twice.",
+      "fix": "Arrow head coordinates use the already-transformed molecular coordinate frame; stroke and dash scaling remain explicit.",
+      "remaining": [],
+      "repro": "#smiles(\"CC\", scale: 2, arrow(from: atom(0), to: atom(1), bend: none, head-length: 0.5, head-width: 0.3))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: arrowhead scale at 0.7\u00d7 and 1.8\u00d7']",
+      "image": "research/audit-current/S23.png",
+      "caption": "Verified current Typed-smiles output for S23",
+      "extra_images": []
+    },
+    {
+      "id": "S24",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Bond highlight offsets move both bond endpoints and the full capsule.",
+      "fix": "The offset is applied to both ends before constructing the bond highlight.",
+      "remaining": [],
+      "repro": "#smiles(\"CC(=O)NCC\", highlight(bond(1, 3, offset: (0, 0.6)), include-atoms: false))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: offset bond highlight']",
+      "image": "research/audit-current/S24.png",
+      "caption": "Verified current Typed-smiles output for S24",
+      "extra_images": []
+    },
+    {
+      "id": "S25",
+      "classification": "Bug",
+      "resolution": "partial",
+      "reason": "The custom-label arrow endpoint now uses the selected anchor glyph and its asymmetric extent. The finding also covers trimming the adjacent bond into the label, which this patch did not establish as fixed.",
+      "fix": "Arrow reference ray intersection accounts for the label anchor offset.",
+      "remaining": [
+        "Bond trimming into anchored custom labels was not separately changed or verified."
+      ],
+      "repro": "#smiles(\"C{>PPh3|P|lp=1}CC\", scale: 2, arrow(from: atom(0), to: atom(1), bend: none))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: anchored label arrow']",
+      "image": "research/audit-current/S25.png",
+      "caption": "Verified current Typed-smiles output for S25",
+      "extra_images": []
+    },
+    {
+      "id": "S26",
+      "classification": "Bug",
+      "resolution": "open",
+      "reason": "Label-side bond trimming and reference attachments improve endpoint placement, but the conjugated C=C tail side is not yet direction-aware for every bend.",
+      "fix": "No direction-aware curved bond-tail fix is claimed; retain the original case for further work.",
+      "remaining": [
+        "Direction-aware curved bond-tail placement; current visual case remains a partial improvement."
+      ],
+      "repro": "#smiles(\"C=CC=O\", scale: 1.6, arrow(from: bond(0, 1), to: atom(3), bend: \"left\"))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: conjugated bond source']",
+      "extra_images": []
+    },
+    {
+      "id": "S27",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Implicit-H references in skeleton mode use the drawn skeleton H position.",
+      "fix": "The H fragment lookup finds the matching virtual child ordinal and uses the shared skeleton direction calculation.",
+      "remaining": [],
+      "repro": "#smiles(\"CCO\", show-h: \"skeleton\", show-indices: true, highlight(atom(3)))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: skeleton H reference']",
+      "image": "research/audit-current/S27.png",
+      "caption": "Verified current Typed-smiles output for S27",
+      "extra_images": []
+    },
+    {
+      "id": "S28",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "rotation: \"auto\" now follows the cycle arc tangent in Typst's screen rotation convention and applies upright-angle correction.",
+      "fix": "Negate the mathematical tangent angle before upright-angle correction; explicit angle values remain unchanged. Arc endpoints additionally retreat from measured rendered bounds, including asymmetric OH labels, with arrowhead clearance.",
+      "remaining": [],
+      "repro": "#cycle(mol(\"CCO\"), step(label: [top-left], rotation: \"auto\"), mol(\"CC=O\"), step(label: [top-right], rotation: \"auto\"), mol(\"CC(=O)O\"), step(label: [bottom-right], rotation: \"auto\"), mol(\"CCOC\"), step(label: [bottom-left], rotation: \"auto\"))",
+      "current_repro": null,
+      "verification": "tests/test.typ: clockwise and counterclockwise diagonal cycle render plus direct tangent-angle assertions; research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S28.png",
+      "caption": "Verified current Typed-smiles output for S28",
+      "extra_images": []
+    },
+    {
+      "id": "S29",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Mechanism and cycle molecule glyphs and bond strokes match the ordinary scheme path for identical options. Reaction and cycle scale now uniformly scale geometry, text, and strokes; the cycle also honors mol(scale:).",
+      "fix": "Resolve effective bond length and physical appearance values once. Reaction measurement uses those physical font/stroke sizes and the total coordinate factor; drawing leaves text/stroke values uncompensated. Cycle draws on a 30pt base canvas and scales the finished canvas uniformly.",
+      "remaining": [],
+      "repro": "#let m = mol(\"CO\", style: \"acs\", bond-length: 0.65, scale: 0.7)\n#reaction(m, rxn-arrow(), m)\n#reaction(m, rxn-arrow(), m, arrow(from: atom(0, 0), to: atom(1, 1)))\n#cycle(scale: 2, radius: 2, m, step(), m, step())",
+      "current_repro": null,
+      "verification": "tests/test.typ: explicit ACS sizing across scheme/mechanism/cycle, scale 0.7 with bond-length 0.65, plus scale 2; PDF text boxes are 10.500\u00d76.439pt at scale 1 and 21.000\u00d712.879pt at scale 2 in all three paths. research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S29.png",
+      "caption": "Verified current Typed-smiles output for S29",
+      "extra_images": []
+    },
+    {
+      "id": "S30",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Plain string reaction items in scheme mode are normalized through mol() and draw as SMILES structures.",
+      "fix": "Convert raw strings after scheme/mechanism mode detection so mechanism species indexing remains unchanged.",
+      "remaining": [],
+      "repro": "#reaction(\"CCO\", rxn-arrow(above: [oxidation]), \"CC=O\")",
+      "current_repro": null,
+      "verification": "tests/test.typ and research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S30.png",
+      "caption": "Verified current Typed-smiles output for S30",
+      "extra_images": []
+    },
+    {
+      "id": "S31",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Labels for species lifted from rxn-arrow(above:) remain below the molecule as documented, while reserved bounds keep the full caption clear of the arrow shaft.",
+      "fix": "Measure caption height and reserve it below the bare molecule bounds for all captioned species; place the caption from the saved molecular bottom bound.",
+      "remaining": [],
+      "repro": "#reaction(mol(\"CCO\", arrow(from: bond(0, 0, 1), to: atom(0, 2))), rxn-arrow(above: mol(\"CC=O\", label: [acetaldehyde])), mol(\"CC(=O)O\"))",
+      "current_repro": null,
+      "verification": "tests/test.typ: lifted caption remains below molecule and above arrow; research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S31.png",
+      "caption": "Verified current Typed-smiles output for S31",
+      "extra_images": []
+    },
+    {
+      "id": "S32",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Mechanism species bounds now include caption width, so the canvas cursor reserves room for long labels.",
+      "fix": "Label half-width extends each species\u2019 horizontal bounds for both SMILES and opaque content.",
+      "remaining": [],
+      "repro": "#reaction(mol(\"CC\", label: [first long label text]), mol(\"CC\", label: [second long label text]), arrow(from: atom(0, 0), to: atom(1, 0)))",
+      "current_repro": null,
+      "verification": "tests/test.typ and research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S32.png",
+      "caption": "Verified current Typed-smiles output for S32",
+      "extra_images": []
+    },
+    {
+      "id": "S33",
+      "classification": "Design limitation",
+      "resolution": "deferred",
+      "reason": "Cycle side branches accept arbitrary opaque content, including nested reactions; the cycle has no canonical way to identify a particular downstream species within that block. The current side-edge midpoint is the generic anchor.",
+      "fix": "Keep the generic edge-midpoint anchor for opaque content; targeting a nested species requires an explicit API.",
+      "remaining": [
+        "Targeting a particular molecule inside arbitrary nested content requires a new explicit API or structured branch item."
+      ],
+      "repro": "#cycle(mol(\"CC(=O)O\"), step(out: reaction(mol(\"CC=O\"), rxn-arrow(), mol(\"CC(=O)O\"))), mol(\"CCOC(=O)C\"), step())",
+      "current_repro": null,
+      "verification": "Existing nested-reaction branch visual cases remain in tests/test.typ.",
+      "extra_images": []
+    },
+    {
+      "id": "S34",
+      "classification": "Intended behavior",
+      "resolution": "intended",
+      "reason": "RDKit default and CoordGen both show cage bond crossings for the cited adamantane perspective; a crossing is not itself a topology error.",
+      "fix": "No change; retain accepted perspective depiction.",
+      "remaining": [
+        "No semantic stereochemistry is inferred from the planar perspective."
+      ],
+      "repro": "#smiles(\"C1C2CC3CC1CC(C2)C3\", scale: 2.2, show-indices: true)",
+      "current_repro": null,
+      "verification": "['conformance_corpus_matches_reviewed_expectations']",
+      "extra_images": []
+    },
+    {
+      "id": "S35",
+      "classification": "Bug",
+      "resolution": "open",
+      "reason": "The 14-membered macrocycle places an ethyl substituent inside the ring across ring bonds; RDKit CoordGen places it outside.",
+      "fix": "Deferred; requires substitution-aware macrocycle outline scoring rather than a local angle tweak.",
+      "remaining": [
+        "Account for substituent size and collision when choosing macrocycle lattice outlines."
+      ],
+      "repro": "#smiles(\"CCC1OC(=O)C(C)C(O)C(C)CC(C)(O)C(O)C(C)C(=O)C(C)C(O)C1(C)O\")",
+      "current_repro": null,
+      "verification": "[]",
+      "extra_images": []
+    },
+    {
+      "id": "S36",
+      "classification": "Bug",
+      "resolution": "open",
+      "reason": "Gem-dimethyl bridge substituents in bridged bicyclic layouts collide with ring atoms; RDKit gives a cleaner drawing.",
+      "fix": "Deferred; bridge placement needs substituent-aware ring-system layout.",
+      "remaining": [
+        "Include bridge substituent geometry in ring-system placement and collision checks."
+      ],
+      "repro": "#smiles(\"CC1(C)C2CCCC1CCC2\", scale: 2, show-indices: true)",
+      "current_repro": null,
+      "verification": "[]",
+      "extra_images": []
+    },
+    {
+      "id": "S37",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Isolated bracket carbon atoms always receive a visible atom label; disconnected isolated carbons are also drawn.",
+      "fix": "The label predicate recognizes a forced isolated carbon even when its computed hydrogen count is zero.",
+      "remaining": [],
+      "repro": "#smiles(\"[C]\")\n#smiles(\"[C].[C]\")",
+      "current_repro": null,
+      "verification": "['tests/test.typ: lone atom labels']",
+      "image": "research/audit-current/S37.png",
+      "caption": "Verified current Typed-smiles output for S37",
+      "extra_images": []
+    },
+    {
+      "id": "S38",
+      "classification": "Documentation/example bug",
+      "resolution": "solved",
+      "reason": "Confirmed documentation defects: oversize example, incorrect bromination product, and arrow out of an electron-deficient carbon.",
+      "fix": "Use a full-width mol example, compact highlight examples, vicinal dibromide product BrCCBr, and nucleophile-to-carbon arrows.",
+      "remaining": [],
+      "repro": "#reaction(mol(\"C=C\"), rxn-arrow(above: ce(\"Br2\")), mol(\"BrC(Br)C\"))",
+      "current_repro": "#reaction(mol(\"C=C\"), rxn-arrow(above: ce(\"Br2\")), mol(\"BrCCBr\"))",
+      "verification": "['guide compile and visual inspection']",
+      "image": "research/audit-current/S38.png",
+      "caption": "Verified current Typed-smiles output for S38",
+      "extra_images": []
+    },
+    {
+      "id": "S39",
+      "classification": "Documentation/example bug",
+      "resolution": "solved",
+      "reason": "Confirmed mismatch between the README source and its catalytic-cycle figure.",
+      "fix": "README now gives the source used for the figure.",
+      "remaining": [],
+      "repro": "#cycle(radius: 4.3, mol(ce(\"RhCl(PPh3)3\")), step(label: ce(\"-PPh3 + S\")), mol(ce(\"RhCl(PPh3)2S\")), step(label: [oxidative addition], into: ce(\"H2\")))",
+      "current_repro": "#align(center)[\n  #reaction(\n    flow : \"down\",\n    mol(smiles(\"{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)(!w{>PPh3})\"), offset: (0.5, 0)),\n    rxn-arrow(above : [#ce(\"PPh3\") solvent (S)]),\n    cycle(\n      radius : 6.0,\n      mol(smiles(\"{Rh}(!w{S | S})(!h{>PPh3})(!hCl)(!w{>PPh3})\")),\n      step(label : [#text(size : 6pt)[oxidative addition]], label-offset : (0.3, 0.5), into : [#ce(\"H2\")], rotation : \"auto\", merge : true),\n      mol(smiles(\"{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!w{H})\")),\n      step(into : [#smiles(\"C=C\")], merge : true),\n      mol(smiles(\"{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({})({H})({H})\")),\n      step(label : [#text(size : 6pt)[migratory insertion]], label-offset: (0, 0.5), rotation : \"auto\"),\n      mol(smiles(\"{Rh}(!w{>PPh3})(!h{>PPh3})(!hCl)({S | S})({H})(!wCC{H})\", rotation : -90deg)),\n      step(label : [#text(size : 6pt)[reductive elimination]], label-offset:  (-0.5, 0.5), out : [#smiles(\"{H}CC{H}\")], merge:true, rotation : \"auto\")\n    )\n  )\n]\n",
+      "verification": "['compile gallery asset']",
+      "image": "assets/readme/cycle-wilkinson.png",
+      "caption": "The README now gives the source used for this regenerated catalytic-cycle figure.",
+      "extra_images": []
+    },
+    {
+      "id": "S40",
+      "classification": "Documentation/example bug",
+      "resolution": "solved",
+      "reason": "Confirmed example lacks a required CeTZ import.",
+      "fix": "Add the CeTZ import in the README example.",
+      "remaining": [],
+      "repro": "#align(center, context cetz.canvas(length: 30pt, { smiles-cetz(\"CO\") }))",
+      "current_repro": "#import \"@preview/cetz:0.5.2\"\n#align(center, context cetz.canvas(length: 30pt, { smiles-cetz(\"CO\") }))",
+      "verification": "['README example compile']",
+      "image": "research/audit-current/S40.png",
+      "caption": "Verified current Typed-smiles output for S40",
+      "extra_images": []
+    },
+    {
+      "id": "S41",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Invalid species references in smiles() now receive a user-facing species listing rather than an internal missing-key panic.",
+      "fix": "smiles() placed-species records include `source` and measured rotated bounds.",
+      "remaining": [],
+      "repro": "#smiles(\"CCO\", arrow(from: atom(1, 0), to: atom(2)))",
+      "current_repro": null,
+      "verification": "['tests/check-errors.sh: smiles-reference-wrong-species']",
+      "diagnostic": "\"typed-smiles: smiles annotation 0 from reference species index is invalid: 1 does not exist. The only valid index is 0. Species by index: 0 = mol(\\\"CCO\\\"). Species indices count mol() and visible content items in written order; rxn-arrow() itself does not count as a species.\"",
+      "image": "research/audit-current/S41.png",
+      "caption": "Verified diagnostic for S41",
+      "extra_images": []
+    },
+    {
+      "id": "S42",
+      "classification": "Documentation bug; accepted precision limit",
+      "resolution": "solved",
+      "reason": "The incorrect IUPAC-weight promise has been replaced with the rounded-table behavior actually provided.",
+      "fix": "README and guide accurately describe the rounded weights; higher-precision atomic weights are a separate enhancement.",
+      "remaining": [],
+      "repro": "#mol-weight(\"[Li+].[Cl-]\")",
+      "current_repro": null,
+      "verification": "['mol_weight_pubchem_reference_set', 'mol_weight_sodium_acetate_dot_fragments']",
+      "image": "research/audit-current/S42.png",
+      "caption": "Documented rounded-table molecular weight result.",
+      "extra_images": []
+    },
+    {
+      "id": "S43",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "smiles-cetz() rejects positional annotations with a descriptive diagnostic instead of silently dropping them.",
+      "fix": "Added validation at the public smiles-cetz boundary.",
+      "remaining": [],
+      "repro": "#context cetz.canvas(smiles-cetz(\"CO\", name: \"a\", arrow(from: atom(0), to: atom(1))))",
+      "current_repro": null,
+      "verification": "['tests/check-errors.sh: positional-smiles-cetz-annotation']",
+      "diagnostic": "\"typed-smiles: smiles-cetz positional options is invalid: received 1 positional annotation(s). Pass drawing options by name; arrow() and highlight() annotations are supported by smiles().\"",
+      "image": "research/audit-current/S43.png",
+      "caption": "Verified diagnostic for S43",
+      "extra_images": []
+    },
+    {
+      "id": "S44",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "SMARTS [as] was parsed as aromatic-any followed by sulfur, so it could match thiophene sulfur rather than aromatic arsenic.",
+      "fix": "Recognize lowercase two-letter aromatic element symbols before the generic aromatic-any atom token.",
+      "remaining": [],
+      "repro": "#raw(repr(substructure-matches(\"c1ccsc1\", \"[as]\")))",
+      "current_repro": null,
+      "verification": "['aromatic_flags_survive_kekulization', 'pubchem_corpus_agrees_with_independent_match_sets']",
+      "image": "research/audit-current/S44.png",
+      "caption": "Verified current Typed-smiles output for S44",
+      "extra_images": []
+    },
+    {
+      "id": "S45",
+      "classification": "Bug",
+      "resolution": "open",
+      "reason": "Curl reconstruction loses preceding-chain turn context across an abbreviated group and rejects COC!cC with OMe abbreviation.",
+      "fix": "Deferred; requires preserving expanded-graph turn history through contraction.",
+      "remaining": [
+        "Retain source graph context for !c validation after abbreviation contraction."
+      ],
+      "repro": "#smiles(\"COC!cC\", abbreviate: \"OMe\")",
+      "current_repro": null,
+      "verification": "[]",
+      "extra_images": []
+    },
+    {
+      "id": "S46",
+      "classification": "Intended behavior",
+      "resolution": "intended",
+      "reason": "The documentation explicitly defines a one-species cycle as drawing that species alone. Into/out bends use the same sign in their own travel frame, which gives opposite absolute curvature because the arrows travel in opposite directions.",
+      "fix": "No code change.",
+      "remaining": [],
+      "repro": "#cycle(mol(\"CCO\"), step(label: [self]))",
+      "current_repro": null,
+      "verification": "Checked docs/documentation.typ around the one-species cycle description and compared incoming/outgoing control-point geometry.",
+      "extra_images": []
+    },
+    {
+      "id": "S47",
+      "classification": "Known rendering/resource limitation",
+      "resolution": "deferred",
+      "reason": "The prismane and bridged cage depiction can distort lengths or cross depending on planar versus perspective layout; RDKit default and CoordGen differ, showing this is a 2D depiction-method limitation rather than a parser defect.",
+      "fix": "No change; classify as a constrained 2D ring-template/layout limitation.",
+      "remaining": [
+        "Improve cage templates if a more consistent perspective/planar rendering target is selected."
+      ],
+      "repro": "#smiles(\"C12C3C1C1C2C31\", show-indices: true)",
+      "current_repro": null,
+      "verification": "['cages_without_flat_drawings_use_templates', 'complex_ring_layouts_are_deterministic']",
+      "extra_images": []
+    },
+    {
+      "id": "S48",
+      "classification": "Bug",
+      "resolution": "partial",
+      "reason": "Multi-character atom labels need width-aware lone-pair placement. The blanket spacing increase was rejected. Curved-arrow path avoidance and the estradiol wedge/H overlap remain open.",
+      "fix": "Restored original lone-pair distances for one-character labels. Cl/Br positions account for their measured glyph edges, with lp() references using the same placement.",
+      "remaining": [
+        "Curved-arrow path avoidance across arbitrary label and bond geometry; estradiol ring-fusion stereochemical-H/wedge clearance."
+      ],
+      "repro": "#smiles(\"CF\", lone-pairs: \"dots\")\n#smiles(\"CCl\", lone-pairs: \"dots\")\n#smiles(\"CF\", lone-pairs: \"lines\")\n#smiles(\"CCl\", lone-pairs: \"lines\")",
+      "current_repro": null,
+      "verification": "['tests/test.typ: halide lone pairs', 'tests/test.typ: oxygen arrow']",
+      "image": "research/audit-current/S48.png",
+      "caption": "Original compact F spacing retained; Cl lone pairs use measured label width in dots and lines modes.",
+      "extra_images": []
+    },
+    {
+      "id": "S49",
+      "classification": "Bug",
+      "resolution": "open",
+      "reason": "Charge superscript placement in the cited crowded ring/multicharge examples is not conclusively resolved by this grouped patch.",
+      "fix": "No targeted charge-layout change made without a reproducible shared placement rule.",
+      "remaining": [
+        "Verify [nH+]1ccccc1, [O-][Cl+3]([O-])([O-])[O-], and isolated [O-] at review scale."
+      ],
+      "repro": null,
+      "current_repro": null,
+      "verification": "[]",
+      "extra_images": []
+    },
+    {
+      "id": "S50",
+      "classification": "Rendering preference / restored behavior",
+      "resolution": "reverted",
+      "reason": "Centered index overlays identify the actual atom and H glyph positions. Offsetting the badges improves legibility but weakens their direct spatial correspondence; the centered convention is preferred.",
+      "fix": "Reverted the outward badge displacement. Indices are centered on the atom or H glyph, including inline hydrogens.",
+      "remaining": [],
+      "repro": "#smiles(molecules.alanine, scale: 1.5, show-indices: true, highlight(atom(6)))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: heteroatom index badge placement']",
+      "image": "research/audit-current/S50.png",
+      "caption": "Restored centered index overlays on the atom and H glyphs.",
+      "extra_images": []
+    },
+    {
+      "id": "S51",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Lone-pair dots use skeleton H directions as occupied space in the same helper as arrow references.",
+      "fix": "Shared inline pair geometry now accepts skeleton H directions.",
+      "remaining": [],
+      "repro": "#smiles(\"N\", scale: 4, show-h: \"skeleton\", lone-pairs: \"dots\")",
+      "current_repro": null,
+      "verification": "['tests/test.typ: ring amine pair', 'tests/test.typ: nitrogen pair in skeleton mode']",
+      "image": "research/audit-current/S51.png",
+      "caption": "Verified current Typed-smiles output for S51",
+      "extra_images": []
+    },
+    {
+      "id": "S52",
+      "classification": "Rendering tradeoff / restored behavior",
+      "resolution": "reverted",
+      "reason": "Tiny gaps on thick bond strokes are accepted in preference to the extended junctions and continuous-stroke change.",
+      "fix": "Reverted the junction-overlap increase and same-color continuous-stroke shortcut; restored the prior thick-bond rendering.",
+      "remaining": [],
+      "repro": "#smiles(\"c1ccccc1\", bond-stroke: 4pt, scale: 3)",
+      "current_repro": null,
+      "verification": "['tests/test.typ: thick junction']",
+      "image": "research/audit-current/S52.png",
+      "caption": "Restored thick-bond strokes; the small gaps are intentionally retained.",
+      "extra_images": []
+    },
+    {
+      "id": "S53",
+      "classification": "Layout bug / unresolved styling design",
+      "resolution": "open",
+      "reason": "The annotation-placement change was reverted after the skeleton-H example traded one collision for another. The original audit also bundles opacity behavior for mechanism annotations, whose intended behavior is unresolved.",
+      "fix": "An attempted annotation-placement change was reverted because it traded one collision for another; no solved claim.",
+      "remaining": [
+        "Skeleton annotation clearance remains open.",
+        "Decide whether molecular opacity should also apply to mechanism overlay colors.",
+        "Capsule-highlight overhang requires a separate reproducible bounds check."
+      ],
+      "repro": "#smiles(\"CC(=O)NC\", show-h: \"skeleton\", atom-annotations: ((3, [skel]),))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: annotation stem clearance']",
+      "extra_images": []
+    },
+    {
+      "id": "S54",
+      "classification": "Unconfirmed",
+      "resolution": "unconfirmed",
+      "reason": "The audit could not reproduce the smaller-gap screenshot difference, so no rendering change was justified.",
+      "fix": "No bounds change made specifically for this unconfirmed observation.",
+      "remaining": [
+        "Revisit only if an actual collision or gap regression can be reproduced."
+      ],
+      "repro": null,
+      "current_repro": null,
+      "verification": "[]",
+      "extra_images": []
+    },
+    {
+      "id": "S55",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Displaced brackets and rotated species bounds are corrected; atom arrow endpoints now also clear inline OH/NH\u2082 and hydrogen-count fragments.",
+      "fix": "Bracket extents follow displaced species, species references use measured rotated bounds, and atom arrows clear complete inline hydrogen labels from either side.",
+      "remaining": [],
+      "repro": "#reaction(brackets(mol(\"CCO\", offset: (0, 2)), sup: [\u2021]), rxn-arrow(), mol(\"CC=O\"))\n#v(1em)\n#reaction(mol(\"CCO\", rotation: 90deg), rxn-arrow(), mol(\"CC=O\"), arrow(from: species(0), to: species(1), bend: none))",
+      "current_repro": null,
+      "verification": "Inline-hydrogen endpoint assertions across OH, NH\u2082, stacked NH\u2082\u207a, isolated H\u2082O and four rotations; direct H\u2082 reference; displaced-bracket and rotated-species reproductions.",
+      "image": "research/audit-current/S55.png",
+      "caption": "Verified current Typed-smiles output for S55",
+      "extra_images": [
+        "research/audit-current/S55-inline-H.png"
+      ],
+      "extra_repro": "#import \"../src/lib.typ\": smiles, atom, arrow\n#set page(width: 24cm, height: auto, margin: 1cm)\n#set text(font: \"New Computer Modern\", size: 11pt)\n= Arrowheads clear inline hydrogen labels\n#grid(columns: (1fr, 1fr), gutter: 20pt,\n  [*OH from the H side* \\ #smiles(\"CCO\", scale: 1.6, arrow(from: atom(0, offset: (4, 0)), to: atom(2), bend: none))],\n  [*NH\u2082 from the H side* \\ #smiles(\"CCN\", scale: 1.6, arrow(from: atom(0, offset: (4, 0)), to: atom(2), bend: none))],\n  [*Reversed OH* \\ #smiles(\"CCO\", rotation: 180deg, scale: 1.6, arrow(from: atom(0, offset: (-4, 0)), to: atom(2), bend: none))],\n  [*Rotated OH* \\ #smiles(\"CCO\", rotation: 90deg, scale: 1.6, arrow(from: atom(0, offset: (0, 4)), to: atom(2), bend: none))],\n  [*Direct NH\u2082 hydrogen reference* \\ #smiles(\"CCN\", scale: 1.6, arrow(from: atom(0, offset: (4, 0)), to: atom(3), bend: none))],\n)\n"
+    },
+    {
+      "id": "S56",
+      "classification": "Bug",
+      "resolution": "solved",
+      "reason": "Lone carbon formulas must share one element-glyph center between rendering and references.",
+      "fix": "Methane and isotope-carbon labels use the same bare C glyph center for rendering, references, index markers and highlights.",
+      "remaining": [],
+      "repro": "#smiles(\"C\", scale: 2, show-indices: true, highlight(atom(0)))",
+      "current_repro": null,
+      "verification": "['tests/test.typ: methane reference']",
+      "image": "research/audit-current/S56.png",
+      "caption": "Methane highlight and index centered on the actual C glyph.",
+      "extra_images": []
+    },
+    {
+      "id": "S57",
+      "classification": "Rendering and documentation/example bugs",
+      "resolution": "partial",
+      "reason": "Direct selection of a virtual hydrogen-count label used an atom-sized disk that failed to cover its subscript. Several earlier captions and legacy test layouts were also incorrect.",
+      "fix": "Measure and highlight the whole displayed H/count fragment when selected directly, including the subscript. Correct nitro code caption, rotated-label wording, methylpyridine/spiro[5.5] labels, protected-DOPA naming, and amine-H caption.",
+      "remaining": [
+        "Not every cramped/split legacy test panel has been redesigned."
+      ],
+      "repro": "#smiles(\"N[C@@H](C)C(=O)O\", show-indices: true, highlight(atom(6)))",
+      "current_repro": null,
+      "verification": "Hydrogen-count highlight geometry assertions and appended visual cases; S57 reproduction and H\u2082/H\u2083/H\u2084 controls under transforms.",
+      "caption": "Index 6 highlights the entire displayed amine H\u2082 fragment, including its subscript.",
+      "image": "research/audit-current/S57.png",
+      "extra_images": []
+    },
+    {
+      "id": "S58",
+      "classification": "Bug",
+      "resolution": "partial",
+      "reason": "Explicit hydrogen folding used saturating arithmetic and silently changed composition above 255; the attempted 256th hydrogen now errors clearly.",
+      "fix": "Use checked hydrogen-count accumulation and return a descriptive maximum-count diagnostic.",
+      "remaining": [
+        "Recursive kekulization can still exhaust the stack on extremely large aromatic rings; C(.C)C branch-dot acceptance is not addressed."
+      ],
+      "repro": "#mol-formula(\"C\" + range(300).map(_ => \"([H])\").join(\"\"))",
+      "current_repro": "#mol-formula(\"C\" + range(300).map(_ => \"([H])\").join(\"\"))",
+      "verification": "['folded_hydrogen_count_overflow_is_reported']",
+      "diagnostic": "error: plugin errored with: invalid SMILES \"C([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H]) \u2026 H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])([H])\": explicit hydrogen count for atom at character 1 exceeds the supported maximum of 255; use a smaller hydrogen count",
+      "image": "research/audit-current/S58.png",
+      "caption": "Verified diagnostic for S58",
+      "extra_images": []
+    },
+    {
+      "id": "S59",
+      "classification": "Test defects; remaining audit claims not confirmed",
+      "resolution": "solved",
+      "reason": "Confirmed folded-hydrogen stereo and composition assertions are corrected. Conformance intentionally compares layout problem categories, with a clearance floor for crowded fixtures; the pinane test correctly excludes substituted bridge atom 7 from the center.",
+      "fix": "Tests select the tetrahedral center and verify hydrogen counts plus CH\u2082Cl\u2082 composition. Category-based conformance checks and the pinane center check are valid as written.",
+      "remaining": [],
+      "repro": "Rust regression assertions for F[C@](Cl)([H])Br versus F[C@@H](Cl)Br and ClC([H])Cl.",
+      "current_repro": null,
+      "verification": "folded_hydrogens_keep_the_written_configuration; folded_hydrogens_drop_from_neighbor_ordering; pinane_puts_the_substituted_bridge_on_the_outline; conformance_corpus_matches_reviewed_expectations.",
+      "extra_images": []
+    },
+    {
+      "id": "S60",
+      "classification": "Bug",
+      "resolution": "partial",
+      "reason": "Typst theme/style/color/mirror argument errors now name the function, value, accepted inputs, and correction. Plugin parse/charge/backslash diagnostics are handled by the Rust implementation.",
+      "fix": "Added shared Typst diagnostics at the relevant public validation boundaries.",
+      "remaining": [
+        "Rust malformed-input categories, source positions, and escaped-backslash diagnostics remain open."
+      ],
+      "repro": "#smiles(\"CCO\", theme: \"x\")",
+      "current_repro": null,
+      "verification": "['tests/check-errors.sh: invalid-theme, invalid-style, invalid-color-type, invalid-mirror']",
+      "diagnostic": "\"typed-smiles: smiles theme is invalid: unsupported value \\\"x\\\". Use auto, \\\"light\\\", or \\\"dark\\\".\"",
+      "image": "research/audit-current/S60.png",
+      "caption": "Verified diagnostic for S60",
+      "extra_images": []
+    },
+    {
+      "id": "S61",
+      "classification": "Tooling defects; broader coverage is an enhancement",
+      "resolution": "solved",
+      "reason": "Confirmed success-banner, custom-target build-path and ignored-file defects are corrected. Adding every possible invalid-option probe is broader coverage work, not an unresolved demonstrated defect.",
+      "fix": "Success prints after the full suite; Cargo metadata determines build paths; temporary files are ignored; additional negative probes exercise supported public validation.",
+      "remaining": [],
+      "repro": "CARGO_TARGET_DIR=<custom directory> ./build.sh",
+      "current_repro": null,
+      "verification": "Custom CARGO_TARGET_DIR build, shell/Python syntax and complete editor-visible validation suite.",
+      "extra_images": []
+    },
+    {
+      "id": "S62",
+      "classification": "Documentation/example bug",
+      "resolution": "solved",
+      "reason": "The cited signature, foreground, stereo-token, curl and parser/dependency claims have been corrected. Local agent-guide signatures and current abbreviation-reference doc comments are now synchronized too.",
+      "fix": "Documentation, README, AGENTS.md, CLAUDE.md and API comments describe the current signature, local parser, foreground override, numbered stereo tokens and supported curl syntax.",
+      "remaining": [],
+      "repro": "#smiles(\"CO\", color: false, fg: maroon)",
+      "current_repro": "#smiles(\"CCO\", color: false, fg: maroon)",
+      "verification": "Current guide signature compared with molecule API; cited stale claims searched; guide compilation and monochrome reproduction.",
+      "image": "research/audit-current/S62.png",
+      "caption": "color: false uses the supplied maroon foreground; the documentation now describes that behavior.",
+      "extra_images": [
+        "research/audit-current/S62-08.png"
+      ]
+    },
+    {
+      "id": "S63",
+      "classification": "Permissive chemistry design / resource limitation",
+      "resolution": "deferred",
+      "reason": "This renderer intentionally accepts syntactically valid graphs without a full chemistry-valence validator. Extremely large molecules also expose genuine performance/resource limits; no broad validation or performance redesign is included.",
+      "fix": "No broad valence validation added.",
+      "remaining": [
+        "Define supported valence policy and diagnostics; benchmark and bound very large aromatic inputs."
+      ],
+      "repro": "#smiles(\"C(C)(C)(C)(C)C\")",
+      "current_repro": null,
+      "verification": "['quadruple_bond_counts_toward_valence']",
+      "extra_images": []
+    },
+    {
+      "id": "S64",
+      "classification": "Mixed: sizing bugs / intended shared scale / housekeeping",
+      "resolution": "solved",
+      "reason": "Content offsets and inline preset sizing were bugs. A molecule-grid deliberately enforces one shared bond length, overriding per-item preset lengths. Unused code is a maintenance observation, not evidence of incorrect output.",
+      "fix": "Apply opaque-content grid offsets, use preset length for inline fitting, and attach module/function documentation to the right owners.",
+      "remaining": [
+        "Optional unused-code cleanup is not classified as a functional bug."
+      ],
+      "repro": "#grid(columns: (1fr, 1fr), gutter: 1em, align: center, [#molecule-grid(mol([H\u2082O], offset: (1, 0)), columns: 1)], [#smiles-inline(\"CCO\", style: \"acs\")])",
+      "current_repro": null,
+      "verification": "tests/test.typ and research/audit-schemes-evidence.typ",
+      "image": "research/audit-current/S64.png",
+      "caption": "Verified current Typed-smiles output for S64",
+      "extra_images": []
+    }
+  ],
+  "charge_placement_review": {
+    "cases": 24,
+    "source": "research/audit-charge-placement-2026-10-12.typ",
+    "method": "research/audit-comparisons/charge-placement-method.json",
+    "selected": "atom-first when a clear slot exists; combined-label fallback only when crowded"
+  },
+  "charge_rotation_sweep": {
+    "steps": 24,
+    "increment_degrees": 15,
+    "source": "tests/charge-rotation-sweep.typ",
+    "image": "research/audit-current/charge-rotation-sweep.png",
+    "renderer_changed": false,
+    "without_pairs_source": "tests/charge-rotation-sweep-without-pairs.typ",
+    "without_pairs_image": "research/audit-current/charge-rotation-sweep-without-pairs.png"
+  },
+  "charged_hydrogen_count_rotation_sweeps": {
+    "source": "tests/charged-hydrogen-count-rotation-sweeps.typ",
+    "steps_per_case": 24,
+    "increment_degrees": 15,
+    "renderer_changed": false,
+    "cases": [
+      {
+        "smiles": "C[NH2+]C",
+        "lone_pairs": 0,
+        "image": "research/audit-current/charge-rotation-ammonium.png"
+      },
+      {
+        "smiles": "C[ClH2+]C",
+        "lone_pairs": 1,
+        "image": "research/audit-current/charge-rotation-chlorine.png",
+        "note": "Hypothetical hypervalent stress case; parser acceptance does not establish chemical stability."
+      },
+      {
+        "smiles": "C[SeH2+]",
+        "lone_pairs": 1,
+        "image": "research/audit-current/charge-rotation-selenium.png"
+      }
+    ]
+  },
+  "double_charge_rotation_sweeps": {
+    "source": "tests/double-charge-rotation-sweeps.typ",
+    "steps_per_case": 24,
+    "increment_degrees": 15,
+    "renderer_changed": false,
+    "cases": [
+      {
+        "smiles": "C[NH+2]C",
+        "charge": 2,
+        "hydrogen_count": 1,
+        "lone_pairs": 0,
+        "image": "research/audit-current/charge-rotation-nitrogen-2plus.png"
+      },
+      {
+        "smiles": "C[ClH+2]C",
+        "charge": 2,
+        "hydrogen_count": 1,
+        "lone_pairs": 1,
+        "image": "research/audit-current/charge-rotation-chlorine-2plus.png"
+      }
+    ]
+  }
+}

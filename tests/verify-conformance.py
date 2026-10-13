@@ -39,7 +39,10 @@ def typed_smiles_layouts(smiles_list):
     """Layout JSON (or the diagnostic) for each SMILES from the native build."""
     subprocess.run(['cargo', 'build', '--quiet', '--release', '--example', 'layout_json',
                     '--manifest-path', str(ROOT / 'plugin/Cargo.toml')], check=True)
-    binary = ROOT / 'plugin/target/release/examples/layout_json'
+    metadata = subprocess.run(['cargo', 'metadata', '--format-version', '1', '--no-deps',
+                               '--manifest-path', str(ROOT / 'plugin/Cargo.toml')],
+                              capture_output=True, text=True, check=True)
+    binary = Path(json.loads(metadata.stdout)['target_directory']) / 'release/examples/layout_json'
     lines = ''.join(f'{index}\t{smiles}\n' for index, smiles in enumerate(smiles_list))
     output = subprocess.run([binary], input=lines, capture_output=True, text=True, check=True)
     return [json.loads(line) for line in output.stdout.splitlines()]

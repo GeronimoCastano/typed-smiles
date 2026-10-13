@@ -1,3 +1,4 @@
+#import "molecule/label-fragments.typ": _abbreviation-fragment, _abbreviation-fragment-representative
 // Shared validation and normalization for public typed-smiles input.
 
 #let _color-type = type(black)
@@ -133,11 +134,13 @@
 
 // An atom hidden inside an automatic abbreviation has no drawn position of its
 // own, so a reference to it is rejected rather than moved onto the label.
-#let _reject-contracted-atom(layout, atom-index, input-context) = {
+#let _reject-contracted-atom(layout, atom-index, input-context, allow-fragment: false) = {
+  if allow-fragment and _abbreviation-fragment(layout, atom-index) != none { return }
   if not layout.atoms.at(atom-index).at("contracted", default: false) {
     return
   }
   let group = _abbreviation-group-of(layout, atom-index)
+  let representative = _abbreviation-fragment-representative(layout, atom-index)
   _invalid-input(
     input-context,
     "atom "
@@ -147,8 +150,8 @@
       + " (atoms "
       + group.atoms.map(str).join(", ")
       + ")",
-    "Reference the labeled attachment atom "
-      + str(group.attachment_atom)
+    (if representative == none { "Reference the labeled attachment atom " } else { "Reference the displayed representative atom " })
+      + str(if representative == none { group.attachment_atom } else { representative.index })
       + " instead, or remove "
       + repr(group.name)
       + " from abbreviate to draw the group in full."
@@ -517,6 +520,13 @@
       )
     }
     if layout.atoms.at(atom-index).at("virtual_h", default: false) {
+      if layout.atoms.at(atom-index).at("stereo_virtual_h", default: false) {
+        _invalid-input(
+          "show-h atom index",
+          str(atom-index) + " is an already displayed stereochemical hydrogen",
+          "Use the stereocenter's atom index to select its other hydrogens.",
+        )
+      }
       _invalid-input(
         "show-h atom index",
         str(atom-index) + " is an explicit bracket-hydrogen fragment",
@@ -577,9 +587,14 @@
       )
     }
     if layout.atoms.at(annotation.index).at("virtual_h", default: false) {
+      let hydrogen-kind = if layout.atoms.at(annotation.index).at("stereo_virtual_h", default: false) {
+        " is the displayed stereochemical hydrogen"
+      } else {
+        " is an explicit bracket-hydrogen fragment"
+      }
       _invalid-input(
         "atom-annotations atom index",
-        str(annotation.index) + " is an explicit bracket-hydrogen fragment",
+        str(annotation.index) + hydrogen-kind,
         "Reference its parent atom instead.",
       )
     }

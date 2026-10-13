@@ -60,6 +60,7 @@ pub(crate) fn compute_layout_naming_atoms(
         &mut atoms,
         &mut bonds,
     );
+    append_stereo_hydrogen_outputs(&stereo.hydrogen_stereo, &mut atoms, &mut bonds);
 
     let all_positions: Vec<Vec2> = atoms.iter().map(|atom| atom.pos).collect();
     let (bbox_width, bbox_height) = bounding_box(&all_positions);
@@ -109,6 +110,7 @@ fn build_atom_outputs(
                 symbol: atom.symbol.clone(),
                 pos: coordinates[atom_index],
                 hcount: atom.hcount,
+                has_bracket_hydrogen_count: atom.has_bracket_hydrogen_count,
                 implicit_h: implicit_h_count(molecule, atom_index),
                 charge: atom.charge,
                 isotope: atom.isotope.unwrap_or(0),
@@ -134,6 +136,7 @@ fn build_atom_outputs(
                     .map(|(_, direction)| direction)
                     .unwrap_or_default(),
                 virtual_h: false,
+                stereo_virtual_h: false,
                 contracted: false,
                 abbreviation_group: None,
             }
@@ -184,7 +187,34 @@ fn append_virtual_hydrogen_outputs(
             .collect();
         if should_add_virtual_hydrogen(molecule, atoms, hydrogen_stereo, atom_index) {
             let angle = hydrogen_label_angle(&occupied_angles);
-            append_virtual_hydrogen(atoms, bonds, atom_index, angle);
+            append_virtual_hydrogen(atoms, bonds, atom_index, angle, 0.35, false);
+        }
+    }
+}
+
+fn append_stereo_hydrogen_outputs(
+    hydrogen_stereo: &[Option<(BondStereo, Vec2)>],
+    atoms: &mut Vec<AtomOutput>,
+    bonds: &mut Vec<BondOutput>,
+) {
+    for (parent_atom, stereo) in hydrogen_stereo.iter().enumerate() {
+        let Some((_, direction)) = stereo else {
+            continue;
+        };
+        let existing_hydrogen = bonds.iter().find_map(|bond| {
+            (bond.virtual_bond && bond.from == parent_atom && atoms[bond.to].virtual_h)
+                .then_some(bond.to)
+        });
+        if let Some(hydrogen_index) = existing_hydrogen {
+            let parent_position = atoms[parent_atom].pos;
+            atoms[hydrogen_index].stereo_virtual_h = true;
+            atoms[hydrogen_index].pos = Vec2::new(
+                parent_position.x + direction.x * 0.82,
+                parent_position.y + direction.y * 0.82,
+            );
+        } else {
+            let angle = direction.y.atan2(direction.x);
+            append_virtual_hydrogen(atoms, bonds, parent_atom, angle, 0.82, true);
         }
     }
 }
@@ -212,6 +242,8 @@ fn append_virtual_hydrogen(
     bonds: &mut Vec<BondOutput>,
     parent_atom: usize,
     angle: f64,
+    distance: f64,
+    stereo_virtual_hydrogen: bool,
 ) {
     let direction = Vec2::new(angle.cos(), angle.sin());
     let parent_position = atoms[parent_atom].pos;
@@ -219,10 +251,11 @@ fn append_virtual_hydrogen(
     atoms.push(AtomOutput {
         symbol: "H".to_string(),
         pos: Vec2::new(
-            parent_position.x + direction.x * 0.35,
-            parent_position.y + direction.y * 0.35,
+            parent_position.x + direction.x * distance,
+            parent_position.y + direction.y * distance,
         ),
         hcount: 0,
+        has_bracket_hydrogen_count: false,
         implicit_h: 0,
         charge: 0,
         isotope: 0,
@@ -239,6 +272,7 @@ fn append_virtual_hydrogen(
         stereo_h: "none".to_string(),
         stereo_h_dir: Vec2::default(),
         virtual_h: true,
+        stereo_virtual_h: stereo_virtual_hydrogen,
         contracted: false,
         abbreviation_group: None,
     });
@@ -320,7 +354,9 @@ fn layout_coordinates(molecule: &MoleculeGraph) -> Result<Vec<Vec2>, String> {
 
     let mut coordinates = vec![Vec2::new(0.0, 0.0); molecule.n_atoms()];
     let mut cursor = 0.0;
-    for (component_index, component) in components.iter().enumerate() {
+    // Typst reflects layout x coordinates when mapping them to page space, so
+    // reverse component placement here to keep the written order on the page.
+    for (component_index, component) in components.iter().rev().enumerate() {
         let component_molecule = molecule.induced_subgraph(component);
         let component_coordinates = place_connected_molecule(&component_molecule)?;
 
@@ -413,6 +449,7 @@ fn place_connected_molecule(molecule: &MoleculeGraph) -> Result<Vec<Vec2>, Strin
 
     apply_curl_layout(molecule, &mut coordinates)?;
     apply_cis_trans_layout(molecule, &mut coordinates)?;
+    orient_sulfone_centers(molecule, &rings, &mut coordinates);
     separate_overlapping_branches(molecule, &rings, &mut coordinates);
 
     // ── 5. Center the molecule ────────────────────────────────────────────
@@ -547,7 +584,7 @@ fn apply_curl_layout(molecule: &MoleculeGraph, coordinates: &mut [Vec2]) -> Resu
 
 pub(crate) fn implicit_h_count(molecule: &MoleculeGraph, atom_index: usize) -> u8 {
     let atom = &molecule.atoms[atom_index];
-    if atom.has_explicit_h {
+    if atom.has_bracket_hydrogen_count {
         return 0;
     }
 
@@ -559,7 +596,7 @@ pub(crate) fn implicit_h_count(molecule: &MoleculeGraph, atom_index: usize) -> u
         .iter()
         .map(|&(_, bond_index)| molecule.bonds[bond_index].order.as_u8() as i16)
         .sum();
-    let required_valence = atom.charge as i16 + bond_order_sum;
+    let required_valence = atom.charge as i16 + bond_order_sum + atom.hcount as i16;
     let valence = normal_valences
         .iter()
         .copied()
@@ -850,8 +887,31 @@ fn orient_subtree_to_side(
     }
 
     let atoms = collect_subtree(molecule, branch.root, branch.parent, branch.blocked_atom);
+    let reflected_root = reflect_point_across_line(coordinates[branch.root], axis);
+    let displaced_sibling = molecule.adj[branch.parent]
+        .iter()
+        .map(|&(neighbor, _)| neighbor)
+        .filter(|&neighbor| neighbor != branch.root && neighbor != branch.blocked_atom)
+        .find(|&neighbor| coordinates[neighbor].distance_to(reflected_root) < 1e-8);
     for atom in atoms {
         coordinates[atom] = reflect_point_across_line(coordinates[atom], axis);
+    }
+
+    if let Some(sibling_root) = displaced_sibling {
+        let sibling_atoms =
+            collect_subtree(molecule, sibling_root, branch.parent, branch.blocked_atom);
+        let branch_atoms: HashSet<usize> =
+            collect_subtree(molecule, branch.root, branch.parent, branch.blocked_atom)
+                .into_iter()
+                .collect();
+        if sibling_atoms
+            .iter()
+            .all(|atom| !branch_atoms.contains(atom))
+        {
+            for atom in sibling_atoms {
+                coordinates[atom] = reflect_point_across_line(coordinates[atom], axis);
+            }
+        }
     }
 }
 
@@ -907,6 +967,127 @@ fn collect_subtree(
         }
     }
     atoms
+}
+
+/// Gives an unconstrained sulfone its familiar planar projection: carbon
+/// substituents oppose each other and the two oxo bonds lie on opposite sides
+/// of that backbone.
+fn orient_sulfone_centers(
+    molecule: &MoleculeGraph,
+    rings: &[Vec<usize>],
+    coordinates: &mut [Vec2],
+) {
+    let mut in_ring = vec![false; molecule.n_atoms()];
+    for &atom_index in rings.iter().flatten() {
+        in_ring[atom_index] = true;
+    }
+
+    for (sulfur_index, sulfur) in molecule.atoms.iter().enumerate() {
+        if sulfur.symbol != "S"
+            || sulfur.charge != 0
+            || sulfur.chirality != AtomChirality::None
+            || molecule.adj[sulfur_index].len() != 4
+            || in_ring[sulfur_index]
+        {
+            continue;
+        }
+
+        let mut carbon_neighbors = Vec::new();
+        let mut oxo_neighbors = Vec::new();
+        let mut has_constrained_bond = false;
+        for &(neighbor, bond_index) in &molecule.adj[sulfur_index] {
+            let bond = &molecule.bonds[bond_index];
+            has_constrained_bond |= is_geometry_constrained_bond(molecule, bond_index);
+            match (&molecule.atoms[neighbor], bond.order) {
+                (atom, BondOrder::Single) if atom.symbol == "C" => {
+                    carbon_neighbors.push((neighbor, bond_index));
+                }
+                (atom, BondOrder::Double)
+                    if atom.symbol == "O"
+                        && atom.charge == 0
+                        && molecule.adj[neighbor].len() == 1 =>
+                {
+                    oxo_neighbors.push(neighbor);
+                }
+                _ => {}
+            }
+        }
+        if has_constrained_bond || carbon_neighbors.len() != 2 || oxo_neighbors.len() != 2 {
+            continue;
+        }
+
+        let first_carbon_in_ring = in_ring[carbon_neighbors[0].0];
+        let second_carbon_in_ring = in_ring[carbon_neighbors[1].0];
+        if first_carbon_in_ring && second_carbon_in_ring {
+            continue;
+        }
+
+        let anchor_position = if first_carbon_in_ring {
+            0
+        } else if second_carbon_in_ring {
+            1
+        } else {
+            let first_size =
+                collect_subtree(molecule, carbon_neighbors[0].0, sulfur_index, sulfur_index).len();
+            let second_size =
+                collect_subtree(molecule, carbon_neighbors[1].0, sulfur_index, sulfur_index).len();
+            usize::from(second_size > first_size)
+        };
+        let mobile_position = 1 - anchor_position;
+        let anchor_carbon = carbon_neighbors[anchor_position].0;
+        let mobile_carbon = carbon_neighbors[mobile_position].0;
+        let backbone_direction =
+            (coordinates[anchor_carbon] - coordinates[sulfur_index]).normalized();
+        if backbone_direction.length() < 1e-9 {
+            continue;
+        }
+
+        let mobile_bond = carbon_neighbors[mobile_position].1;
+        let mobile_branch = collect_subtree(molecule, mobile_carbon, sulfur_index, sulfur_index);
+        if mobile_branch.iter().any(|&atom| in_ring[atom])
+            || is_geometry_constrained_bond(molecule, mobile_bond)
+        {
+            continue;
+        }
+        rotate_subtree_to_direction(
+            &mobile_branch,
+            sulfur_index,
+            backbone_direction * -1.0,
+            coordinates,
+        );
+
+        let oxo_axis = backbone_direction.perpendicular();
+        let sulfur_position = coordinates[sulfur_index];
+        let first_oxo = oxo_neighbors[0];
+        let second_oxo = oxo_neighbors[1];
+        let first_target = sulfur_position + oxo_axis;
+        let second_target = sulfur_position - oxo_axis;
+        let direct_cost = coordinates[first_oxo].distance_to(first_target)
+            + coordinates[second_oxo].distance_to(second_target);
+        let crossed_cost = coordinates[first_oxo].distance_to(second_target)
+            + coordinates[second_oxo].distance_to(first_target);
+        if direct_cost <= crossed_cost {
+            coordinates[first_oxo] = first_target;
+            coordinates[second_oxo] = second_target;
+        } else {
+            coordinates[first_oxo] = second_target;
+            coordinates[second_oxo] = first_target;
+        }
+    }
+}
+
+fn rotate_subtree_to_direction(
+    subtree: &[usize],
+    pivot_atom: usize,
+    direction: Vec2,
+    coordinates: &mut [Vec2],
+) {
+    let pivot = coordinates[pivot_atom];
+    let current_direction = coordinates[subtree[0]] - pivot;
+    let turn = normalize_angle(direction.angle() - current_direction.angle());
+    for &atom_index in subtree {
+        coordinates[atom_index] = pivot + (coordinates[atom_index] - pivot).rotated(turn);
+    }
 }
 
 // ── Ring placement ────────────────────────────────────────────────────────────
@@ -1713,9 +1894,24 @@ impl OverlapReduction {
 
 /// Small turns of a branch about its attachment atom, tried when every
 /// ideal position of the branch is already occupied.
-const BRANCH_ESCAPE_TURNS: [f64; 4] = [PI / 12.0, -PI / 12.0, PI / 6.0, -PI / 6.0];
+const BRANCH_ESCAPE_TURNS: [f64; 14] = [
+    PI / 12.0,
+    -PI / 12.0,
+    PI / 6.0,
+    -PI / 6.0,
+    PI / 4.0,
+    -PI / 4.0,
+    PI / 3.0,
+    -PI / 3.0,
+    5.0 * PI / 12.0,
+    -5.0 * PI / 12.0,
+    PI / 2.0,
+    -PI / 2.0,
+    7.0 * PI / 12.0,
+    -7.0 * PI / 12.0,
+];
 
-/// A ring-free branch hanging off one single bond.
+/// A ring-free branch hanging off an unconstrained bond.
 struct FlippableBranch {
     attachment: usize,
     root: usize,
@@ -1755,7 +1951,7 @@ fn flippable_branches(molecule: &MoleculeGraph, rings: &[Vec<usize>]) -> Vec<Fli
     }
     let mut branches = Vec::new();
     for (bond_index, bond) in molecule.bonds.iter().enumerate() {
-        if bond.order != BondOrder::Single || is_geometry_constrained_bond(molecule, bond_index) {
+        if is_geometry_constrained_bond(molecule, bond_index) {
             continue;
         }
         for (attachment, root) in [(bond.from, bond.to), (bond.to, bond.from)] {
@@ -2164,6 +2360,36 @@ fn bounding_box(coordinates: &[Vec2]) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sulfone_orientation_leaves_a_curled_center_untouched() {
+        let mut molecule = crate::parse_molecule("CS(C)(=O)=O").unwrap();
+        let sulfur = 1;
+        let curved_oxo_bond = molecule.adj[sulfur]
+            .iter()
+            .find_map(|&(neighbor, bond_index)| {
+                (molecule.atoms[neighbor].symbol == "O"
+                    && molecule.bonds[bond_index].order == BondOrder::Double)
+                    .then_some(bond_index)
+            })
+            .unwrap();
+        molecule.bonds[curved_oxo_bond].curl = true;
+
+        let rings = find_rings(&molecule);
+        let mut coordinates = vec![Vec2::default(); molecule.n_atoms()];
+        coordinates[0] = Vec2::new(-1.0, 0.0);
+        coordinates[sulfur] = Vec2::new(0.0, 0.0);
+        coordinates[2] = Vec2::new(1.0, 0.0);
+        coordinates[3] = Vec2::new(0.5, 0.5);
+        coordinates[4] = Vec2::new(-0.5, 0.5);
+        let original_coordinates = coordinates.clone();
+
+        orient_sulfone_centers(&molecule, &rings, &mut coordinates);
+
+        for (actual, expected) in coordinates.iter().zip(original_coordinates) {
+            assert!(actual.distance_to(expected) < 1e-9);
+        }
+    }
 
     fn ring_atoms_with_substituent_inside(smiles: &str) -> Vec<usize> {
         let layout = crate::layout_native(smiles).unwrap();

@@ -1,0 +1,30 @@
+{
+  "version": "2026.03.1",
+  "cases": [
+    [
+      "S34 adamantane",
+      "C1C2CC3CC1CC(C2)C3"
+    ],
+    [
+      "S47 prismane",
+      "C12C3C1C1C2C31"
+    ],
+    [
+      "S36 bridged dimethyl",
+      "CC1(C)C2CCCC1CCC2"
+    ],
+    [
+      "S35 macrocycle",
+      "CCC1OC(=O)C(C)C(O)C(C)CC(C)(O)C(O)C(C)C(=O)C(C)C(O)C1(C)O"
+    ],
+    [
+      "S48 estradiol",
+      "C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O"
+    ]
+  ],
+  "method": "RDKit Compute2DCoords and rdCoordGen.AddCoords; default drawing options",
+  "sources": [
+    "https://www.rdkit.org/docs/Cookbook.html#using-coordgen-library",
+    "https://www.rdkit.org/docs/source/rdkit.Chem.rdmolops.html"
+  ]
+}

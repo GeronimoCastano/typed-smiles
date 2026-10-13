@@ -17,10 +17,11 @@
   _reject-contracted-atom,
   _available-index-description,
 )
-#import "../molecule/rendering.typ": _label-anchor-offset, _abbreviation-label
+#import "../molecule/rendering.typ": _label-anchor-offset, _abbreviation-label, _abbreviation-fragment-geometry
 #import "references.typ": (
   _atom-position,
   _highlight-hydrogens,
+  _inline-hydrogen-highlight-fragment,
   _bond-arrow-attachment,
   _atom-arrow-attachment,
   _resolve-reference,
@@ -288,6 +289,7 @@
       layout,
       atom-index,
       input-context + " in species " + str(species-index),
+      allow-fragment: kind == "atom",
     )
   }
 
@@ -300,7 +302,10 @@
       )
     }
     let matching-bonds = layout.bonds.filter(bond-output => (
-      not bond-output.at("virtual_bond", default: false)
+      (
+        not bond-output.at("virtual_bond", default: false)
+          or layout.atoms.at(bond-output.to).at("stereo_virtual_h", default: false)
+      )
         and (
           (bond-output.from == reference.i and bond-output.to == reference.j)
             or (
@@ -498,6 +503,14 @@
 
 #let _disk-piece(centre, radius) = (kind: "disk", centre: centre, radius: radius)
 
+#let _rounded-rectangle-piece(centre, width, height, radius) = (
+  kind: "rounded-rectangle",
+  centre: centre,
+  width: width,
+  height: height,
+  radius: radius,
+)
+
 #let _linear-combination(first, first-weight, second, second-weight) = (
   first.at(0) * first-weight + second.at(0) * second-weight,
   first.at(1) * first-weight + second.at(1) * second-weight,
@@ -577,7 +590,53 @@
   )
 }
 
+#let _rounded-rectangle-outline(piece) = {
+  import cetz.draw: *
+  let half-width = piece.width / 2
+  let half-height = piece.height / 2
+  let radius = piece.radius
+  let tangent = radius * _quarter-arc-handle
+  let left = piece.centre.at(0) - half-width
+  let right = piece.centre.at(0) + half-width
+  let bottom = piece.centre.at(1) - half-height
+  let top = piece.centre.at(1) + half-height
+  let commands = (
+    ..line((left + radius, top), (right - radius, top)),
+    ..bezier(
+      (right - radius, top),
+      (right, top - radius),
+      (right - radius + tangent, top),
+      (right, top - radius + tangent),
+    ),
+    ..line((right, top - radius), (right, bottom + radius)),
+    ..bezier(
+      (right, bottom + radius),
+      (right - radius, bottom),
+      (right, bottom + radius - tangent),
+      (right - radius + tangent, bottom),
+    ),
+    ..line((right - radius, bottom), (left + radius, bottom)),
+    ..bezier(
+      (left + radius, bottom),
+      (left, bottom + radius),
+      (left + radius - tangent, bottom),
+      (left, bottom + radius - tangent),
+    ),
+    ..line((left, bottom + radius), (left, top - radius)),
+    ..bezier(
+      (left, top - radius),
+      (left + radius, top),
+      (left, top - radius + tangent),
+      (left + radius - tangent, top),
+    ),
+  )
+  merge-path(commands, close: true)
+}
+
 #let _piece-outline(piece, configuration) = {
+  if piece.kind == "rounded-rectangle" {
+    return _rounded-rectangle-outline(piece)
+  }
   if piece.kind == "capsule" {
     return _capsule-outline(
       piece.start,
@@ -593,6 +652,14 @@
 // as functions and would shadow inside the importing block.
 #let _stroke-piece(piece, paint, outline) = {
   import cetz.draw: *
+  if piece.kind == "rounded-rectangle" {
+    return compound-path(
+      _rounded-rectangle-outline(piece),
+      fill: paint,
+      stroke: outline,
+      fill-rule: "non-zero",
+    )
+  }
   if piece.kind == "capsule" {
     return line(piece.start, piece.end, stroke: (
       paint: paint,
@@ -633,8 +700,11 @@
 #let _bond-highlight-pieces(bond-reference, highlight-specification, placed-species-list, configuration) = {
   let placed-species = placed-species-list.at(bond-reference.species)
   let molecule-scale = placed-species.at("mol-scale", default: 1.0)
+  let offset = bond-reference.at("offset", default: (0, 0))
   let first-position = _atom-position(placed-species, bond-reference.i)
   let second-position = _atom-position(placed-species, bond-reference.j)
+  let first-position = (first-position.at(0) + offset.at(0), first-position.at(1) + offset.at(1))
+  let second-position = (second-position.at(0) + offset.at(0), second-position.at(1) + offset.at(1))
   let offset-x = second-position.at(0) - first-position.at(0)
   let offset-y = second-position.at(1) - first-position.at(1)
   let distance = calc.max(
@@ -716,6 +786,43 @@
   let placed-species = placed-species-list.at(reference.species)
   let molecule-scale = placed-species.at("mol-scale", default: 1.0)
   let atom = placed-species.layout.atoms.at(reference.index)
+  let abbreviation-fragment = _abbreviation-fragment-geometry(placed-species, reference.index)
+  if reference.__ref__ == "atom" and abbreviation-fragment != none {
+    let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+    let padding = placed-species.at("actual-font-size", default: 11pt) / canvas-scale * 0.07
+    let radius = _highlight-atom-radius(highlight-specification, molecule-scale, configuration)
+    return (_rounded-rectangle-piece(reference-position,
+      calc.max(abbreviation-fragment.width + 2 * padding, 2 * radius),
+      calc.max(abbreviation-fragment.height + 2 * padding, 2 * radius), padding * 0.8),)
+  }
+  if (
+    reference.__ref__ == "atom"
+      and atom.at("virtual_h", default: false)
+      and not atom.at("stereo_virtual_h", default: false)
+  ) {
+    let hydrogen-fragment = _inline-hydrogen-highlight-fragment(placed-species, reference.index)
+    if hydrogen-fragment != none {
+      let canvas-scale = placed-species.at("canvas-scale", default: 30pt)
+      let hydrogen-position = _atom-position(placed-species, reference.index)
+      let offset-x = reference-position.at(0) - hydrogen-position.at(0)
+      let offset-y = reference-position.at(1) - hydrogen-position.at(1)
+      let radius = _highlight-atom-radius(highlight-specification, molecule-scale, configuration)
+      let font-size = placed-species.at("actual-font-size", default: 11pt)
+      let padding = font-size / canvas-scale * 0.07
+      let width = calc.max(hydrogen-fragment.width + 2 * padding, 2 * radius)
+      let height = calc.max(hydrogen-fragment.height + 2 * padding, 2 * radius)
+      let corner-radius = calc.min(padding * 0.8, width / 4, height / 4)
+      return (_rounded-rectangle-piece(
+        (
+          hydrogen-fragment.position.at(0) + offset-x,
+          hydrogen-fragment.position.at(1) + offset-y,
+        ),
+        width,
+        height,
+        corner-radius,
+      ),)
+    }
+  }
   let abbreviation = atom.at("abbrev", default: "")
   if reference.__ref__ == "atom" and abbreviation != "" {
     return _abbreviation-highlight-pieces(
@@ -826,6 +933,14 @@
 // merged region from changing the canvas size and the layout around it.
 #let _bounds-carrier(piece) = {
   import cetz.draw: *
+  if piece.kind == "rounded-rectangle" {
+    return compound-path(
+      _rounded-rectangle-outline(piece),
+      fill: none,
+      stroke: none,
+      fill-rule: "non-zero",
+    )
+  }
   if piece.kind == "capsule" {
     return line(piece.start, piece.end, stroke: none)
   }
@@ -1013,7 +1128,7 @@
 
   let arrowhead-options = (
     fill: arrow-specification.color,
-    scale: configuration.arrow-scale,
+    scale: 1,
     harpoon: arrow-specification.half,
     length: arrow-specification.at("head-length", default: 0.11),
     width: arrow-specification.at("head-width", default: 0.07),

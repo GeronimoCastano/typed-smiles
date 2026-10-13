@@ -427,6 +427,7 @@ mod tests {
         let layout_output = layout_native("C([H])([H])([H])[H]").expect("methane layout failed");
         assert_eq!(layout_output.atoms[0].symbol, "C");
         assert_eq!(layout_output.atoms[0].hcount, 4);
+        assert!(!layout_output.atoms[0].has_bracket_hydrogen_count);
         assert_eq!(layout_output.atoms[0].implicit_h, 0);
         let drawn_hydrogen_count = layout_output
             .atoms
@@ -437,9 +438,33 @@ mod tests {
     }
 
     #[test]
+    fn folded_hydrogen_keeps_the_parents_remaining_implicit_hydrogens() {
+        let layout_output = layout_native("C([H])F").expect("fluoromethane layout failed");
+        assert_eq!(layout_output.atoms[0].hcount, 1);
+        assert!(!layout_output.atoms[0].has_bracket_hydrogen_count);
+        assert_eq!(layout_output.atoms[0].implicit_h, 2);
+        assert_eq!(mol_formula_native("C([H])F").unwrap(), "CH3F");
+    }
+
+    #[test]
+    fn bracket_hydrogen_counts_are_marked_for_the_renderer() {
+        let ammonium = layout_native("[NH4+]").expect("ammonium layout failed");
+        assert!(ammonium.atoms[0].has_bracket_hydrogen_count);
+
+        let bracket_carbon = layout_native("[CH3]F").expect("bracket carbon layout failed");
+        assert!(bracket_carbon.atoms[0].has_bracket_hydrogen_count);
+    }
+
+    #[test]
+    fn folded_hydrogen_count_overflow_is_reported() {
+        let smiles = format!("C{}", "([H])".repeat(256));
+        let error = parse_molecule(&smiles).expect_err("unrepresentable count should fail");
+        assert!(error.contains("exceeds the supported maximum of 255"));
+    }
+
+    #[test]
     fn folded_hydrogens_drop_from_neighbor_ordering() {
-        // The dichloromethyl carbon keeps only its three heavy neighbors after
-        // the explicit hydrogen is folded away.
+        // The dichloromethyl carbon keeps its heavy neighbors and remaining H.
         let layout_output = layout_native("ClC([H])Cl").expect("dichloromethane layout failed");
         let heavy_atom_count = layout_output
             .atoms
@@ -447,6 +472,10 @@ mod tests {
             .filter(|atom| atom.symbol != "H")
             .count();
         assert_eq!(heavy_atom_count, 3);
+        let carbon = &layout_output.atoms[1];
+        assert_eq!(carbon.hcount, 1);
+        assert_eq!(carbon.implicit_h, 1);
+        assert_eq!(mol_formula_native("ClC([H])Cl").unwrap(), "CH2Cl2");
         assert_eq!(
             layout_output
                 .bonds
@@ -550,6 +579,107 @@ mod tests {
     }
 
     #[test]
+    fn overlapping_multiple_bond_branches_move_without_changing_bond_lengths() {
+        let sulfone =
+            layout_native("CC(C)(C)c1cc(C)ccc1S(C)(=O)=O").expect("sulfone layout failed");
+        assert!(sulfone.atoms[13].pos.dist(sulfone.atoms[14].pos) > 0.55);
+        assert!((sulfone.atoms[11].pos.dist(sulfone.atoms[13].pos) - 1.0).abs() < 1e-6);
+        assert!((sulfone.atoms[11].pos.dist(sulfone.atoms[14].pos) - 1.0).abs() < 1e-6);
+
+        let paclitaxel = layout_native(
+            "CC1=C2C(C(=O)C3(C(CC4C(C3C(C(C2(C)C)(CC1OC(=O)C(C(C5=CC=CC=C5)NC(=O)C6=CC=CC=C6)O)O)OC(=O)C7=CC=CC=C7)(CO4)OC(=O)C)O)C)OC(=O)C",
+        )
+        .expect("polycyclic ester layout failed");
+        assert!(paclitaxel.atoms[43].pos.dist(paclitaxel.atoms[44].pos) > 0.55);
+        assert!((paclitaxel.atoms[42].pos.dist(paclitaxel.atoms[43].pos) - 1.0).abs() < 1e-6);
+        assert!((paclitaxel.atoms[42].pos.dist(paclitaxel.atoms[44].pos) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn sulfone_oxygens_straddle_the_carbon_backbone_in_written_order_variants() {
+        let assert_sulfone_geometry = |smiles: &str| {
+            let layout_output = layout_native(smiles).expect("sulfone layout failed");
+            let sulfur = layout_output
+                .atoms
+                .iter()
+                .position(|atom| atom.symbol == "S")
+                .expect("sulfur atom");
+            let sulfur_bonds: Vec<_> = layout_output
+                .bonds
+                .iter()
+                .filter(|bond| bond.from == sulfur || bond.to == sulfur)
+                .collect();
+            let atom_other_end = |bond: &crate::render::BondOutput| {
+                if bond.from == sulfur {
+                    bond.to
+                } else {
+                    bond.from
+                }
+            };
+            let carbon_neighbors: Vec<_> = sulfur_bonds
+                .iter()
+                .filter(|bond| {
+                    bond.order == 1 && layout_output.atoms[atom_other_end(bond)].symbol == "C"
+                })
+                .map(|bond| atom_other_end(bond))
+                .collect();
+            let oxo_neighbors: Vec<_> = sulfur_bonds
+                .iter()
+                .filter(|bond| {
+                    bond.order == 2 && layout_output.atoms[atom_other_end(bond)].symbol == "O"
+                })
+                .map(|bond| atom_other_end(bond))
+                .collect();
+            assert_eq!(carbon_neighbors.len(), 2, "{smiles}");
+            assert_eq!(oxo_neighbors.len(), 2, "{smiles}");
+
+            let sulfur_position = layout_output.atoms[sulfur].pos;
+            let backbone = layout_output.atoms[carbon_neighbors[0]].pos
+                - layout_output.atoms[carbon_neighbors[1]].pos;
+            let first_oxo_side =
+                backbone.cross(layout_output.atoms[oxo_neighbors[0]].pos - sulfur_position);
+            let second_oxo_side =
+                backbone.cross(layout_output.atoms[oxo_neighbors[1]].pos - sulfur_position);
+            assert!(
+                first_oxo_side * second_oxo_side < -1e-6,
+                "oxo branches must sit on opposite sides of the carbon backbone for {smiles}"
+            );
+
+            let carbon_vectors: Vec<_> = carbon_neighbors
+                .iter()
+                .map(|&atom| (layout_output.atoms[atom].pos - sulfur_position).normalized())
+                .collect();
+            assert!(
+                carbon_vectors[0].x * carbon_vectors[1].x
+                    + carbon_vectors[0].y * carbon_vectors[1].y
+                    < -0.99,
+                "carbon backbone branches must oppose at sulfur for {smiles}"
+            );
+            for bond in sulfur_bonds {
+                assert!(
+                    (layout_output.atoms[bond.from]
+                        .pos
+                        .dist(layout_output.atoms[bond.to].pos)
+                        - 1.0)
+                        .abs()
+                        < 1e-6,
+                    "sulfone bond length changed for {smiles}"
+                );
+            }
+        };
+
+        for smiles in [
+            "CS(C)(=O)=O",
+            "CS(=O)(=O)C",
+            "CC(C)(C)c1cc(C)ccc1S(C)(=O)=O",
+            "CC(C)(C)c1cc(C)ccc1S(=O)(=O)C",
+            "CS(=O)(=O)c1c(C(C)(C)C)cc(C)cc1",
+        ] {
+            assert_sulfone_geometry(smiles);
+        }
+    }
+
+    #[test]
     fn steroid_ring_system_has_regular_bond_lengths() {
         let layout_output =
             layout_native("C[C@]12CC[C@H]3[C@H]([C@@H]1CC[C@@H]2O)CCC4=C3C=CC(=C4)O")
@@ -593,8 +723,8 @@ mod tests {
 
     #[test]
     fn salt_fragments_are_disconnected_and_ordered() {
-        // Sodium acetate: no bond may touch the sodium ion, and fragments keep
-        // SMILES writing order left to right with a visible gap.
+        // Sodium acetate: no bond may touch the sodium ion, and page-coordinate
+        // normalization keeps the fragments in SMILES writing order.
         let layout_output = layout_native("CC(=O)[O-].[Na+]").expect("sodium acetate failed");
         let sodium_index = 4;
         assert_eq!(layout_output.atoms[sodium_index].symbol, "Na");
@@ -604,12 +734,12 @@ mod tests {
             .iter()
             .all(|bond| bond.from != sodium_index && bond.to != sodium_index));
 
-        let max_acetate_x = (0..4)
+        let min_acetate_x = (0..4)
             .map(|atom_index| layout_output.atoms[atom_index].pos.x)
-            .fold(f64::MIN, f64::max);
+            .fold(f64::MAX, f64::min);
         assert!(
-            layout_output.atoms[sodium_index].pos.x >= max_acetate_x + 1.0,
-            "Na+ should sit clearly right of the acetate fragment"
+            layout_output.atoms[sodium_index].pos.x < min_acetate_x - 1.0,
+            "raw coordinates compensate for the page-space x reflection"
         );
     }
 
@@ -618,7 +748,7 @@ mod tests {
         let layout_output = layout_native("[Na+].[Cl-]").expect("sodium chloride failed");
         assert_eq!(layout_output.atoms.len(), 2);
         assert!(layout_output.bonds.is_empty());
-        assert!(layout_output.atoms[1].pos.x > layout_output.atoms[0].pos.x);
+        assert!(layout_output.atoms[1].pos.x < layout_output.atoms[0].pos.x);
     }
 
     #[test]
@@ -631,7 +761,7 @@ mod tests {
             .collect();
         assert_eq!(heavy.len(), 3);
         assert!(layout_output.bonds.iter().all(|bond| bond.virtual_bond));
-        assert!(heavy[0].pos.x < heavy[1].pos.x && heavy[1].pos.x < heavy[2].pos.x);
+        assert!(heavy[0].pos.x > heavy[1].pos.x && heavy[1].pos.x > heavy[2].pos.x);
     }
 
     #[test]
@@ -960,6 +1090,20 @@ mod tests {
     }
 
     #[test]
+    fn marked_trisubstituted_alkene_keeps_both_substituents_visible() {
+        let layout_output = layout_native("CC/C=C(C)/CC").expect("trisubstituted alkene failed");
+        assert!(min_nonbonded_distance(&layout_output) > 0.45);
+        assert_eq!(marked_alkene_substituent_side_product(&layout_output), -1);
+    }
+
+    #[test]
+    fn marked_alkene_with_two_ring_substituents_keeps_them_separate() {
+        let smiles = "CC/C(=C(\\c1ccccc1)c1ccc(OCCN(C)C)cc1)c1ccccc1";
+        let layout_output = layout_native(smiles).expect("aryl alkene failed");
+        assert!(min_nonbonded_distance(&layout_output) > 0.45);
+    }
+
+    #[test]
     fn branch_direction_matches_opensmiles_examples() {
         let trans = layout_native("C(\\F)=C/F").expect("branch trans failed");
         let cis = layout_native("C(/F)=C/F").expect("branch cis failed");
@@ -1165,6 +1309,71 @@ mod tests {
 
         // Every stereocenter is depicted with the geometrically correct handedness.
         assert!(chirality_matches_smiles(smiles));
+    }
+
+    #[test]
+    fn stereo_hydrogen_is_an_addressable_virtual_atom_after_existing_hydrogens() {
+        let layout_output = layout_native("[NH4+].C1C[P@H]2CCC1C2")
+            .expect("ammonium and bridged stereocenter layout failed");
+        assert_eq!(
+            layout_output
+                .atoms
+                .iter()
+                .filter(|atom| !atom.virtual_h)
+                .count(),
+            8
+        );
+        assert_eq!(
+            layout_output
+                .bonds
+                .iter()
+                .filter(|bond| !bond.virtual_bond)
+                .count(),
+            8
+        );
+        let ordinary_hydrogen_indices: Vec<usize> = layout_output
+            .atoms
+            .iter()
+            .enumerate()
+            .filter_map(|(index, atom)| (atom.virtual_h && !atom.stereo_virtual_h).then_some(index))
+            .collect();
+        let stereo_hydrogen_index = layout_output
+            .atoms
+            .iter()
+            .position(|atom| atom.stereo_virtual_h)
+            .expect("stereo hydrogen should have an addressable atom index");
+        let stereo_hydrogen = &layout_output.atoms[stereo_hydrogen_index];
+        assert!(stereo_hydrogen.virtual_h);
+        assert_eq!(stereo_hydrogen.symbol, "H");
+        assert!(ordinary_hydrogen_indices
+            .iter()
+            .all(|index| *index < stereo_hydrogen_index));
+        assert_eq!(ordinary_hydrogen_indices, vec![8]);
+        assert_eq!(stereo_hydrogen_index, 9);
+
+        let stereo_center = layout_output
+            .atoms
+            .iter()
+            .position(|atom| atom.stereo_h != "none")
+            .expect("stereo center should carry its wedge hydrogen");
+        assert_eq!(stereo_center, 3);
+        let virtual_bond = layout_output
+            .bonds
+            .iter()
+            .find(|bond| bond.from == stereo_center && bond.to == stereo_hydrogen_index)
+            .expect("stereo hydrogen should have a reference bond");
+        assert!(virtual_bond.virtual_bond);
+        assert_eq!(virtual_bond.order, 1);
+        let center = layout_output.atoms[stereo_center].pos;
+        let distance = ((stereo_hydrogen.pos.x - center.x).powi(2)
+            + (stereo_hydrogen.pos.y - center.y).powi(2))
+        .sqrt();
+        assert!((distance - 0.82).abs() < 1e-9);
+
+        let exact_repro =
+            layout_native("C1C[P@H]2CCC1C2").expect("stereo hydrogen reference repro failed");
+        assert_eq!(exact_repro.atoms[2].stereo_virtual_h, false);
+        assert!(exact_repro.atoms.iter().any(|atom| atom.stereo_virtual_h));
     }
 
     // ── Extended chirality classes and quadruple bonds ───────────────────────
@@ -1879,6 +2088,36 @@ mod tests {
         )
     }
 
+    fn marked_alkene_substituent_side_product(layout_output: &LayoutOutput) -> i8 {
+        let double = layout_output
+            .bonds
+            .iter()
+            .find(|bond| bond.order == 2)
+            .unwrap();
+        let marked_neighbors: Vec<usize> = layout_output
+            .bonds
+            .iter()
+            .filter(|bond| bond.direction != "none")
+            .map(|bond| {
+                if bond.from == double.from || bond.from == double.to {
+                    bond.to
+                } else {
+                    bond.from
+                }
+            })
+            .collect();
+        assert_eq!(marked_neighbors.len(), 2);
+        side(
+            layout_output.atoms[double.from].pos,
+            layout_output.atoms[double.to].pos,
+            layout_output.atoms[marked_neighbors[0]].pos,
+        ) * side(
+            layout_output.atoms[double.from].pos,
+            layout_output.atoms[double.to].pos,
+            layout_output.atoms[marked_neighbors[1]].pos,
+        )
+    }
+
     /// Returns 1 when the two substituents sit on the same side of the
     /// double bond (cis) and -1 when they sit on opposite sides (trans).
     fn double_bond_substituent_side_product(
@@ -2066,9 +2305,8 @@ mod tests {
 
     // ── Molecular weight ──────────────────────────────────────────────────────
     //
-    // Reference values are PubChem's computed molecular weights, which use the
-    // IUPAC/CIAAW standard atomic weights (the same table ptable embeds via
-    // PubChemElements_all.json).
+    // Reference values are PubChem's computed molecular weights, compared
+    // with the rounded per-element weights exposed by `ptable`.
 
     fn assert_weight(smiles: &str, expected: f64) {
         let molecular_weight = mol_weight_native(smiles).expect("mol weight failed");
@@ -2127,13 +2365,30 @@ mod tests {
             molecules.len() > 50,
             "extraction looks broken: {molecules:?}"
         );
+        let corpus: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/smiles-conformance.json"))
+                .expect("the conformance corpus is valid JSON");
+        let recorded_clearances: BTreeMap<String, f64> = corpus["cases"]
+            .as_array()
+            .expect("cases array")
+            .iter()
+            .filter_map(|case| {
+                Some((
+                    case["smiles"].as_str()?.to_string(),
+                    case["minimum_clearance"].as_f64()?,
+                ))
+            })
+            .collect();
         let mut failures = Vec::new();
         for m in &molecules {
             match layout_native(m) {
                 Ok(layout_output) => {
                     let min = min_atom_distance(&layout_output);
-                    if layout_output.atoms.len() > 1 && min < 0.5 {
-                        failures.push(format!("{m}: min atom distance {min:.3}"));
+                    let minimum_clearance = recorded_clearances.get(m).copied().unwrap_or(0.5);
+                    if layout_output.atoms.len() > 1 && min < minimum_clearance {
+                        failures.push(format!(
+                            "{m}: min atom distance {min:.3} is below expected clearance {minimum_clearance:.3}"
+                        ));
                     }
                 }
                 Err(e) => failures.push(format!("{m}: layout failed: {e}")),

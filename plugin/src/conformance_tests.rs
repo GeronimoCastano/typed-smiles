@@ -54,6 +54,24 @@ fn layout_problems(layout_output: &LayoutOutput) -> Vec<&'static str> {
     problems
 }
 
+fn minimum_atom_clearance(layout_output: &LayoutOutput) -> f64 {
+    layout_output
+        .atoms
+        .iter()
+        .enumerate()
+        .filter(|(_, atom)| !atom.virtual_h)
+        .flat_map(|(first_index, first_atom)| {
+            layout_output
+                .atoms
+                .iter()
+                .enumerate()
+                .skip(first_index + 1)
+                .filter(|(_, second_atom)| !second_atom.virtual_h)
+                .map(move |(_, second_atom)| first_atom.pos.distance_to(second_atom.pos))
+        })
+        .fold(f64::INFINITY, f64::min)
+}
+
 fn segments_cross(
     a: crate::render::Vec2,
     b: crate::render::Vec2,
@@ -97,6 +115,13 @@ fn conformance_corpus_matches_reviewed_expectations() {
                     layout_output.undepicted_stereo
                 );
                 let problems = layout_problems(&layout_output).join(",");
+                if let Some(minimum_clearance) = case["minimum_clearance"].as_f64() {
+                    let measured_clearance = minimum_atom_clearance(&layout_output);
+                    assert!(
+                        measured_clearance >= minimum_clearance,
+                        "{label}: clearance {measured_clearance:.3} is below recorded minimum {minimum_clearance:.3}"
+                    );
+                }
                 let recorded = case["layout"]
                     .as_str()
                     .expect("accepted cases record a layout");

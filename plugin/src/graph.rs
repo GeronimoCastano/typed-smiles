@@ -183,6 +183,8 @@ pub struct Atom {
     pub aromatic: bool,
     pub hcount: u8,
     pub has_explicit_h: bool,
+    /// Whether a bracket atom supplied its complete hydrogen count.
+    pub has_bracket_hydrogen_count: bool,
     /// Mass number from a bracket isotope specification, e.g. `[2H]`.
     pub isotope: Option<u16>,
     pub charge: i8,
@@ -214,6 +216,7 @@ impl Atom {
             aromatic: false,
             hcount: 0,
             has_explicit_h: false,
+            has_bracket_hydrogen_count: false,
             isotope: None,
             charge: 0,
             chirality: AtomChirality::None,
@@ -422,15 +425,22 @@ impl GraphBuilder {
     /// hydrogen there passes over every neighbor written between those two
     /// positions; each one swaps the configuration, so an odd number of them
     /// inverts `@`/`@@` and the depicted stereocenter stays the written one.
-    pub fn fold_hydrogen_into(&mut self, parent_atom: usize) {
+    pub fn fold_hydrogen_into(&mut self, parent_atom: usize) -> Result<(), String> {
         let written_position = self.neighbor_slots[parent_atom].len();
         let counted_position = usize::from(self.has_preceding[parent_atom]);
         let parent = &mut self.atoms[parent_atom];
+        let hydrogen_count = parent.hcount.checked_add(1).ok_or_else(|| {
+            format!(
+                "explicit hydrogen count for atom at character {} exceeds the supported maximum of 255; use a smaller hydrogen count",
+                parent.source_position
+            )
+        })?;
         if (written_position - counted_position) % 2 == 1 {
             parent.chirality = parent.chirality.inverted();
         }
-        parent.hcount = parent.hcount.saturating_add(1);
+        parent.hcount = hydrogen_count;
         parent.has_explicit_h = true;
+        Ok(())
     }
 
     /// Whether a plain hydrogen bonded to `parent_atom` may become part of the

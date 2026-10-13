@@ -18,6 +18,10 @@
   )
 } else if selected-case == "atom-out-of-range" {
   smiles("CO", arrow(from: atom(4), to: atom(0)))
+} else if selected-case == "stereo-hydrogen-index-out-of-range" {
+  smiles("C1C[P@H]2CCC1C2", arrow(from: atom(8), to: atom(2)))
+} else if selected-case == "smiles-reference-wrong-species" {
+  smiles("CCO", arrow(from: atom(1, 0), to: atom(2)))
 } else if selected-case == "missing-bond" {
   smiles("CCC", highlight(bond(0, 2)))
 } else if selected-case == "missing-lone-pair" {
@@ -34,6 +38,8 @@
   smiles("CO", [not an annotation])
 } else if selected-case == "show-h-out-of-range" {
   smiles("CO", show-h: 5)
+} else if selected-case == "show-stereo-hydrogen-index" {
+  smiles("C1C[P@H]2CCC1C2", show-h: 7)
 } else if selected-case == "mol-formula-wrong-type" {
   mol-formula(1)
 } else if selected-case == "mol-formula-empty" {
@@ -332,6 +338,16 @@
   reaction(scale-factor: 2, mol("CCO"))
 } else if selected-case == "cetz-named-highlight" {
   cetz.canvas(smiles-cetz("CCO", highlight: highlight(atom(0))))
+} else if selected-case == "cetz-positional-annotation" {
+  cetz.canvas(smiles-cetz("CCO", arrow(from: atom(0), to: atom(1))))
+} else if selected-case == "invalid-theme" {
+  smiles("CCO", theme: "x")
+} else if selected-case == "invalid-style" {
+  smiles("CCO", style: "x")
+} else if selected-case == "invalid-color-type" {
+  smiles("CCO", color: "false")
+} else if selected-case == "invalid-mirror" {
+  smiles("CCO", mirror: "diagonal")
 } else if selected-case == "highlight-radius-zero" {
   smiles("CCO", highlight(bond(0, 1), radius: 0))
 } else if selected-case == "highlight-include-hydrogens-value" {
@@ -340,6 +356,15 @@
   smiles("CCO", highlight-smarts: (pattern: "[OX2H1]", include-hydrogens: 1))
 } else if selected-case == "highlight-group-include-hydrogens-value" {
   reaction(mol("CCO", highlight-groups: (group: "alcohol", include-hydrogens: "true")))
+} else if selected-case == "cycle-radius-no-visible-arc" {
+  cycle(
+    radius: 0.1,
+    mol("CCO"), step(),
+    mol("CCN"), step(),
+    mol("CCBr"), step(),
+  )
+} else if selected-case == "abbreviate-skipped-oxygen" {
+  smiles("CC(=O)O", abbreviate: "CO2H", highlight(atom(3)))
 } else {
   panic("unknown validation test case: " + selected-case)
 }
