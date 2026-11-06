@@ -6051,3 +6051,29 @@ stereocenter keeps its existing index and badge.
 
 #pagebreak()
 #include "inline-hydrogen-arrow-clearance.typ"
+
+#pagebreak()
+= Reaction arrow label size follows the surrounding text
+#let label-size-scheme(..arrow-options) = reaction(
+  mol("OCC(O)CO", label: [glycerol]),
+  rxn-arrow(above: ce("Na2SO4, $Delta$"), below: [$-#ce("2H2O")$], ..arrow-options),
+  mol("O=CC=C", label: [acrolein]),
+  [+],
+  ce("2H2O"),
+)
+#[
+  #set text(size: 12pt)
+  *Default (auto, 0.8em of 12pt)* \
+  #label-size-scheme()
+  *label-size: 1em* \
+  #label-size-scheme(label-size: 1em)
+  *label-size: 8pt* \
+  #label-size-scheme(label-size: 8pt)
+  *Vertical arrow, label-size: 1em* \
+  #reaction(
+    flow: "down",
+    mol("CCO"),
+    rxn-arrow(above: ce("H2SO4"), below: [heat], label-size: 1em),
+    mol("C=C"),
+  )
+]

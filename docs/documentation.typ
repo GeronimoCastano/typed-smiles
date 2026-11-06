@@ -1603,7 +1603,7 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 
 == #raw("rxn-arrow()")
 
-#c("rxn-arrow(above: none, below: none, dir: auto, kind: \"single\", scale: 1.0, color: auto, stroke: auto)") draws an arrow.
+#c("rxn-arrow(above: none, below: none, dir: auto, kind: \"single\", scale: 1.0, color: auto, stroke: auto, label-size: auto)") draws an arrow.
 #c("dir") may be #c("\"right\""), #c("\"left\""), #c("\"up\""), #c("\"down\""), or
 #c("auto") (the default, following the enclosing #c("reaction(flow:)")).
 #c("kind") may be #c("\"single\""), #c("\"equilibrium\""), #c("\"equilibrium-filled\""),
@@ -1616,6 +1616,9 @@ Three helpers compose molecules, formulas, and arrows into schemes.
 #c("color") defaults to #c("auto"), inheriting the surrounding text color
 (so arrows recolor on dark slides). #c("stroke") sets the shaft width before
 scaling; #c("auto") matches the default 0.9pt SMILES bond stroke.
+#c("label-size") sets the text size of #c("above") and #c("below") content
+before scaling; #c("auto") is #c("0.8em"), so labels follow the surrounding text.
+Molecules in a slot keep their own size.
 
 #table(
   columns: (auto, auto, 1fr), inset: 6.5pt,
@@ -1629,6 +1632,7 @@ scaling; #c("auto") matches the default 0.9pt SMILES bond stroke.
   [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
   [#c("stroke")], [`auto`], [Shaft width before scaling; #c("auto") matches the default molecule bond stroke.],
+  [#c("label-size")], [`auto`], [Text size of condition labels before scaling; #c("auto") is #c("0.8em") of the surrounding text. Use #c("1em") to match it, or a length such as #c("9pt").],
 )
 
 #demo[
@@ -1641,6 +1645,22 @@ scaling; #c("auto") matches the default 0.9pt SMILES bond stroke.
     ce("A"),
     rxn-arrow(scale: 1.4, stroke: 1.2pt, above: [cat.]),
     ce("B"),
+  )
+  ```, side: false)
+]
+
+#demo[
+  By default, condition labels take 0.8em of the surrounding text.
+  #c("label-size: 1em") matches the body text, and an absolute length fixes the
+  size regardless of the document.
+
+  #example(```typ
+  #reaction(
+    ce("A"),
+    rxn-arrow(above: ce("Na2SO4, $Delta$"), below: [heat]),
+    ce("B"),
+    rxn-arrow(above: ce("Na2SO4, $Delta$"), below: [heat], label-size: 1em),
+    ce("C"),
   )
   ```, side: false)
 ]
@@ -2735,6 +2755,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("scale")], [`1.0`], [Uniform arrow scale, including condition labels.],
   [#c("color")], [`auto`], [Arrow color; `auto` inherits the surrounding text color.],
   [#c("stroke")], [`auto`], [Shaft width before scaling; #c("auto") matches a default 0.9pt molecule bond.],
+  [#c("label-size")], [`auto`], [Condition-label text size before scaling; #c("auto") is #c("0.8em") of the surrounding text.],
 )
 
 #let reference-signature(signature) = text(size: 8pt, raw(signature.replace(", ", ",\n  "), block: true))

@@ -9,6 +9,7 @@
   _invalid-input,
   _validate-positive-number,
   _validate-positive-length,
+  _validate-positive-text-size,
   _validate-nonnegative-length,
   _validate-bool,
   _validate-offset,
@@ -66,8 +67,13 @@
 ///   color, matching dark slide themes. Default: auto.
 /// - stroke (auto / length): Shaft width before `scale` is applied. `auto`
 ///   matches the default SMILES bond stroke (0.9pt). Default: auto.
+/// - label-size (auto / length): Text size of `above` and `below` content
+///   before `scale` is applied. `auto` is 0.8em, so labels follow the
+///   surrounding text size; use `1em` to match it or an absolute
+///   length such as `9pt`. Molecules in a slot keep their own size.
+///   Default: auto.
 /// -> dictionary  (consumed by `reaction()`)
-#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", scale: 1.0, color: auto, stroke: auto) = {
+#let rxn-arrow(above: none, below: none, dir: auto, kind: "single", scale: 1.0, color: auto, stroke: auto, label-size: auto) = {
   if dir != auto and dir not in ("right", "left", "down", "up") {
     _invalid-input(
       "rxn-arrow direction",
@@ -98,6 +104,7 @@
     )
   }
   _validate-positive-length(stroke, "rxn-arrow stroke", allow-auto: true)
+  _validate-positive-text-size(label-size, "rxn-arrow label-size", allow-auto: true)
   for (slot-name, slot-value) in (("above", above), ("below", below)) {
     if type(slot-value) == dictionary and not slot-value.at("__mol__", default: false) {
       _invalid-input(
@@ -116,6 +123,7 @@
     scale: scale,
     color: color,
     stroke: stroke,
+    label-size: label-size,
   )
 }
 
@@ -288,14 +296,18 @@
   }
 }
 
+// Condition labels default to a fraction of the surrounding text so they stay
+// in proportion to the rest of the document at any text size.
+#let _default-arrow-label-size = 0.8em
+
 // An arrow label slot accepts plain content (rendered as small text) or a
 // mol() item (rendered as a molecule).
-#let _arrow-label-content(label) = {
+#let _arrow-label-content(label, label-size) = {
   if type(label) == dictionary and label.at("__mol__", default: false) {
-    _render-molecule-item(label)
-  } else {
-    text(size: 8pt, label)
+    return _render-molecule-item(label)
   }
+  let resolved-label-size = if label-size == auto { _default-arrow-label-size } else { label-size }
+  text(size: resolved-label-size, label)
 }
 
 // Uniformly scales an arrow component while preserving its layout dimensions.
@@ -309,7 +321,7 @@
 }
 
 // Render a horizontal reaction arrow.
-#let _horizontal-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0) = context {
+#let _horizontal-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0, label-size: auto) = context {
   let arrow-color = if arrow-color == auto {
     if type(text.fill) == _color-type { text.fill } else { black }
   } else { arrow-color }
@@ -372,8 +384,8 @@
   let body = if above == none and below == none {
     align(center + horizon, arrow-canvas)
   } else {
-    let above-label = if above != none { _arrow-label-content(above) } else { [] }
-    let below-label = if below != none { _arrow-label-content(below) } else { [] }
+    let above-label = if above != none { _arrow-label-content(above, label-size) } else { [] }
+    let below-label = if below != none { _arrow-label-content(below, label-size) } else { [] }
     let above-size = if above != none { measure(above-label) } else { (width: 0pt, height: 0pt) }
     let below-size = if below != none { measure(below-label) } else { (width: 0pt, height: 0pt) }
     let arrow-size = measure(arrow-canvas)
@@ -390,7 +402,7 @@
 }
 
 // Render a vertical reaction arrow. `above` is shown to the right, `below` to the left.
-#let _vertical-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0) = context {
+#let _vertical-reaction-arrow(above, below, direction, kind, arrow-color, stroke, arrow-scale: 1.0, label-size: auto) = context {
   let arrow-color = if arrow-color == auto {
     if type(text.fill) == _color-type { text.fill } else { black }
   } else { arrow-color }
@@ -451,8 +463,8 @@
   let body = if above == none and below == none {
     align(center + horizon, arrow-canvas)
   } else {
-    let right-label = if above != none { _arrow-label-content(above) } else { [] }
-    let left-label = if below != none { _arrow-label-content(below) } else { [] }
+    let right-label = if above != none { _arrow-label-content(above, label-size) } else { [] }
+    let left-label = if below != none { _arrow-label-content(below, label-size) } else { [] }
     let right-width = if above != none { measure(right-label).width } else { 0pt }
     let left-width = if below != none { measure(left-label).width } else { 0pt }
     let side-width = calc.max(left-width, right-width)
@@ -828,6 +840,7 @@
                 item.at("color", default: auto),
                 item.at("stroke", default: auto),
                 arrow-scale: item.at("scale", default: 1.0),
+                label-size: item.at("label-size", default: auto),
               )
             } else {
               _vertical-reaction-arrow(
@@ -838,6 +851,7 @@
                 item.at("color", default: auto),
                 item.at("stroke", default: auto),
                 arrow-scale: item.at("scale", default: 1.0),
+                label-size: item.at("label-size", default: auto),
               )
             }
           )
@@ -1244,6 +1258,7 @@
               item.at("color", default: auto),
               item.at("stroke", default: auto),
               arrow-scale: item.at("scale", default: 1.0),
+              label-size: item.at("label-size", default: auto),
             )
           } else {
             _vertical-reaction-arrow(
@@ -1254,6 +1269,7 @@
               item.at("color", default: auto),
               item.at("stroke", default: auto),
               arrow-scale: item.at("scale", default: 1.0),
+              label-size: item.at("label-size", default: auto),
             )
           }
           let arrow-width = measure(body).width / canvas-scale

@@ -365,6 +365,14 @@
   )
 } else if selected-case == "abbreviate-skipped-oxygen" {
   smiles("CC(=O)O", abbreviate: "CO2H", highlight(atom(3)))
+} else if selected-case == "arrow-label-size-zero" {
+  rxn-arrow(above: [cat.], label-size: 0pt)
+} else if selected-case == "arrow-label-size-type" {
+  rxn-arrow(above: [cat.], label-size: "small")
+} else if selected-case == "arrow-label-size-negative-relative" {
+  rxn-arrow(above: [cat.], label-size: -0.5em)
+} else if selected-case == "arrow-label-size-mixed-sign" {
+  rxn-arrow(above: [cat.], label-size: 1em - 3pt)
 } else {
   panic("unknown validation test case: " + selected-case)
 }

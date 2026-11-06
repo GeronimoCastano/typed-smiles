@@ -67,6 +67,29 @@
   }
 }
 
+// A text size may be absolute (11pt), relative to the surrounding text (0.8em),
+// or a sum of both. Only sizes whose parts are non-negative and not all zero
+// are certain to be positive before the surrounding text size is known.
+#let _validate-positive-text-size(value, input-context, allow-auto: false) = {
+  if allow-auto and value == auto {
+    return
+  }
+  let is-positive-size = (
+    type(value) == _length-type
+      and value.abs >= 0pt
+      and value.em >= 0
+      and (value.abs > 0pt or value.em > 0)
+  )
+  if not is-positive-size {
+    _invalid-input(
+      input-context,
+      "expected a positive text size, got " + repr(value),
+      "Pass a length such as 8pt or 0.8em"
+        + if allow-auto { ", or auto to follow the surrounding text." } else { "." },
+    )
+  }
+}
+
 #let _validate-nonnegative-length(value, input-context) = {
   if type(value) != _length-type or value < 0pt {
     _invalid-input(

@@ -694,6 +694,18 @@ if it does not fit.
 )
 ```
 
+`rxn-arrow` sets condition labels in `above:` and `below:` at `0.8em` of the
+surrounding text, so they follow the document's text size. `label-size: 1em` matches the
+body text, and a length such as `label-size: 9pt` fixes the size.
+
+```typst
+#reaction(
+  ce("A"),
+  rxn-arrow(above: ce("Na2SO4, $Delta$"), below: [heat], label-size: 1em),
+  ce("B"),
+)
+```
+
 `fit: "width"` shrinks a scheme that is wider than the page or container it sits
 in, uniformly and without enlarging it. It applies after `scale:`. The default,
 `fit: none`, keeps the natural size and can run past the edge.
@@ -1073,7 +1085,7 @@ grows a branch that reads away from the ring, while the outer reaction keeps
 its own direction — so a main reaction can embed a cycle whose branch runs its
 own sub-reaction, then continue.
 
-### `#rxn-arrow(above, below, dir, kind, scale, color, stroke)`
+### `#rxn-arrow(above, below, dir, kind, scale, color, stroke, label-size)`
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -1084,6 +1096,7 @@ own sub-reaction, then continue.
 | `scale` | `1.0` | Uniform arrow scale, including condition labels |
 | `color` | `auto` | Arrow color; `auto` inherits the surrounding text color |
 | `stroke` | `auto` | Shaft width before scaling; `auto` matches the default 0.9pt molecule bond |
+| `label-size` | `auto` | Text size of `above`/`below` content before scaling; `auto` is `0.8em` of the surrounding text |
 
 `scale` resizes the complete arrow component proportionally, including the
 shaft width, arrowhead, spacing, and `above`/`below` labels. Explicit `stroke`

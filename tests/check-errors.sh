@@ -212,4 +212,9 @@ expect_error "audit-folded-hydrogen-overflow" "exceeds the supported maximum of 
 
 expect_error "abbreviate-skipped-oxygen" "Reference the displayed representative atom 2"
 
+expect_error "arrow-label-size-zero" "rxn-arrow label-size is invalid: expected a positive text size, got 0pt"
+expect_error "arrow-label-size-type" "rxn-arrow label-size is invalid"
+expect_error "arrow-label-size-negative-relative" "rxn-arrow label-size is invalid"
+expect_error "arrow-label-size-mixed-sign" "Pass a length such as 8pt or 0.8em, or auto to follow the surrounding text."
+
 echo "All editor-visible validation cases passed."
