@@ -6,27 +6,46 @@
 
 #let _smiles-plugin = plugin("../plugin/typst_smiles_plugin.wasm")
 
+// A math font extends an arrow to the width of its labels only when it carries
+// a glyph assembly for that arrow. New Computer Modern Math ships with Typst
+// and carries assemblies for every reaction arrow, so it stands in for fonts
+// that lack one.
+#let _arrow-fallback-font = "New Computer Modern Math"
+#let _reaction-arrow-glyphs = (
+  sym.arrow.r,
+  sym.arrow.l,
+  sym.arrow.l.r,
+  sym.harpoons.rtlb,
+)
+
+// Labels can be several em wide, so the probe is long enough that only
+// glyphs with an unbounded assembly reach it.
+#let _arrow-probe-length-in-ems = 10
+#let _arrow-probe-tolerance = 0.9
+
+// Whether the math font at the call site stretches `arrow` to `length`.
+#let _font-extends-arrow(arrow, length) = {
+  let stretched-arrow = measure(math.equation(math.stretch(arrow, size: length)))
+  stretched-arrow.width >= length * _arrow-probe-tolerance
+}
+
+// Keeps the reader's math font unless it cannot extend every reaction arrow,
+// in which case the arrows are drawn from the fallback font so they span their
+// labels like in any other font.
+#let _with-extensible-arrows(body) = context {
+  let probe-length = text.size * _arrow-probe-length-in-ems
+  let font-extends-every-arrow = _reaction-arrow-glyphs.all(arrow => _font-extends-arrow(arrow, probe-length))
+  show math.stretch: set text(font: _arrow-fallback-font) if not font-extends-every-arrow
+  body
+}
+
 // Re-export as ce so users only need one import line.
 // chemformula uses math mode internally, giving proper operator spacing.
 #let ce(chem, font: none, font-size: none, ..args) = {
-  if font == none and font-size == none {
-    ch(chem, ..args)
-  } else if font == none {
-    [
-      #show math.equation: set text(size: font-size)
-      #ch(chem, ..args)
-    ]
-  } else if font-size == none {
-    [
-      #show math.equation: set text(font: font)
-      #ch(chem, ..args)
-    ]
-  } else {
-    [
-      #show math.equation: set text(font: font, size: font-size)
-      #ch(chem, ..args)
-    ]
-  }
+  let formula = _with-extensible-arrows(ch(chem, ..args))
+  show math.equation: set text(font: font) if font != none
+  show math.equation: set text(size: font-size) if font-size != none
+  formula
 }
 
 // Catalogue names accepted by automatic abbreviation, in priority order.

@@ -6077,3 +6077,18 @@ stereocenter keeps its existing index and badge.
     mol("C=C"),
   )
 ]
+
+#pagebreak()
+= Reaction arrows in ce() extend in every math font
+#for font in ("New Computer Modern Math", "Libertinus Serif", "DejaVu Sans Mono") [
+  *#font* \
+  #[
+    #show math.equation: set text(font: font, size: 13pt)
+    #ce("6 H2O + 6 CO2 <=>[Photosynthesis][Respiration] C6H12O6 + 6 O2")
+    #v(1.2em)
+    #ce("A ->[Heat] B <-[Cool] C <->[Resonance] D")
+  ]
+  #v(4pt)
+]
+*ce(font:, font-size:)* \
+#ce("N2 + 3 H2 <=>[Haber][Process] 2 NH3", font: "DejaVu Sans Mono", font-size: 13pt)
