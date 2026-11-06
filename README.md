@@ -38,7 +38,7 @@ source instead of copying diagrams from a separate editor.
 ## Quick start
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": *
+#import "@preview/typed-smiles:0.14.0": *
 ```
 
 A wildcard import gives you the molecule renderer, reaction helpers, and
@@ -55,7 +55,7 @@ Aromatic rings can be written either in lowercase aromatic notation
 on parse and both render identically.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": smiles
+#import "@preview/typed-smiles:0.14.0": smiles
 
 #table(
   columns: (1fr, 1fr, 1fr, 1fr),
@@ -83,7 +83,7 @@ laboratory reagents. Type `molecules.` and the editor suggests the available
 names.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": smiles, molecules
+#import "@preview/typed-smiles:0.14.0": smiles, molecules
 
 #smiles(molecules.caffeine)
 #smiles(molecules.alanine)
@@ -618,7 +618,7 @@ A–T base pair with its two hydrogen bonds nudged off the atom centers:
 and formulas.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": ce
+#import "@preview/typed-smiles:0.14.0": ce
 
 #table(
   columns: (1fr, 1fr),
@@ -654,7 +654,7 @@ including implicit and explicit hydrogens. Dot-separated fragments (salts, hydra
 together.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": mol-weight
+#import "@preview/typed-smiles:0.14.0": mol-weight
 
 Ethanol: #calc.round(mol-weight("CCO"), digits: 2) g/mol // 46.07
 Caffeine: #calc.round(mol-weight("CN1C=NC2=C1C(=O)N(C(=O)N2C)C"), digits: 2) g/mol // 194.19
@@ -673,7 +673,7 @@ schemes. `reaction(scale: 0.8)` shrinks the whole scheme uniformly. By default,
 if it does not fit.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": smiles, ce, rxn-arrow, mol, reaction
+#import "@preview/typed-smiles:0.14.0": smiles, ce, rxn-arrow, mol, reaction
 
 #stack(
   spacing: 1cm,
@@ -877,7 +877,7 @@ or an angle), and `label-offset:`/`into-offset:`/`out-offset:` nudge pieces like
 a `mol` offset.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": smiles, ce, rxn-arrow, mol, reaction, cycle, step
+#import "@preview/typed-smiles:0.14.0": smiles, ce, rxn-arrow, mol, reaction, cycle, step
 
 #align(center)[
   #reaction(
@@ -915,7 +915,7 @@ from `mol(label: ...)` start on one line per row, and page breaks fall only
 between rows.
 
 ```typst
-#import "@preview/typed-smiles:0.13.0": *
+#import "@preview/typed-smiles:0.14.0": *
 
 #let aligned = align-molecules(
   ("CC(=O)c1ccccc1", "CC(O)c1ccccc1"),
