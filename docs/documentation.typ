@@ -308,6 +308,7 @@ call site. See @sec-library for every entry.]
   [#c("mirror")], [`none` / `"horizontal"` / `"vertical"`], [`none`], [Optional horizontal or vertical page-axis reflection.],
   [#c("show-h")], [`"skeleton"` / `"all"` / `int` / `array`], [`()`], [Implicit hydrogens to label beyond the default heteroatom hydrogens. Use #c("\"all\"") for compact labels or #c("\"skeleton\"") for separate H atoms and bonds.],
   [#c("aromatic")], [`"kekule"` / `"circle"`], [`"kekule"`], [Depict lowercase-aromatic rings with alternating double bonds or with an inscribed circle.],
+  [#c("charge-style")], [`"plain"` / `"circled"`], [`"plain"`], [Write formal charges as a bare sign or with the sign inside a circle. See @sec-charges.],
   [#c("atom-annotations")], [`array`], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuple entries.],
   [#c("opacity")], [`ratio` / `float`], [`100%`], [Fade the whole drawing — bonds, labels, charges, lone pairs — e.g. for ghost molecules.],
   [#c("bond-customizations")], [`array`], [`()`], [Per-bond style overrides as #c("(bond(i, j), (..options..))") pairs; options are #c("color"), #c("stroke"), and #c("opacity").],
@@ -732,7 +733,7 @@ references apply to either form. Write aromatic hydrogens explicitly, as in
 #c("[nH]")\; invalid aromatic rings or aromatic atoms outside a ring produce an
 error.]
 
-== Charges
+== Charges <sec-charges>
 
 #demo[
   Formal charges inside brackets render as a raised sign after the atom.
@@ -743,6 +744,19 @@ error.]
   #smiles("[O-]C1=CC=CC=C1") \
   #smiles("C[NH3+]") \
   #smiles("C[N+](=O)[O-]")
+  ```)
+]
+
+#demo[
+  #c("charge-style: \"circled\"") encloses each sign in a circle, as in organic
+  structure drawings. A charge larger than one writes its size before the
+  circle. The option also works on #c("mol()"), #c("smiles-inline()"), and
+  #c("smiles-cetz()").
+
+  #example(```typ
+  #smiles("C[N+](=O)[O-]", charge-style: "circled") \
+  #smiles("[NH3+]CC(=O)[O-]", charge-style: "circled") \
+  #smiles("[Mg+2]", charge-style: "circled")
   ```)
 ]
 
@@ -1427,13 +1441,37 @@ anchors for selectable formula fragments, but no #c("atom-<i>") anchor for skipp
 == Fonts and size
 
 #demo[
-  #c("ce") accepts #c("font") and #c("font-size")\; any other arguments pass
-  through to chemformula.
+  #c("ce") accepts #c("font"), #c("font-size"), #c("charge-style"), and
+  #c("stacked-charges") (see below)\; any other arguments pass through to
+  chemformula.
 
   #example(```typ
   #ce("CuSO4 * 5 H2O") \
   #ce("CuSO4 * 5 H2O", font: "Libertinus Serif", font-size: 13pt) \
   #ce("CuSO4 * 5 H2O", font: "PT Sans", font-size: 13pt)
+  ```)
+]
+
+== Charge placement and style <sec-ce-charges>
+
+#table(
+  columns: (auto, auto, auto, 1fr), inset: 6.5pt,
+  align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
+  fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
+  [*Argument*], [*Type*], [*Default*], [*Description*],
+  [#c("stacked-charges")], [`bool`], [`true`], [Stack a charge over the subscript that follows the same atom, as in #c("SO4^2-"). With `false` the charge follows the subscript.],
+  [#c("charge-style")], [`"plain"` / `"circled"`], [`"plain"`], [Write charges as a bare sign, or with the sign inside a circle and the size of a larger charge before it.],
+)
+
+#demo[
+  Both options change only written charges such as #c("^2-"), #c("+"), and
+  #c("-")\; isotopes, exponents, and other scripts keep their place.
+
+  #example(```typ
+  #ce("SO4^2-") #h(1em)
+  #ce("SO4^2-", stacked-charges: false) #h(1em)
+  #ce("NH4+", charge-style: "circled") #h(1em)
+  #ce("Fe^3+", charge-style: "circled")
   ```)
 ]
 
@@ -1546,7 +1584,7 @@ a larger #c("height") or as a display-mode #c("smiles()").]
 ]
 
 The remaining #c("..opts") are #c("smiles()") drawing options (#c("color"),
-#c("rotation"), #c("mirror"), #c("show-h"), #c("aromatic"), #c("opacity"),
+#c("rotation"), #c("mirror"), #c("show-h"), #c("aromatic"), #c("charge-style"), #c("opacity"),
 #c("bond-customizations"), …). #c("fg") and #c("theme") default to black and
 light because `auto` foreground resolution is not available inside a raw
 canvas — pass them explicitly on dark backgrounds.
@@ -1576,8 +1614,8 @@ Three helpers compose molecules, formulas, and arrows into schemes.
   addressable by curly arrows (see #link(<sec-mech>)[Reaction mechanisms]). String
   molecules accept common drawing options such as #c("scale"), #c("font-size"),
   #c("font"), #c("bond-stroke"), #c("color"), #c("rotation"), #c("show-h"),
-  #c("lone-pairs"), #c("opacity"), #c("bond-customizations"), #c("atom-colors"),
-  #c("show-indices"), #c("abbreviate"), and #c("highlight-overlap"). #c("offset") nudges the molecule in page coordinates, in
+  #c("lone-pairs"), #c("charge-style"), #c("opacity"), #c("bond-customizations"),
+  #c("atom-colors"), #c("show-indices"), #c("abbreviate"), and #c("highlight-overlap"). #c("offset") nudges the molecule in page coordinates, in
   bond-length units: positive x moves right and positive y moves up regardless
   of #c("reaction(flow:)"). Positional #c("arrow()") and #c("highlight()")
   annotations use local one-molecule references, so #c("atom(i)") and
@@ -2707,6 +2745,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   [#c("mirror")], [`none`], [Optional #c("\"horizontal\"") or #c("\"vertical\"") reflection.],
   [#c("show-h")], [`()`], [Label selected implicit hydrogens; use #c("\"all\"") for every atom or #c("\"skeleton\"") for separate H atoms and bonds.],
   [#c("aromatic")], [`"kekule"`], [Lowercase-aromatic rings as doubles or #c("\"circle\"").],
+  [#c("charge-style")], [`"plain"`], [Formal charges as a bare sign or #c("\"circled\"") signs.],
   [#c("atom-annotations")], [`()`], [Small gray side labels as #c("(index, content)") or #c("(index, content, offset)") tuples.],
   [#c("opacity")], [`100%`], [Fade the whole drawing (ghost molecules).],
   [#c("bond-customizations")], [`()`], [Per-bond #c("color"), #c("stroke"), #c("opacity") keyed by #c("bond(i, j)").],
@@ -2767,6 +2806,7 @@ sugars, acids, drugs and natural products, and laboratory reagents.
   align: (x, y) => if y == 0 { center + horizon } else { left + horizon },
   fill: (_, y) => if y == 0 { accent-soft }, stroke: 0.5pt + luma(210),
   [*Helper*], [*Purpose*],
+  [#reference-signature("ce(chem, font:, font-size:, charge-style:, stacked-charges:, ..args)")], [Chemical formula or equation through chemformula; #c("stacked-charges: false") writes charges after subscripts and #c("charge-style: \"circled\"") circles the sign.],
   [#reference-signature("mol-formula(smiles)")], [Hill-ordered molecular formula content; errors on wildcards, abbreviations, and isotopes.],
   [#reference-signature("mol-weight(smiles)")], [Molecular weight in g/mol as a #c("float")\; errors on wildcards, abbreviations, and isotopes.],
   [#reference-signature("smiles-inline(smiles, height:, baseline:, ..args)")], [Molecule scaled and baseline-aligned for running text.],

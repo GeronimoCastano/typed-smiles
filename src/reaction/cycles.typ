@@ -840,6 +840,7 @@
               fg: molecule-foreground,
               theme: molecule-theme,
               aromatic: placed-item.m.opts.at("aromatic", default: "kekule"),
+              charge-style: placed-item.m.opts.at("charge-style", default: "plain"),
               atom-annotations: placed-item.m.opts.at(
                 "atom-annotations",
                 default: (),

@@ -212,6 +212,15 @@ expect_error "audit-folded-hydrogen-overflow" "exceeds the supported maximum of 
 
 expect_error "abbreviate-skipped-oxygen" "Reference the displayed representative atom 2"
 
+expect_error "smiles-charge-style-value" "smiles charge-style is invalid: expected"
+expect_error "smiles-charge-style-value" "square"
+expect_error "smiles-charge-style-type" "smiles charge-style is invalid: expected"
+expect_error "mol-charge-style-value" "mol charge-style is invalid"
+expect_error "cetz-charge-style-value" "smiles-cetz charge-style is invalid"
+expect_error "ce-charge-style-value" "ce charge-style is invalid: expected"
+expect_error "ce-charge-style-value" "boxed"
+expect_error "ce-charge-style-type" "ce charge-style is invalid"
+expect_error "ce-stacked-charges-type" "ce stacked-charges is invalid: expected true or false"
 expect_error "arrow-label-size-zero" "rxn-arrow label-size is invalid: expected a positive text size, got 0pt"
 expect_error "arrow-label-size-type" "rxn-arrow label-size is invalid"
 expect_error "arrow-label-size-negative-relative" "rxn-arrow label-size is invalid"

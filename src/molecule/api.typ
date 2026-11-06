@@ -12,6 +12,7 @@
   _validate-offset,
   _validate-molecule-options,
   _validate-highlight-overlap,
+  _validate-charge-style,
   _smiles-option-names,
   _positional-highlight-hint,
   _reject-unknown-named-options,
@@ -78,6 +79,10 @@
 ///   notation are depicted: alternating double bonds, or single bonds with an
 ///   inscribed circle. Kekulé-written input always draws its explicit bonds.
 ///   Default: "kekule".
+/// - charge-style ("plain" / "circled"): How formal charges are written. "plain"
+///   writes a bare sign (+, −, 2+); "circled" encloses the sign in a circle, as
+///   in organic structure drawings, with the size of a larger charge before the
+///   circle. Default: "plain".
 /// - atom-annotations (array): Small gray side labels as tuple entries:
 ///   (index, content) or (index, content, offset). Default: ().
 /// - opacity (ratio / float): Fade the whole drawing — bonds, labels, lone
@@ -133,6 +138,7 @@
   mirror: none,
   show-h: (),
   aromatic: "kekule",
+  charge-style: "plain",
   atom-annotations: (),
   opacity: 100%,
   bond-customizations: (),
@@ -251,6 +257,7 @@
     bond-customizations,
     show-maps: show-maps,
     undepicted-stereo: undepicted-stereo,
+    charge-style: charge-style,
   )
   _validate-highlight-overlap(highlight-overlap, "smiles highlight-overlap")
   let bounds-options = (
@@ -260,6 +267,7 @@
     show-h: show-h,
     lone-pairs: lone-pairs,
     atom-annotations: atom-annotations,
+    charge-style: charge-style,
   )
   let bounds = _molecule-bounds(
     layout,
@@ -285,6 +293,7 @@
     font: font,
     show-h: show-h,
     aromatic: aromatic,
+    charge-style: charge-style,
   ),)
   let configuration = _annotation-configuration(canvas-scale, actual-font-size, scale, bond-stroke: bond-stroke)
   let the-scale = scale // cetz.draw `scale` shadows the argument inside the canvas
@@ -316,6 +325,7 @@
       fg: fg,
       theme: theme,
       aromatic: aromatic,
+      charge-style: charge-style,
       atom-annotations: atom-annotations,
       opacity: opacity,
       bond-customizations: bond-customizations,
@@ -412,8 +422,8 @@
 ///   canvas and falls back to black. Default: black.
 /// - theme ("light" / "dark"): CPK palette variant. Default: "light".
 /// - ..opts: `smiles()` drawing options — scale, font-size, font, bond-stroke,
-///   color, rotation, mirror, show-h, aromatic, atom-annotations, opacity,
-///   bond-customizations, lone-pairs, atom-colors, show-indices, abbreviate,
+///   color, rotation, mirror, show-h, aromatic, charge-style, atom-annotations,
+///   opacity, bond-customizations, lone-pairs, atom-colors, show-indices, abbreviate,
 ///   highlight-smarts, highlight-groups, highlight-colors, highlight-unmatched,
 ///   highlight-overlap, show-maps, undepicted-stereo. Hidden abbreviation atoms get no
 ///   `"atom-<i>"` anchor.
@@ -487,8 +497,8 @@
   let allowed = (
     "scale", "font-size", "font", "bond-stroke", "color", "rotation",
     "show-h", "lone-pairs", "atom-colors", "show-indices", "aromatic",
-    "atom-annotations", "opacity", "bond-customizations", "show-maps",
-    "undepicted-stereo",
+    "charge-style", "atom-annotations", "opacity", "bond-customizations",
+    "show-maps", "undepicted-stereo",
   )
   let drawing-options = (:)
   let highlight-options = (
@@ -497,6 +507,7 @@
   let matching-options = (:)
   let highlight-overlap = options.at("highlight-overlap", default: "merge")
   _validate-highlight-overlap(highlight-overlap, "smiles-cetz highlight-overlap")
+  _validate-charge-style(options.at("charge-style", default: "plain"), "smiles-cetz charge-style")
   for (option-name, option-value) in options {
     if option-name in allowed {
       drawing-options.insert(option-name, option-value)
@@ -543,6 +554,7 @@
     actual-bond-stroke: if bond-stroke == none { 0.9pt * molecule-scale } else { bond-stroke },
     font: drawing-options.at("font", default: "New Computer Modern"),
     show-h: show-h, aromatic: options.at("aromatic", default: "kekule"),
+    charge-style: options.at("charge-style", default: "plain"),
   ),)
   let configuration = _annotation-configuration(canvas-scale, actual-font-size, molecule-scale, bond-stroke: bond-stroke)
   group(name: name, {

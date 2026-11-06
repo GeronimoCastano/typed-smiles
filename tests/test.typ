@@ -6092,3 +6092,52 @@ stereocenter keeps its existing index and badge.
 ]
 *ce(font:, font-size:)* \
 #ce("N2 + 3 H2 <=>[Haber][Process] 2 NH3", font: "DejaVu Sans Mono", font-size: 13pt)
+
+#pagebreak()
+= ce charge placement and style
+#let charge-formulas = ("SO4^2-", "PO4^3-", "NH4+", "Na+", "Fe^3+", "OH-", "H3O+", "A_2^+", "^14C")
+#let charge-row(label, ..options) = [
+  *#label* \
+  #for formula in charge-formulas [#ce(formula, ..options)#h(1.2em)]
+  #v(6pt)
+]
+#charge-row([Default: stacked, plain])
+#charge-row([stacked-charges: false], stacked-charges: false)
+#charge-row([charge-style: "circled"], charge-style: "circled")
+#charge-row([Circled, not stacked], charge-style: "circled", stacked-charges: false)
+*In a reaction* \
+#ce("SO4^2- + 2H+ <=>[Heat][Cool] H2SO4", stacked-charges: false) \
+#ce("NH3 + H2O <=> NH4+ + OH-", charge-style: "circled")
+
+#pagebreak()
+= Circled charges in molecules
+#let charge-comparison(smiles-string, ..options) = grid(
+  columns: 2,
+  gutter: 1em,
+  smiles(smiles-string, scale: 1.2, ..options),
+  smiles(smiles-string, scale: 1.2, charge-style: "circled", ..options),
+)
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 14pt,
+  row-gutter: 14pt,
+  [*Ammonium* \ #charge-comparison("[NH4+]")],
+  [*Nitro group* \ #charge-comparison("C[N+](=O)[O-]")],
+  [*Acetate* \ #charge-comparison("CC(=O)[O-]")],
+  [*Zwitterion* \ #charge-comparison("[NH3+]CC(=O)[O-]")],
+  [*Dication* \ #charge-comparison("[Mg+2]")],
+  [*Dianion* \ #charge-comparison("[O-2]")],
+  [*Lone pairs* \ #charge-comparison("C[O-]", lone-pairs: "dots")],
+  [*Rotated 60°* \ #charge-comparison("C[N+](=O)[O-]", rotation: 60deg)],
+  [*Arrow from a charged atom* \ #charge-comparison("C[N+](=O)[O-]", arrow(from: atom(3), to: atom(1)))],
+  [*Stacked hydrogen* \ #charge-comparison("C[NH2+]C")],
+)
+*In a scheme* \
+#reaction(
+  mol("CC(=O)O"),
+  rxn-arrow(above: ce("NaOH")),
+  mol("CC(=O)[O-]", charge-style: "circled"),
+  [+],
+  ce("Na+", charge-style: "circled"),
+)
+*Inline:* #smiles-inline("[NH4+]", charge-style: "circled") ammonium and #smiles-inline("CC(=O)[O-]", charge-style: "circled") acetate.

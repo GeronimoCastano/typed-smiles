@@ -1,4 +1,4 @@
-#import "../src/lib.typ": smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, molecules, substructure-matches, align-molecules, molecule-grid, smiles-cetz
+#import "../src/lib.typ": ce, smiles, mol, mol-formula, rxn-arrow, reaction, cycle, step, atom, bond, lp, species, arrow, highlight, molecules, substructure-matches, align-molecules, molecule-grid, smiles-cetz
 #import "@preview/cetz:0.5.2"
 
 #let selected-case = sys.inputs.at("case", default: "")
@@ -365,6 +365,20 @@
   )
 } else if selected-case == "abbreviate-skipped-oxygen" {
   smiles("CC(=O)O", abbreviate: "CO2H", highlight(atom(3)))
+} else if selected-case == "smiles-charge-style-value" {
+  smiles("[NH4+]", charge-style: "square")
+} else if selected-case == "smiles-charge-style-type" {
+  smiles("[NH4+]", charge-style: true)
+} else if selected-case == "mol-charge-style-value" {
+  reaction(mol("[NH4+]", charge-style: "ring"))
+} else if selected-case == "cetz-charge-style-value" {
+  cetz.canvas(smiles-cetz("[NH4+]", charge-style: "ring"))
+} else if selected-case == "ce-charge-style-value" {
+  ce("SO4^2-", charge-style: "boxed")
+} else if selected-case == "ce-charge-style-type" {
+  ce("SO4^2-", charge-style: none)
+} else if selected-case == "ce-stacked-charges-type" {
+  ce("SO4^2-", stacked-charges: "no")
 } else if selected-case == "arrow-label-size-zero" {
   rxn-arrow(above: [cat.], label-size: 0pt)
 } else if selected-case == "arrow-label-size-type" {

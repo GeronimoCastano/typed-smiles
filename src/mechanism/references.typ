@@ -23,7 +23,7 @@
   _inline-hydrogen-pair-directions,
   _lone-pair-center-distance,
   _element-glyph-center-offset,
-  _charge-text,
+  _inline-charge-content,
   _abbreviation-label,
   _label-anchor-offset,
   _abbreviation-lone-pair-directions,
@@ -139,14 +139,14 @@
     }
     neighbor-index
   }
-  let charge-content(atom) = {
-    let charge-str = _charge-text(atom.charge)
-    if charge-str == "" {
-      []
-    } else {
-      h(0.12em) + super(atom-label(charge-str, size: superscript-size))
-    }
-  }
+  let charge-style = placed-species.at("charge-style", default: "plain")
+  let charge-content(atom) = _inline-charge-content(
+    atom.charge,
+    charge-style,
+    (charge-text, size) => atom-label(charge-text, size: size),
+    black,
+    font-size,
+  )
   let show-h-list = show-h-state.indices
   // Hydrogens written in an atom's label, or 0 when the label shows none.
   let label-hydrogen-count(atom, index) = {

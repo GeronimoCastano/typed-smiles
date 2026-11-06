@@ -647,6 +647,86 @@
   charge-label,
 )
 
+// A circled charge draws its sign inside a ring built from lines, so the sign
+// stays centered and does not depend on the label font. Every size follows the
+// label font size. A raised ring tops out at the capital height of the label.
+#let _circled-charge-diameter-ratio = 0.46
+#let _circled-charge-stroke-ratio = 0.05
+#let _circled-charge-sign-length-ratio = 0.54
+#let _circled-charge-magnitude-scale = 0.6
+#let _circled-charge-magnitude-gap-ratio = 0.1
+#let _circled-charge-raise-ratio = 0.2
+
+#let _circled-charge-outer-diameter(font-size) = (
+  font-size * (_circled-charge-diameter-ratio + _circled-charge-stroke-ratio)
+)
+
+#let _circled-charge-ring(is-positive, font-size, ring-color) = {
+  let ring-diameter = font-size * _circled-charge-diameter-ratio
+  let ring-stroke = font-size * _circled-charge-stroke-ratio + ring-color
+  let sign-length = ring-diameter * _circled-charge-sign-length-ratio
+  let outer-diameter = _circled-charge-outer-diameter(font-size)
+  box(width: outer-diameter, height: outer-diameter, {
+    place(center + horizon, std.circle(radius: ring-diameter / 2, stroke: ring-stroke))
+    place(center + horizon, std.line(length: sign-length, stroke: ring-stroke))
+    if is-positive {
+      place(center + horizon, std.line(length: sign-length, angle: 90deg, stroke: ring-stroke))
+    }
+  })
+}
+
+// One ring for a charge of one; a larger charge writes its size before the ring.
+// `magnitude-label` styles the size's digits at the size it is given. Placed
+// pieces keep the box's baseline on its bottom edge, like a lone ring, so both
+// forms sit at the same height.
+#let _circled-charge-content(charge, font-size, ring-color, magnitude-label) = {
+  let ring = _circled-charge-ring(charge > 0, font-size, ring-color)
+  let magnitude = calc.abs(charge)
+  if magnitude == 1 { return ring }
+  let magnitude-content = magnitude-label(str(magnitude), font-size * _circled-charge-magnitude-scale)
+  let magnitude-gap = font-size * _circled-charge-magnitude-gap-ratio
+  let outer-diameter = _circled-charge-outer-diameter(font-size)
+  box(
+    width: measure(magnitude-content).width + magnitude-gap + outer-diameter,
+    height: outer-diameter,
+    {
+      place(left + horizon, magnitude-content)
+      place(right + horizon, ring)
+    },
+  )
+}
+
+// A formal charge written after its label and raised like a superscript.
+// `charge-label(text, size)` styles charge text for the caller's font and color.
+#let _inline-charge-content(charge, charge-style, charge-label, ring-color, font-size) = {
+  if charge == 0 { return [] }
+  // A small gap before the superscript so the sign sits to the right of a
+  // preceding subscript (e.g. the "3" in NH3+) instead of reading as that
+  // digit's exponent.
+  let gap-before-charge = h(0.12em)
+  if charge-style == "circled" {
+    let ring-lift = font-size * _circled-charge-raise-ratio
+    return gap-before-charge + box(
+      baseline: -ring-lift,
+      _circled-charge-content(charge, font-size, ring-color, charge-label),
+    )
+  }
+  gap-before-charge + super(charge-label(_charge-text(charge), font-size))
+}
+
+// A formal charge drawn apart from its symbol, measured by its visible ink.
+#let _separate-charge-sign(charge, charge-style, charge-label, ring-color, font-size) = {
+  if charge-style == "circled" {
+    return _circled-charge-content(
+      charge,
+      font-size,
+      ring-color,
+      (magnitude, size) => _charge-sign(charge-label(magnitude, size)),
+    )
+  }
+  _charge-sign(charge-label(_charge-text(charge), font-size * _charge-sign-scale))
+}
+
 // Screen directions leaving an atom that a charge sign must keep clear of:
 // its bonds, a stereo hydrogen, skeleton hydrogens, and drawn lone pairs.
 #let _occupied-atom-directions(
@@ -1427,6 +1507,7 @@
   bond-customizations: (),
   show-maps: false,
   undepicted-stereo: "error",
+  charge-style: "plain",
 ) = {
   _validate-molecule-options(
     layout,
@@ -1449,6 +1530,7 @@
     bond-customizations,
     show-maps: show-maps,
     undepicted-stereo: undepicted-stereo,
+    charge-style: charge-style,
   )
   _require-depicted-stereo(layout, undepicted-stereo)
   let show-h-state = _normalize-show-h(show-h)
@@ -2352,11 +2434,13 @@
           skeleton: show-skeleton-h,
         )
       }
-      let charge-sign = _charge-sign(atom-label(
-        charge-str,
-        fill: fill,
-        size: superscript-size * _charge-sign-scale,
-      ))
+      let charge-sign = _separate-charge-sign(
+        atom.charge,
+        charge-style,
+        (charge-text, size) => atom-label(charge-text, fill: fill, size: size),
+        fill,
+        actual-font-size,
+      )
       let charge-offset = _charge-label-offset(
         _occupied-atom-directions(
           layout,
@@ -2396,14 +2480,13 @@
         let h-count = visible-hydrogen-count(i)
 
         let charge-str = _charge-text(atom.charge)
-        // A small gap before the superscript so the sign sits to the right of a
-        // preceding subscript (e.g. the "3" in NH3+) instead of reading as that
-        // digit's exponent.
-        let charge-content = if charge-str == "" {
-          []
-        } else {
-          h(0.12em) + super(atom-label(charge-str, fill: fill, size: superscript-size))
-        }
+        let charge-content = _inline-charge-content(
+          atom.charge,
+          charge-style,
+          (charge-text, size) => atom-label(charge-text, fill: fill, size: size),
+          fill,
+          actual-font-size,
+        )
 
         let isotope = atom.at("isotope", default: 0)
         let isotope-content = if isotope > 0 {
@@ -2981,11 +3064,14 @@
       }
     }
     let charge-string = _charge-text(atom.charge)
-    let charge-content = if charge-string == "" {
-      []
-    } else {
-      h(0.12em) + super(atom-label(charge-string))
-    }
+    let charge-style = options.at("charge-style", default: "plain")
+    let charge-content = _inline-charge-content(
+      atom.charge,
+      charge-style,
+      (charge-text, size) => atom-label(charge-text, size: size),
+      black,
+      actual-font-size,
+    )
     // Mirrors the renderer's separately placed charge sign.
     let charge-sign-box(
       symbol-content,
@@ -3009,10 +3095,13 @@
           skeleton: show-h-state.skeleton,
         )
       }
-      let charge-sign = _charge-sign(atom-label(
-        charge-string,
-        size: actual-font-size * _charge-sign-scale,
-      ))
+      let charge-sign = _separate-charge-sign(
+        atom.charge,
+        charge-style,
+        (charge-text, size) => atom-label(charge-text, size: size),
+        black,
+        actual-font-size,
+      )
       let charge-size = content-size(charge-sign)
       let charge-offset = _charge-label-offset(
         _occupied-atom-directions(

@@ -430,9 +430,22 @@
   }
 }
 
+#let _charge-styles = ("plain", "circled")
+
+// Shared by molecule drawings and ce() so both spell the choice the same way.
+#let _validate-charge-style(charge-style, input-context) = {
+  if charge-style not in _charge-styles {
+    _invalid-input(
+      input-context,
+      "expected \"plain\" or \"circled\", got " + repr(charge-style),
+      "Use \"plain\" for a bare sign or \"circled\" for a sign inside a circle.",
+    )
+  }
+}
+
 #let _smiles-option-names = (
   "style", "scale", "bond-length", "font-size", "font", "bond-stroke", "color", "fg",
-  "theme", "rotation", "mirror", "show-h", "aromatic", "atom-annotations", "opacity",
+  "theme", "rotation", "mirror", "show-h", "aromatic", "charge-style", "atom-annotations", "opacity",
   "bond-customizations", "lone-pairs", "atom-colors", "show-indices", "abbreviate",
   "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
   "highlight-overlap", "show-maps", "undepicted-stereo",
@@ -503,6 +516,7 @@
   bond-customizations,
   show-maps: false,
   undepicted-stereo: "error",
+  charge-style: "plain",
 ) = {
   _validate-positive-number(scale, "smiles scale")
   if bond-length != none {
@@ -600,6 +614,7 @@
       "Choose one of the supported aromatic rendering styles.",
     )
   }
+  _validate-charge-style(charge-style, "smiles charge-style")
   let normalized-annotations = _normalize-atom-annotations(atom-annotations)
   for annotation in normalized-annotations {
     if annotation.index >= layout.atoms.len() {

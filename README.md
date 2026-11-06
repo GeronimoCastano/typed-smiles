@@ -170,6 +170,18 @@ explicit bonds.
 #smiles("Cc1ccncc1", aromatic: "circle")
 ```
 
+## Circled charges
+
+`charge-style: "circled"` writes each formal charge as a sign inside a circle,
+as organic structure drawings do. A charge larger than one writes its
+size before the circle. The default, `"plain"`, writes a bare sign.
+
+```typst
+#smiles("C[N+](=O)[O-]", charge-style: "circled")
+#smiles("[NH3+]CC(=O)[O-]", charge-style: "circled")
+#smiles("[Mg+2]", charge-style: "circled")
+```
+
 ## Hydrogens, labels, and fonts
 
 Heteroatom hydrogens are shown by default; carbon hydrogens stay implicit.
@@ -623,6 +635,17 @@ and formulas.
 
 ![Chemical formula and equation examples](assets/readme/formulas.png)
 
+`ce` stacks a charge over the subscript that follows the same atom, as in
+`SO4^2-`. `stacked-charges: false` writes the charge after the subscript, and
+`charge-style: "circled"` puts the sign inside a circle. Both options change
+written charges only; isotopes and other scripts keep their place.
+
+```typst
+#ce("SO4^2-")
+#ce("SO4^2-", stacked-charges: false)
+#ce("NH4+", charge-style: "circled")
+```
+
 ## Molecular weights
 
 `mol-weight(smiles)` returns the molecular weight in g/mol as a float — the
@@ -1027,6 +1050,7 @@ a mapped atom replaces its label.
 | `mirror` | `none` | Optional `"horizontal"` or `"vertical"` reflection |
 | `show-h` | `()` | Label selected implicit hydrogens; use `"all"` for compact labels or `"skeleton"` for separate H atoms and bonds |
 | `aromatic` | `"kekule"` | Lowercase-aromatic rings as doubles or `"circle"` |
+| `charge-style` | `"plain"` | Formal charges as a bare sign or `"circled"` signs |
 | `atom-annotations` | `()` | Small gray side labels as `(index, content)` or `(index, content, offset)` tuples |
 | `opacity` | `100%` | Fade the whole drawing (ghost molecules) |
 | `bond-customizations` | `()` | Per-bond `color`, `stroke`, `opacity` keyed by `bond(i, j)` |
@@ -1110,7 +1134,7 @@ A reaction item. `spec` is any content (`smiles(...)`, `ce(...)`, text), a SMILE
 nudges it in page coordinates, in bond-length units: positive x moves right and
 positive y moves up regardless of `reaction(flow:)`. String molecules accept
 common drawing options such as `scale`, `font-size`, `font`, `bond-stroke`, `color`, `rotation`, `show-h`,
-`lone-pairs`, `opacity`, `bond-customizations`, `atom-colors`,
+`lone-pairs`, `charge-style`, `opacity`, `bond-customizations`, `atom-colors`,
 `show-indices`, `abbreviate`, `show-maps`, and `undepicted-stereo`, and the four
 `highlight-*` options above; `reaction(scale: ...)` uniformly resizes the complete reaction,
 and each `mol(scale: ...)` additionally resizes that molecule. Positional
@@ -1166,10 +1190,12 @@ Per-item `scale` and `bond-length` are rejected.
 
 All references accept an `offset: (dx, dy)` nudge.
 
-### `#ce(chem, font: none, font-size: none, …)`
+### `#ce(chem, font: none, font-size: none, charge-style: "plain", stacked-charges: true, …)`
 
 Re-exports `chemformula`'s `ch`. Accepts `font` and `font-size` for local
-styling; other arguments pass through to chemformula.
+styling, `charge-style` (`"plain"` or `"circled"`) for the sign of written
+charges, and `stacked-charges` (`false` writes a charge after a subscript
+instead of over it); other arguments pass through to chemformula.
 
 ### `#mol-weight(smiles-str)`
 

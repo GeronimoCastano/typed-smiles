@@ -10,6 +10,7 @@
   _validate-positive-number,
   _validate-positive-length,
   _validate-positive-text-size,
+  _validate-charge-style,
   _validate-nonnegative-length,
   _validate-bool,
   _validate-offset,
@@ -177,7 +178,7 @@
   let allowed-options = (
     "style", "scale", "bond-length", "font-size", "font", "bond-stroke",
     "color", "fg", "theme", "rotation", "mirror", "show-h", "aromatic",
-    "atom-annotations", "opacity", "bond-customizations", "lone-pairs",
+    "charge-style", "atom-annotations", "opacity", "bond-customizations", "lone-pairs",
     "atom-colors", "show-indices", "abbreviate",
     "highlight-smarts", "highlight-groups", "highlight-colors", "highlight-unmatched",
     "show-maps", "undepicted-stereo", "highlight-overlap",
@@ -196,6 +197,9 @@
   }
   if "abbreviate" in options {
     let _ = _abbreviation-request(options.abbreviate, "mol abbreviate")
+  }
+  if "charge-style" in options {
+    _validate-charge-style(options.at("charge-style"), "mol charge-style")
   }
   if "bond-length" in options and options.at("bond-length") != none {
     _validate-positive-number(options.at("bond-length"), "mol bond-length")
@@ -1015,6 +1019,7 @@
             ),
             show-h: molecule-item.opts.at("show-h", default: ()),
             aromatic: molecule-item.opts.at("aromatic", default: "kekule"),
+            charge-style: molecule-item.opts.at("charge-style", default: "plain"),
             highlight-overlap: molecule-item.opts.at("highlight-overlap", default: highlight-overlap),
             resolved-bond-length: molecule-bond-length,
             bond-factor: molecule-bond-factor,
@@ -1523,6 +1528,7 @@
                 fg: molecule-foreground,
                 theme: molecule-theme,
                 aromatic: placed-species.opts.at("aromatic", default: "kekule"),
+                charge-style: placed-species.opts.at("charge-style", default: "plain"),
                 atom-annotations: placed-species.opts.at("atom-annotations", default: ()),
                 opacity: placed-species.opts.at("opacity", default: 100%),
                 bond-customizations: placed-species.opts.at("bond-customizations", default: ()),
